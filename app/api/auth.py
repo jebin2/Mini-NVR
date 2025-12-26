@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException, status, Response
 from pydantic import BaseModel
 from core import config
-from core.security import limiter, add_session, create_session_token, remove_session
+from core.security import limiter, add_session, create_session_token, remove_session, verify_password
 
 router = APIRouter()
 
@@ -12,27 +12,39 @@ class LoginRequest(BaseModel):
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(creds: LoginRequest, request: Request, response: Response):
-    if creds.username in config.USERS and config.USERS[creds.username] == creds.password:
-        # Create server-side session token
-        token = create_session_token()
-        add_session(creds.username, token)
+    if creds.username in config.USERS:
+        stored_pass = config.USERS[creds.username]
         
-        request.session["user"] = creds.username
-        request.session["token"] = token
+        # Support both hashed (bcrypt starts with $2b$) and plaintext passwords
+        # This allows gradual migration to hashed passwords
+        if stored_pass.startswith("$2b$"):
+            valid = verify_password(creds.password, stored_pass)
+        else:
+            # Plaintext comparison (legacy, for backward compatibility)
+            valid = (creds.password == stored_pass)
         
-        # Set a separate CSRF cookie for the frontend to read
-        # It doesn't need to be secret, just unique and match the header in future requests.
-        # We can reuse the session token or generate a new one. 
-        # For Double Submit, the cookie is readable by JS.
-        response.set_cookie(
-            key="csrf_token",
-            value=token,
-            httponly=False, # Must be false so JS can read it to put in header
-            samesite="lax",
-            secure=False # Set to True if using HTTPS
-        )
-        
-        return {"message": "Logged in"}
+        if valid:
+            # Create server-side session token
+            token = create_session_token()
+            add_session(creds.username, token)
+            
+            request.session["user"] = creds.username
+            request.session["token"] = token
+            
+            # Set a separate CSRF cookie for the frontend to read
+            # It doesn't need to be secret, just unique and match the header in future requests.
+            # We can reuse the session token or generate a new one. 
+            # For Double Submit, the cookie is readable by JS.
+            response.set_cookie(
+                key="csrf_token",
+                value=token,
+                httponly=False, # Must be false so JS can read it to put in header
+                samesite="lax",
+                secure=False # Set to True if using HTTPS
+            )
+            
+            return {"message": "Logged in"}
+    
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid credentials"

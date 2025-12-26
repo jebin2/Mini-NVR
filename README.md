@@ -5,11 +5,11 @@ A lightweight, Docker-based Network Video Recorder for RTSP cameras.
 ## Features
 
 - 📹 Multi-channel RTSP recording
-- 📦 Configurable segment duration (MKV format)
+- 📦 Configurable segment duration (MKV → MP4 auto-conversion)
 - 🧹 Automatic cleanup when storage limit reached
-- 🌐 Web-based recording viewer with controls
-- 🎛️ Start/stop recording per channel or all
-- 🗑️ Delete recordings from web UI
+- 🌐 Web-based recording viewer with timeline controls
+- 🔒 Session-based authentication with rate limiting & CSRF protection
+- � Storage usage monitoring
 
 ## Quick Start
 
@@ -24,30 +24,19 @@ nano .env
 
 ### 2. Run
 
-**Development** (with live reload for web files):
 ```bash
 docker compose up -d --build
 ```
 
-**Production** (self-contained, no source files needed):
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
 ### 3. Access
 
-Open `http://localhost:8080` (or your configured `WEB_PORT`)
-
-## Deployment Options
-
-| Mode | Command | Web files | Best for |
-|------|---------|-----------|----------|
-| **Development** | `docker compose up -d` | Volume-mounted (live reload) | Developing & customizing |
-| **Production** | `docker compose -f docker-compose.prod.yml up -d` | Baked into image | Deploy without source code |
+Open `http://localhost:2126` (or your configured `WEB_PORT`)
 
 ## Configuration
 
-All configuration is done via `.env` file. **All variables are required.**
+All configuration is done via `.env` file.
+
+### DVR Settings
 
 | Variable | Description |
 |----------|-------------|
@@ -61,10 +50,19 @@ All configuration is done via `.env` file. **All variables are required.**
 | `RECORD_DIR` | Must be `/recordings` (container path) |
 | `MAX_STORAGE_GB` | Max storage before auto-cleanup |
 | `CLEANUP_INTERVAL` | Cleanup check interval in seconds |
-| `WEB_PORT` | Web UI port |
-| `API_PORT` | Internal API port (usually 8000) |
+| `WEB_PORT` | Web UI port (default: 2126) |
 
-> **Note:** `RECORD_DIR` must remain `/recordings` as this is the path mounted inside the container.
+### Security Settings
+
+| Variable | Description |
+|----------|-------------|
+| `SECRET_KEY` | **Required** for session security. Generate with `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `user1`, `pass1` | First user credentials (add user2/pass2 for more users) |
+
+> **Note:** For production, use bcrypt-hashed passwords. Generate with:
+> ```bash
+> python -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())"
+> ```
 
 ### RTSP URL Templates
 
@@ -76,6 +74,59 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 | Dahua | `rtsp://{user}:{pass}@{ip}:{port}/cam/realmonitor?channel={channel}&subtype=0` |
 | Generic | `rtsp://{user}:{pass}@{ip}:{port}/stream{channel}` |
 
+## Project Structure
+
+```
+├── .env                    # Configuration
+├── .env.example            # Template
+├── docker-compose.yml      # Docker compose config
+├── Dockerfile              # Container image definition
+├── requirements.txt        # Python dependencies
+├── app/
+│   ├── server.py           # FastAPI web server
+│   ├── recorder.py         # RTSP recording service
+│   ├── cleanup.py          # Storage management service
+│   ├── api/
+│   │   ├── auth.py         # Authentication endpoints
+│   │   ├── routes.py       # API routes
+│   │   └── deps.py         # Request dependencies (auth, CSRF)
+│   ├── core/
+│   │   ├── config.py       # Configuration loader
+│   │   ├── logger.py       # Logging setup
+│   │   └── security.py     # Session & password management
+│   ├── services/
+│   │   ├── store.py        # Recording storage queries
+│   │   ├── converter.py    # MKV → MP4 background converter
+│   │   ├── metadata.py     # Duration cache
+│   │   └── media.py        # FFprobe utilities
+│   └── utils/
+│       └── helpers.py      # Utility functions
+├── web/
+│   ├── index.html          # Main UI
+│   ├── login.html          # Login page
+│   ├── css/styles.css      # Styles
+│   └── js/                 # JavaScript modules
+└── recordings/             # Video storage (mounted volume)
+```
+
+## API Endpoints
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/login` | Login (rate limited: 5/min) |
+| POST | `/api/logout` | Logout |
+| GET | `/api/me` | Get current user |
+
+### Protected Routes (require authentication)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/config` | Get system configuration |
+| GET | `/api/storage` | Get storage usage |
+| GET | `/api/live` | Get live channel status |
+| GET | `/api/dates` | Get available recording dates |
+| GET | `/api/channel/{ch}/recordings` | Get recordings for a channel/date |
+
 ## Development
 
 ### What needs rebuild?
@@ -84,40 +135,17 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 |------|----------|---------|
 | `app/*.py` | ✅ Yes | `docker compose build --no-cache && docker compose up -d` |
 | `.env` | ❌ No | `docker compose restart` |
-| `web/index.html` | ❌ No | Just refresh browser (dev mode only) |
-| `web/nginx.conf` | ❌ No | `docker compose restart` (dev mode only) |
+| `web/**` | ❌ No | Just refresh browser |
 
-## Project Structure
+## Security Features
 
-```
-├── .env                    # Configuration
-├── .env.example            # Template
-├── docker-compose.yml      # Development (with mounts)
-├── docker-compose.prod.yml # Production (self-contained)
-├── Dockerfile              # All-in-one image
-├── app/
-│   ├── api.py              # REST API
-│   ├── recorder.py         # RTSP recording
-│   └── cleanup.py          # Storage management
-├── web/
-│   ├── index.html          # Web UI
-│   └── nginx.conf          # Nginx config
-└── recordings/             # Video storage
-```
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/config` | Get configuration |
-| GET | `/api/status` | Get recording status per channel |
-| GET | `/api/storage` | Get storage usage |
-| GET | `/api/files` | List recordings |
-| POST | `/api/recording/start?channel=N` | Start recording (N or "all") |
-| POST | `/api/recording/stop?channel=N` | Stop recording (N or "all") |
-| DELETE | `/api/file?name=X` | Delete a recording |
-| DELETE | `/api/files?channel=N` | Delete all channel N recordings |
+- **Password Hashing**: Supports bcrypt-hashed passwords
+- **Session Management**: Server-side session validation with max 5 sessions per user
+- **Rate Limiting**: Login endpoint limited to 5 attempts per minute
+- **CSRF Protection**: Double Submit Cookie pattern
+- **Input Validation**: Channel and date parameters validated
 
 ## License
 
 MIT
+

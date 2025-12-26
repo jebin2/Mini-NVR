@@ -19,8 +19,8 @@ COPY app/ .
 # Copy web UI
 COPY web/ /app/web/
 
-# Expose web port
-EXPOSE 8080
+# Expose web port (default matches WEB_PORT in config)
+EXPOSE 2126
 
 # Start all services
 CMD ["sh", "-c", "if [ -n \"$LOG_FILE\" ]; then rm -f \"$LOG_FILE\"; fi && python server.py & python recorder.py & python cleanup.py & wait"]

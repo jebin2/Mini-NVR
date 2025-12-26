@@ -7,7 +7,7 @@ services:
     restart: always
     env_file: .env
     ports:
-      - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
+      - "${WEB_PORT:-2126}:${WEB_PORT:-2126}"
     volumes:
       - ./recordings:/recordings
       - ./logs:/logs

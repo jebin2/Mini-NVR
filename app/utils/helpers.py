@@ -20,7 +20,7 @@ def is_file_live(filepath, threshold=15):
     """Consider a file live if modified in the last `threshold` seconds."""
     try:
         return (time.time() - os.path.getmtime(filepath)) < threshold
-    except:
+    except (OSError, IOError):
         return False
 
 def parse_filename(filepath):

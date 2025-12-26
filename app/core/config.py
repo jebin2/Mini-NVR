@@ -14,7 +14,7 @@ RECORD_DIR = get_env("RECORD_DIR", "./recordings")
 NUM_CHANNELS = int(get_env("NUM_CHANNELS", 8))
 SEGMENT_DURATION = int(get_env("SEGMENT_DURATION", 600)) 
 MAX_STORAGE_GB = int(get_env("MAX_STORAGE_GB", 500))
-WEB_PORT = int(get_env("WEB_PORT", 8000))
+WEB_PORT = int(get_env("WEB_PORT", 2126))
 CONTROL_DIR = "/tmp/nvr-control"
 STATIC_DIR = "./web" # Pointing to web folder directly now, or we can copy to static. 
 # Original code had "./static", but the user has a "web" folder. 
@@ -39,7 +39,17 @@ VIDEO_PRESET = get_env("VIDEO_PRESET", "veryfast")
 os.makedirs(CONTROL_DIR, exist_ok=True)
 
 # Auth
-SECRET_KEY = get_env("SECRET_KEY", "dev_secret")
+# SECRET_KEY is required for session security
+_secret = get_env("SECRET_KEY")
+if not _secret:
+    import warnings
+    warnings.warn(
+        "SECRET_KEY not set! Using insecure default. "
+        "Set SECRET_KEY in .env for production.", 
+        stacklevel=2
+    )
+    _secret = "INSECURE_DEV_SECRET_CHANGE_ME"
+SECRET_KEY = _secret
 USERS = {}
 i = 1
 while True:

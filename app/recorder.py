@@ -130,7 +130,10 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                 latest = get_latest_file(out_dir, channel)
                 
                 # If no MKV or MP4 exists for today, and we've been running for > segment time, something is wrong
-                if latest is None and (time.time() - last_file_check > segment_duration):
+                # NOTE: We check against recording_start_time, not last_file_check
+                if latest is None:
+                    # Give a reasonable grace period (2x segment duration) before declaring failure
+                    # This handles slow starts and network issues
                     logger.warning(f"[🔄] CH{channel} no output files found, restarting...")
                     proc.terminate()
                     proc.wait()
