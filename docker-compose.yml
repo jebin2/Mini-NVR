@@ -1,0 +1,13 @@
+# Mini-NVR Docker Compose
+
+services:
+  nvr:
+    build: .
+    container_name: mini-nvr
+    restart: always
+    env_file: .env
+    ports:
+      - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
+    volumes:
+      - ./recordings:/recordings
+      - ./logs:/logs

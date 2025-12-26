@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NVR System</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+    <header>
+        <div class="brand">
+            <button id="backBtn" class="btn btn-ghost hidden" onclick="toggleView('grid')">← Grid</button>
+            <span>📺 NVR System</span>
+        </div>
+        <div class="header-controls">
+            <div class="storage-info" id="storageDisplay">Loading storage...</div>
+            <button id="logoutBtn"
+                style="margin-left: 10px; background: none; border: 1px solid #666; color: #aaa; padding: 5px 10px; cursor: pointer; border-radius: 4px;">Logout</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- GRID VIEW -->
+        <div id="gridView" class="grid-container">
+            <!-- Cameras injected here -->
+        </div>
+
+        <!-- EXPANDED VIEW -->
+        <div id="expandedView" class="expanded-view">
+            <div class="player-header">
+                <h2 id="activeCamTitle">Camera 1</h2>
+                <div class="controls-row">
+                    <select id="dateSelect" onchange="loadRecordings()"></select>
+                    <button class="btn btn-live" onclick="playLive()">🔴 Go LIVE</button>
+                </div>
+            </div>
+
+            <div class="video-stage">
+                <video id="mainPlayer" controls autoplay></video>
+            </div>
+
+            <div class="timeline-wrapper">
+                <div class="timeline-track" id="timeline" onclick="handleTimelineClick(event)">
+                    <!-- Segments injected here -->
+                </div>
+                <div class="time-labels">
+                    <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
+                </div>
+            </div>
+
+            <div class="playlist" id="playlist">
+                <!-- Clips list -->
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="js/app.js"></script>
+
+</body>
+
+</html>
