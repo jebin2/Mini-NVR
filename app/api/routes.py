@@ -3,6 +3,7 @@ from core import config
 from services import store
 from api.deps import get_current_user
 import re
+import os
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -46,3 +47,38 @@ def get_recordings(
     
     return {"recordings": store.get_recordings_for_date(ch, date)}
 
+@router.delete("/recording")
+def delete_recording(path: str = Query(..., description="Relative path to the recording file")):
+    """Delete a recording file. Only works for non-live recordings."""
+    # Security: Validate path doesn't have traversal attempts
+    if ".." in path or path.startswith("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    
+    # Build absolute path
+    abs_path = os.path.abspath(os.path.join(config.RECORD_DIR, path))
+    
+    # Security: Ensure path is within RECORD_DIR
+    if not abs_path.startswith(os.path.abspath(config.RECORD_DIR)):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check file exists
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Prevent deleting live files (modified in last 15 seconds)
+    import time
+    if (time.time() - os.path.getmtime(abs_path)) < 15:
+        raise HTTPException(status_code=400, detail="Cannot delete live recording")
+    
+    # Delete the file
+    try:
+        os.remove(abs_path)
+        
+        # Clean up empty parent directories
+        parent = os.path.dirname(abs_path)
+        if parent != os.path.abspath(config.RECORD_DIR) and os.path.isdir(parent) and not os.listdir(parent):
+            os.rmdir(parent)
+            
+        return {"message": "Deleted", "path": path}
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete: {e}")

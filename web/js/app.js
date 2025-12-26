@@ -1,27 +1,34 @@
 import * as API from './api.js';
 import * as UI from './ui.js';
+import { CONFIG } from './config.js';
 
 let currentCam = 1;
 let recordingsMap = [];
 
 let isLoggingOut = false;
+let isStorageUpdating = false;
+let isGridUpdating = false;
 
 async function updateStorage() {
-    if (isLoggingOut) return;
+    if (isLoggingOut || isStorageUpdating) return;
+    isStorageUpdating = true;
     try {
         const data = await API.fetchStorage();
         document.getElementById('storageDisplay').innerText = `💾 ${data.usedGB} / ${data.maxGB} GB`;
     } catch (e) { console.error(e); }
+    finally { isStorageUpdating = false; }
 }
 
 async function updateGrid() {
-    if (isLoggingOut) return;
+    if (isLoggingOut || isGridUpdating) return;
     if (document.getElementById('gridView').classList.contains('hidden')) return;
+    isGridUpdating = true;
     try {
         const data = await API.fetchLive();
         if (isLoggingOut) return; // check again
         UI.renderGrid(data.channels, openCamera);
     } catch (e) { console.error(e); }
+    finally { isGridUpdating = false; }
 }
 
 async function openCamera(id) {
@@ -56,10 +63,20 @@ async function loadRecordings() {
     recordingsMap = data.recordings || [];
 
     UI.renderTimeline(recordingsMap, playClip);
-    UI.renderPlaylist(recordingsMap, playClip);
+    UI.renderPlaylist(recordingsMap, playClip, deleteClip);
 
     if (recordingsMap.length > 0) {
         playClip(recordingsMap.length - 1);
+    }
+}
+
+async function deleteClip(index, path) {
+    try {
+        await API.deleteRecording(path);
+        // Reload the recordings list
+        loadRecordings();
+    } catch (e) {
+        alert('Failed to delete recording: ' + (e.message || 'Unknown error'));
     }
 }
 
@@ -171,7 +188,7 @@ window.onload = () => {
 
     updateStorage();
     updateGrid();
-    setInterval(updateGrid, 10000);
-    setInterval(updateStorage, 60000);
+    setInterval(updateGrid, CONFIG.gridRefreshInterval);
+    setInterval(updateStorage, CONFIG.storageRefreshInterval);
     document.getElementById('logoutBtn').addEventListener('click', handleLogout);
 };

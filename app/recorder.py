@@ -151,8 +151,6 @@ def main():
         # We rely on config module which reads env vars
         # If config doesn't enforce required (it returns None), we check here.
         if not config.DVR_USER: raise EnvironmentError("DVR_USER not set")
-        
-        pass 
     except EnvironmentError as e:
         logger.error(f"[❌] {e}")
         return

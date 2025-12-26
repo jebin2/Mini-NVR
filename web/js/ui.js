@@ -2,6 +2,15 @@ import { fmtDuration } from './utils.js';
 
 export function renderGrid(channels, onOpenCam) {
     const grid = document.getElementById('gridView');
+
+    // Clean up any existing video elements to free connections
+    const existingVideos = grid.querySelectorAll('video');
+    existingVideos.forEach(v => {
+        v.pause();
+        v.src = '';
+        v.load();
+    });
+
     grid.innerHTML = '';
 
     Object.keys(channels).forEach(chId => {
@@ -17,16 +26,40 @@ export function renderGrid(channels, onOpenCam) {
         card.className = 'cam-card';
         card.onclick = () => onOpenCam(chId);
 
+        // Create placeholder instead of autoplay video to reduce connections
         card.innerHTML = `
         <div class="cam-overlay">
             <span class="badge ${badgeClass}">● ${cam.status}</span>
             <span class="badge">CH ${chId}</span>
         </div>
-        ${src ? `<video src="${src}" muted autoplay loop playsinline></video>` : ''}
+        <div class="cam-placeholder">
+            <span class="cam-icon">📹</span>
+            <span class="cam-label">Camera ${chId}</span>
+        </div>
     `;
+
+        // Lazy load video only on hover (reduces connection usage)
+        if (src) {
+            let videoLoaded = false;
+            card.addEventListener('mouseenter', () => {
+                if (videoLoaded) return;
+                videoLoaded = true;
+                const placeholder = card.querySelector('.cam-placeholder');
+                const video = document.createElement('video');
+                video.src = src;
+                video.muted = true;
+                video.autoplay = true;
+                video.loop = true;
+                video.playsInline = true;
+                card.appendChild(video);
+                if (placeholder) placeholder.style.display = 'none';
+            });
+        }
+
         grid.appendChild(card);
     });
 }
+
 
 export function renderTimeline(recordings, onPlayClip) {
     const track = document.getElementById('timeline');
@@ -54,7 +87,7 @@ export function renderTimeline(recordings, onPlayClip) {
     });
 }
 
-export function renderPlaylist(recordings, onPlayClip) {
+export function renderPlaylist(recordings, onPlayClip, onDeleteClip) {
     const list = document.getElementById('playlist');
     list.innerHTML = '';
 
@@ -65,15 +98,51 @@ export function renderPlaylist(recordings, onPlayClip) {
         const div = document.createElement('div');
         div.className = 'clip-card';
         div.id = `clip-${index}`;
-        div.onclick = () => onPlayClip(index);
 
-        div.innerHTML = `
-        <div class="clip-time">${rec.startTime}</div>
-        <div class="clip-meta">
-            ${rec.size} ${durStr ? '• ' + durStr : ''}
-            ${rec.live ? '<span style="color:var(--danger)"> ● LIVE</span>' : ''}
-        </div>
-    `;
+        // Create main content area (clickable for playback)
+        const mainContent = document.createElement('div');
+        mainContent.className = 'clip-main';
+        mainContent.onclick = () => onPlayClip(index);
+        mainContent.innerHTML = `
+            <div class="clip-time">${rec.startTime}</div>
+            <div class="clip-meta">
+                ${rec.size} ${durStr ? '• ' + durStr : ''}
+                ${rec.live ? '<span style="color:var(--danger)"> ● LIVE</span>' : ''}
+            </div>
+        `;
+        div.appendChild(mainContent);
+
+        // Add action buttons for non-live recordings
+        if (!rec.live) {
+            const actions = document.createElement('div');
+            actions.className = 'clip-actions';
+
+            // Download button
+            const downloadBtn = document.createElement('a');
+            downloadBtn.href = `/recordings/${rec.name}`;
+            downloadBtn.download = rec.name.split('/').pop();
+            downloadBtn.className = 'clip-btn download';
+            downloadBtn.title = 'Download';
+            downloadBtn.innerHTML = '⬇';
+            downloadBtn.onclick = (e) => e.stopPropagation();
+            actions.appendChild(downloadBtn);
+
+            // Delete button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'clip-btn delete';
+            deleteBtn.title = 'Delete';
+            deleteBtn.innerHTML = '🗑';
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (confirm(`Delete recording ${rec.startTime}?`)) {
+                    onDeleteClip(index, rec.name);
+                }
+            };
+            actions.appendChild(deleteBtn);
+
+            div.appendChild(actions);
+        }
+
         list.appendChild(div);
     }
 }

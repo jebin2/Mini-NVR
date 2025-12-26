@@ -55,3 +55,7 @@ export async function logout() {
     await fetchAPI('/logout', { method: 'POST' });
     window.location.href = '/login.html';
 }
+
+export async function deleteRecording(path) {
+    return await fetchAPI(`/recording?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+}

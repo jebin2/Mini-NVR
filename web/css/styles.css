@@ -114,6 +114,31 @@ main {
     height: 100%;
     object-fit: cover;
     background: #000;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.cam-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: var(--text-muted);
+    gap: 8px;
+}
+
+.cam-icon {
+    font-size: 2.5rem;
+    opacity: 0.6;
+}
+
+.cam-label {
+    font-size: 0.9rem;
+    opacity: 0.8;
 }
 
 .cam-overlay {
@@ -264,6 +289,7 @@ select {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    position: relative;
 }
 
 .clip-card:hover {
@@ -275,6 +301,10 @@ select {
     background: rgba(59, 130, 246, 0.1);
 }
 
+.clip-main {
+    flex: 1;
+}
+
 .clip-time {
     font-weight: bold;
     font-size: 0.9rem;
@@ -283,6 +313,43 @@ select {
 .clip-meta {
     font-size: 0.75rem;
     color: var(--text-muted);
+}
+
+.clip-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+}
+
+.clip-btn {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-dark);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.clip-btn:hover {
+    background: var(--border);
+    color: var(--text-main);
+}
+
+.clip-btn.download:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.clip-btn.delete:hover {
+    border-color: var(--danger);
+    color: var(--danger);
 }
 
 @keyframes pulse {

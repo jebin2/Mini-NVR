@@ -126,6 +126,7 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 | GET | `/api/live` | Get live channel status |
 | GET | `/api/dates` | Get available recording dates |
 | GET | `/api/channel/{ch}/recordings` | Get recordings for a channel/date |
+| DELETE | `/api/recording?path=...` | Delete a non-live recording |
 
 ## Development
 

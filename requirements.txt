@@ -1,6 +1,5 @@
 fastapi
 uvicorn
 itsdangerous
-requests
 slowapi
 bcrypt

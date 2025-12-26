@@ -4,6 +4,7 @@ import secrets
 import json
 import os
 import bcrypt
+import threading
 from core import config
 
 # Rate Limiter
@@ -16,19 +17,21 @@ MAX_SESSIONS_PER_USER = 5
 # Store in /tmp to prevent access via web (not in public recordings dir)
 SESSION_FILE = "/tmp/nvr_sessions.json"
 ACTIVE_SESSIONS = {}
+_session_lock = threading.Lock()
 
 def load_sessions():
     """Load sessions from disk on startup."""
     global ACTIVE_SESSIONS
-    if os.path.exists(SESSION_FILE):
-        try:
-            with open(SESSION_FILE, 'r') as f:
-                ACTIVE_SESSIONS = json.load(f)
-        except (json.JSONDecodeError, OSError, IOError):
-            ACTIVE_SESSIONS = {}
+    with _session_lock:
+        if os.path.exists(SESSION_FILE):
+            try:
+                with open(SESSION_FILE, 'r') as f:
+                    ACTIVE_SESSIONS = json.load(f)
+            except (json.JSONDecodeError, OSError, IOError):
+                ACTIVE_SESSIONS = {}
 
-def save_sessions():
-    """Save sessions to disk."""
+def _save_sessions_unlocked():
+    """Save sessions to disk. Must be called with lock held."""
     try:
         # Atomic write safely
         tmp_file = SESSION_FILE + ".tmp"
@@ -46,23 +49,26 @@ def create_session_token():
 
 def add_session(username, token):
     """Add a session token for user, enforcing max sessions limit."""
-    if username not in ACTIVE_SESSIONS:
-        ACTIVE_SESSIONS[username] = []
-    
-    # Enforce session limit - remove oldest if at limit
-    while len(ACTIVE_SESSIONS[username]) >= MAX_SESSIONS_PER_USER:
-        ACTIVE_SESSIONS[username].pop(0)
-    
-    ACTIVE_SESSIONS[username].append(token)
-    save_sessions()
+    with _session_lock:
+        if username not in ACTIVE_SESSIONS:
+            ACTIVE_SESSIONS[username] = []
+        
+        # Enforce session limit - remove oldest if at limit
+        while len(ACTIVE_SESSIONS[username]) >= MAX_SESSIONS_PER_USER:
+            ACTIVE_SESSIONS[username].pop(0)
+        
+        ACTIVE_SESSIONS[username].append(token)
+        _save_sessions_unlocked()
 
 def remove_session(username, token):
-    if username in ACTIVE_SESSIONS and token in ACTIVE_SESSIONS[username]:
-        ACTIVE_SESSIONS[username].remove(token)
-        save_sessions()
+    with _session_lock:
+        if username in ACTIVE_SESSIONS and token in ACTIVE_SESSIONS[username]:
+            ACTIVE_SESSIONS[username].remove(token)
+            _save_sessions_unlocked()
 
 def is_session_valid(username, token):
-    return username in ACTIVE_SESSIONS and token in ACTIVE_SESSIONS[username]
+    with _session_lock:
+        return username in ACTIVE_SESSIONS and token in ACTIVE_SESSIONS[username]
 
 
 # --- Password Hashing ---
