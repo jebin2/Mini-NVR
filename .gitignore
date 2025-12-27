@@ -208,3 +208,6 @@ __marimo__/
 
 recordings/
 logs/
+
+# Auto-generated config (contains credentials)
+go2rtc.yaml
