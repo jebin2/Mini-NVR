@@ -211,3 +211,4 @@ logs/
 
 # Auto-generated config (contains credentials)
 go2rtc.yaml
+web/js/config.js

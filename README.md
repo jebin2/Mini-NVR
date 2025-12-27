@@ -9,7 +9,41 @@ A lightweight, Docker-based Network Video Recorder for RTSP cameras.
 - 🧹 Automatic cleanup when storage limit reached
 - 🌐 Web-based recording viewer with timeline controls
 - 🔒 Session-based authentication with rate limiting & CSRF protection
-- � Storage usage monitoring
+- 📊 Storage usage monitoring
+- 🎥 **Live View** via WebRTC (low-latency, powered by go2rtc)
+- 📺 **YouTube Live Streaming** with automatic 1-hour key rotation
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                              DVR                                    │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │ RTSP (x1 per camera)
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         go2rtc (Hub)                                │
+│                    Single RTSP connection                           │
+└───────┬─────────────────────┬─────────────────────┬─────────────────┘
+        │                     │                     │
+        ▼                     ▼                     ▼
+   ┌─────────┐          ┌──────────┐          ┌──────────┐
+   │ WebRTC  │          │   RTSP   │          │   RTMP   │
+   │  Live   │          │  Relay   │          │ YouTube  │
+   │  View   │          │          │          │   Live   │
+   └─────────┘          └────┬─────┘          └──────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   recorder.py   │
+                    │  (MKV → MP4)    │
+                    └─────────────────┘
+```
+
+**Benefits of unified architecture:**
+- Single RTSP connection per camera (efficient)
+- go2rtc handles reconnection/buffering
+- All consumers (live view, recording, YouTube) share one stream
 
 ## Quick Start
 
@@ -64,6 +98,27 @@ All configuration is done via `.env` file.
 > python -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())"
 > ```
 
+### go2rtc Settings (Live View)
+
+| Variable | Description |
+|----------|-------------|
+| `GO2RTC_API_PORT` | go2rtc API port (default: 2127) |
+| `GO2RTC_WEBRTC_PORT` | WebRTC port (default: 8555) |
+| `GO2RTC_RTSP_PORT` | RTSP relay port (default: 8554) |
+
+### YouTube Live Streaming
+
+| Variable | Description |
+|----------|-------------|
+| `YOUTUBE_ENABLED` | Enable YouTube streaming (`true`/`false`) |
+| `YOUTUBE_STREAM_KEY_1` | First YouTube stream key |
+| `YOUTUBE_STREAM_KEY_2` | Second key (for 1-hour rotation) |
+| `YOUTUBE_CHANNEL` | Camera channel to stream (default: 1) |
+| `YOUTUBE_ROTATION_MINUTES` | Key rotation interval (default: 60) |
+
+> **Note:** Create 2 stream keys in [YouTube Studio](https://studio.youtube.com) → Create → Go Live → Stream.
+> Keys rotate every hour to avoid YouTube's 12-hour session limit.
+
 ### RTSP URL Templates
 
 Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
@@ -77,14 +132,19 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 ## Project Structure
 
 ```
-├── .env                    # Configuration
+├── .env                    # Configuration (from .env.example)
 ├── .env.example            # Template
 ├── docker-compose.yml      # Docker compose config
 ├── Dockerfile              # Container image definition
+├── go2rtc.yaml             # Auto-generated go2rtc config
 ├── requirements.txt        # Python dependencies
+├── scripts/
+│   ├── start.sh            # Start/restart containers
+│   ├── generate-go2rtc-config.sh   # Generate go2rtc.yaml from .env
+│   └── generate-web-config.sh      # Generate web/js/config.js from .env
 ├── app/
 │   ├── server.py           # FastAPI web server
-│   ├── recorder.py         # RTSP recording service
+│   ├── recorder.py         # RTSP recording (via go2rtc relay)
 │   ├── cleanup.py          # Storage management service
 │   ├── api/
 │   │   ├── auth.py         # Authentication endpoints
@@ -97,6 +157,7 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 │   ├── services/
 │   │   ├── store.py        # Recording storage queries
 │   │   ├── converter.py    # MKV → MP4 background converter
+│   │   ├── youtube_rotator.py  # YouTube Live stream key rotation
 │   │   ├── metadata.py     # Duration cache
 │   │   └── media.py        # FFprobe utilities
 │   └── utils/
@@ -105,7 +166,7 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 │   ├── index.html          # Main UI
 │   ├── login.html          # Login page
 │   ├── css/styles.css      # Styles
-│   └── js/                 # JavaScript modules
+│   └── js/                 # JavaScript modules (config.js auto-generated)
 └── recordings/             # Video storage (mounted volume)
 ```
 

@@ -3,3 +3,4 @@ uvicorn
 itsdangerous
 slowapi
 bcrypt
+requests

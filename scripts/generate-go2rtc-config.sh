@@ -14,10 +14,12 @@ ENV_FILE="${PROJECT_ROOT}/.env"
 
 # Colors
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Check .env exists
@@ -40,8 +42,9 @@ for var in DVR_IP DVR_USER DVR_PASS DVR_PORT NUM_CHANNELS RTSP_URL_TEMPLATE; do
 done
 
 # Defaults for optional variables
-GO2RTC_API_PORT="${GO2RTC_API_PORT:-1984}"
+GO2RTC_API_PORT="${GO2RTC_API_PORT:-2127}"
 GO2RTC_WEBRTC_PORT="${GO2RTC_WEBRTC_PORT:-8555}"
+GO2RTC_RTSP_PORT="${GO2RTC_RTSP_PORT:-8554}"
 
 log_info "Generating go2rtc.yaml..."
 
@@ -68,7 +71,11 @@ for i in $(seq 1 "$NUM_CHANNELS"); do
     echo "  cam${i}: $(generate_url "$i")" >> "$OUTPUT_FILE"
 done
 
+# Add RTSP server section for relay functionality
 cat >> "$OUTPUT_FILE" << EOF
+
+rtsp:
+  listen: ":${GO2RTC_RTSP_PORT}"
 
 webrtc:
   listen: ":${GO2RTC_WEBRTC_PORT}"
@@ -84,4 +91,10 @@ log:
 EOF
 
 log_info "Generated: $OUTPUT_FILE"
-log_info "Channels: $NUM_CHANNELS | API: $GO2RTC_API_PORT | WebRTC: $GO2RTC_WEBRTC_PORT"
+log_info "Channels: $NUM_CHANNELS | API: $GO2RTC_API_PORT | WebRTC: $GO2RTC_WEBRTC_PORT | RTSP: $GO2RTC_RTSP_PORT"
+
+# YouTube info
+if [ "$YOUTUBE_ENABLED" = "true" ]; then
+    log_info "YouTube streaming: ENABLED (Channel: ${YOUTUBE_CHANNEL:-1})"
+    log_warn "YouTube RTMP output is managed dynamically via API (see youtube_rotator.py)"
+fi

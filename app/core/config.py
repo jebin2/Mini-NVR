@@ -35,6 +35,19 @@ VIDEO_CODEC = get_env("VIDEO_CODEC", "copy")
 VIDEO_CRF = get_env("VIDEO_CRF", "23")
 VIDEO_PRESET = get_env("VIDEO_PRESET", "veryfast")
 
+# go2rtc Settings
+GO2RTC_API_PORT = int(get_env("GO2RTC_API_PORT", 2127))
+GO2RTC_RTSP_PORT = int(get_env("GO2RTC_RTSP_PORT", 8554))
+GO2RTC_API_URL = f"http://localhost:{GO2RTC_API_PORT}"
+
+# YouTube Streaming (via go2rtc)
+YOUTUBE_ENABLED = get_env("YOUTUBE_ENABLED", "false").lower() == "true"
+YOUTUBE_STREAM_KEY_1 = get_env("YOUTUBE_STREAM_KEY_1")
+YOUTUBE_STREAM_KEY_2 = get_env("YOUTUBE_STREAM_KEY_2")
+YOUTUBE_RTMP_URL = get_env("YOUTUBE_RTMP_URL", "rtmp://a.rtmp.youtube.com/live2")
+YOUTUBE_CHANNEL = int(get_env("YOUTUBE_CHANNEL", 1))
+YOUTUBE_ROTATION_MINUTES = int(get_env("YOUTUBE_ROTATION_MINUTES", 60))
+
 # Ensure dirs
 os.makedirs(CONTROL_DIR, exist_ok=True)
 

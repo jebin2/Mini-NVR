@@ -16,7 +16,7 @@ def is_stopped(channel):
 
 
 def build_rtsp_url(template, user, password, ip, port, channel):
-    """Build RTSP URL from template."""
+    """Build RTSP URL from template (for direct DVR connection)."""
     return template.format(
         user=user,
         **{"pass": password},
@@ -24,6 +24,11 @@ def build_rtsp_url(template, user, password, ip, port, channel):
         port=port,
         channel=channel
     )
+
+
+def build_go2rtc_url(channel):
+    """Build RTSP URL from go2rtc relay (unified hub architecture)."""
+    return f"rtsp://localhost:{config.GO2RTC_RTSP_PORT}/cam{channel}"
 
 
 def ensure_dir(path):
@@ -162,18 +167,14 @@ def main():
     logger.info(f"[✓] Channels: {config.NUM_CHANNELS}")
     logger.info(f"[✓] Segment: {config.SEGMENT_DURATION}s")
     logger.info(f"[✓] Output: {config.RECORD_DIR}/ch{{N}}/{{date}}/")
+    logger.info(f"[✓] Source: go2rtc relay (localhost:{config.GO2RTC_RTSP_PORT})")
 
     # --- Start Recording Threads ---
+    # Using go2rtc relay as unified RTSP source (single DVR connection)
     threads = []
     for ch in range(1, config.NUM_CHANNELS + 1):
-        rtsp_url = build_rtsp_url(
-            config.RTSP_URL_TEMPLATE,
-            config.DVR_USER,
-            config.DVR_PASS,
-            config.DVR_IP,
-            config.DVR_PORT,
-            ch
-        )
+        # Use go2rtc as RTSP source for unified architecture
+        rtsp_url = build_go2rtc_url(ch)
         t = threading.Thread(
             target=start_camera, 
             args=(ch, rtsp_url, config.RECORD_DIR, config.SEGMENT_DURATION),
@@ -192,6 +193,17 @@ def main():
         preset=config.VIDEO_PRESET
     )
     converter.start()
+
+    # --- Start YouTube Streamer (if enabled) ---
+    youtube_rotator = None
+    if config.YOUTUBE_ENABLED:
+        from services.youtube_rotator import create_youtube_rotator
+        youtube_rotator = create_youtube_rotator()
+        if youtube_rotator:
+            youtube_rotator.start()
+            logger.info("[✓] YouTube Rotator started")
+        else:
+            logger.warning("[!] YouTube enabled but not properly configured")
 
     while True:
         time.sleep(60)
