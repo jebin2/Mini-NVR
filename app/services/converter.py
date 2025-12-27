@@ -62,6 +62,7 @@ class BackgroundConverter(threading.Thread):
         cmd.extend([
             "-c:a", "aac",        # Ensure audio is AAC (Browser compatible)
             "-movflags", "+faststart", # Move metadata to front for streaming
+            "-f", "mp4",          # Explicitly specify format (needed for .tmp extension)
             tmp_path  # Write to temp file first
         ])
 
