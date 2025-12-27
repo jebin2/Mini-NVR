@@ -1,5 +1,5 @@
 import { fmtDuration } from './utils.js';
-import { CONFIG } from './config.js';
+import * as go2rtc from './go2rtc.js';
 
 // Store interval ID for cleanup
 let gridRefreshInterval = null;
@@ -23,9 +23,6 @@ export function renderGrid(channels, onOpenCam) {
 
     grid.innerHTML = '';
 
-    // go2rtc base URL for live streams
-    const go2rtcHost = window.location.hostname;
-
     Object.keys(channels).forEach(chId => {
         const cam = channels[chId];
         const isLive = cam.status === 'LIVE';
@@ -38,7 +35,7 @@ export function renderGrid(channels, onOpenCam) {
         card.onclick = () => onOpenCam(chId);
 
         // Use go2rtc snapshot for live preview
-        const snapshotUrl = `http://${go2rtcHost}:${CONFIG.go2rtcPort}/api/frame.jpeg?src=cam${chId}&t=${Date.now()}`;
+        const snapshotUrl = go2rtc.getSnapshotUrl(chId);
 
         card.innerHTML = `
             <div class="cam-overlay">
@@ -62,7 +59,7 @@ export function renderGrid(channels, onOpenCam) {
         images.forEach(img => {
             const camId = img.dataset.cam;
             if (camId) {
-                img.src = `http://${go2rtcHost}:${CONFIG.go2rtcPort}/api/frame.jpeg?src=cam${camId}&t=${Date.now()}`;
+                img.src = go2rtc.getSnapshotUrl(camId);
             }
         });
     }, 2000);

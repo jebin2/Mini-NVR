@@ -1,5 +1,6 @@
 import * as API from './api.js';
 import * as UI from './ui.js';
+import * as go2rtc from './go2rtc.js';
 import { CONFIG } from './config.js';
 
 let currentCam = 1;
@@ -110,9 +111,7 @@ function playLive() {
     }
 
     // go2rtc WebRTC stream URL
-    // Use the hostname from current URL with configured go2rtc port
-    const go2rtcHost = window.location.hostname;
-    const go2rtcUrl = `http://${go2rtcHost}:${CONFIG.go2rtcPort}/stream.html?src=cam${currentCam}`;
+    const go2rtcUrl = go2rtc.getStreamUrl(currentCam);
 
     // Hide video element and show iframe
     video.pause();
