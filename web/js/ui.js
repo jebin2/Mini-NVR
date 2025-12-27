@@ -1,7 +1,16 @@
 import { fmtDuration } from './utils.js';
 
+// Store interval ID for cleanup
+let gridRefreshInterval = null;
+
 export function renderGrid(channels, onOpenCam) {
     const grid = document.getElementById('gridView');
+
+    // Clear previous refresh interval
+    if (gridRefreshInterval) {
+        clearInterval(gridRefreshInterval);
+        gridRefreshInterval = null;
+    }
 
     // Clean up any existing video elements to free connections
     const existingVideos = grid.querySelectorAll('video');
@@ -13,6 +22,9 @@ export function renderGrid(channels, onOpenCam) {
 
     grid.innerHTML = '';
 
+    // go2rtc base URL for live streams
+    const go2rtcHost = window.location.hostname;
+
     Object.keys(channels).forEach(chId => {
         const cam = channels[chId];
         const isLive = cam.status === 'LIVE';
@@ -20,46 +32,48 @@ export function renderGrid(channels, onOpenCam) {
         if (isLive) badgeClass = 'live';
         else if (cam.status === 'REC') badgeClass = 'rec';
 
-        const src = cam.file ? `/recordings/${cam.file}?t=${Date.now()}` : '';
-
         const card = document.createElement('div');
         card.className = 'cam-card';
         card.onclick = () => onOpenCam(chId);
 
-        // Create placeholder instead of autoplay video to reduce connections
-        card.innerHTML = `
-        <div class="cam-overlay">
-            <span class="badge ${badgeClass}">● ${cam.status}</span>
-            <span class="badge">CH ${chId}</span>
-        </div>
-        <div class="cam-placeholder">
-            <span class="cam-icon">📹</span>
-            <span class="cam-label">Camera ${chId}</span>
-        </div>
-    `;
+        // Use go2rtc snapshot for live preview
+        const snapshotUrl = `http://${go2rtcHost}:1984/api/frame.jpeg?src=cam${chId}&t=${Date.now()}`;
 
-        // Lazy load video only on hover (reduces connection usage)
-        if (src) {
-            let videoLoaded = false;
-            card.addEventListener('mouseenter', () => {
-                if (videoLoaded) return;
-                videoLoaded = true;
-                const placeholder = card.querySelector('.cam-placeholder');
-                const video = document.createElement('video');
-                video.src = src;
-                video.muted = true;
-                video.autoplay = true;
-                video.loop = true;
-                video.playsInline = true;
-                card.appendChild(video);
-                if (placeholder) placeholder.style.display = 'none';
-            });
-        }
+        card.innerHTML = `
+            <div class="cam-overlay">
+                <span class="badge ${badgeClass}">● ${cam.status}</span>
+                <span class="badge">CH ${chId}</span>
+            </div>
+            <img class="cam-preview" data-cam="${chId}" src="${snapshotUrl}" alt="Camera ${chId}" 
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <div class="cam-placeholder" style="display:none;">
+                <span class="cam-icon">📹</span>
+                <span class="cam-label">Camera ${chId}</span>
+            </div>
+        `;
 
         grid.appendChild(card);
     });
+
+    // Refresh snapshots every 2 seconds for live preview effect
+    gridRefreshInterval = setInterval(() => {
+        const images = grid.querySelectorAll('.cam-preview');
+        images.forEach(img => {
+            const camId = img.dataset.cam;
+            if (camId) {
+                img.src = `http://${go2rtcHost}:1984/api/frame.jpeg?src=cam${camId}&t=${Date.now()}`;
+            }
+        });
+    }, 2000);
 }
 
+// Stop grid refresh when leaving grid view
+export function stopGridRefresh() {
+    if (gridRefreshInterval) {
+        clearInterval(gridRefreshInterval);
+        gridRefreshInterval = null;
+    }
+}
 
 export function renderTimeline(recordings, onPlayClip) {
     const track = document.getElementById('timeline');

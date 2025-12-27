@@ -26,6 +26,8 @@ webrtc:
 api:
   listen: ":1984"
   origin: "*"  # Allow CORS from NVR UI
+  # NOTE: Authentication is handled by Tailscale network access control
+  # Only users on your Tailscale network can access go2rtc
 
 # Logging
 log:

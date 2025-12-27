@@ -181,6 +181,7 @@ function toggleView(view) {
     const backBtn = document.getElementById('backBtn');
 
     if (view === 'expanded') {
+        UI.stopGridRefresh();  // Stop refreshing snapshots
         grid.classList.add('hidden');
         grid.innerHTML = '';
         expanded.classList.add('active');
