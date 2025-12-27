@@ -85,6 +85,14 @@ function playClip(index) {
     if (!rec) return;
 
     const video = document.getElementById('mainPlayer');
+    const liveFrame = document.getElementById('liveFrame');
+
+    // Remove live iframe if present
+    if (liveFrame) {
+        liveFrame.remove();
+        video.style.display = '';
+    }
+
     video.src = `/recordings/${rec.name}`;
     video.play().catch(e => console.log("Autoplay blocked or format unsupported"));
 
@@ -92,9 +100,36 @@ function playClip(index) {
 }
 
 function playLive() {
+    const video = document.getElementById('mainPlayer');
+    const container = video.parentElement;
+
+    // Remove existing live frame if any
+    const existingFrame = document.getElementById('liveFrame');
+    if (existingFrame) {
+        existingFrame.remove();
+    }
+
+    // go2rtc WebRTC stream URL
+    // Use the hostname from current URL, port 1984 for go2rtc API
+    const go2rtcHost = window.location.hostname;
+    const go2rtcUrl = `http://${go2rtcHost}:1984/stream.html?src=cam${currentCam}`;
+
+    // Hide video element and show iframe
+    video.pause();
+    video.style.display = 'none';
+
+    const iframe = document.createElement('iframe');
+    iframe.src = go2rtcUrl;
+    iframe.id = 'liveFrame';
+    iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
+    iframe.allow = 'autoplay';
+    container.appendChild(iframe);
+
+    // Highlight live clip if available
     const liveIndex = recordingsMap.findIndex(r => r.live);
-    if (liveIndex >= 0) playClip(liveIndex);
-    else alert("No live recording found for this channel right now.");
+    if (liveIndex >= 0) {
+        UI.highlightClip(liveIndex);
+    }
 }
 
 function handleTimelineClick(e) {
@@ -151,10 +186,17 @@ function toggleView(view) {
         expanded.classList.add('active');
         backBtn.classList.remove('hidden');
     } else {
+        // Remove live iframe if present
+        const liveFrame = document.getElementById('liveFrame');
+        if (liveFrame) {
+            liveFrame.remove();
+        }
+
         const player = document.getElementById('mainPlayer');
         if (player) {
             player.pause();
             player.src = '';
+            player.style.display = '';  // Ensure video is visible
         }
         document.getElementById('dateSelect').innerHTML = '';
         document.getElementById('timeline').innerHTML = '';

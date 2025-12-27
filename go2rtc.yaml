@@ -1,0 +1,32 @@
+# go2rtc Configuration for Mini-NVR
+# This file configures live WebRTC streaming for all cameras
+#
+# IMPORTANT: Update the RTSP URLs below to match your DVR settings in .env
+# Format: rtsp://{user}:{pass}@{ip}:{port}/Streaming/Channels/{channel}01
+
+streams:
+  # Camera streams - update credentials and IP to match your .env
+  # Hikvision format: /Streaming/Channels/101, 201, 301, etc.
+  cam1: rtsp://onvif:PassForThis1@192.168.18.41:554/Streaming/Channels/101
+  cam2: rtsp://onvif:PassForThis1@192.168.18.41:554/Streaming/Channels/201
+  cam3: rtsp://onvif:PassForThis1@192.168.18.41:554/Streaming/Channels/301
+  cam4: rtsp://onvif:PassForThis1@192.168.18.41:554/Streaming/Channels/401
+  cam5: rtsp://onvif:PassForThis1@192.168.18.41:554/Streaming/Channels/501
+  cam6: rtsp://onvif:PassForThis1@192.168.18.41:554/Streaming/Channels/601
+  cam7: rtsp://onvif:PassForThis1@192.168.18.41:554/Streaming/Channels/701
+  cam8: rtsp://onvif:PassForThis1@192.168.18.41:554/Streaming/Channels/801
+
+# WebRTC configuration
+webrtc:
+  listen: ":8555"
+  ice_servers:
+    - urls: [stun:stun.l.google.com:19302]
+
+# API and Web UI
+api:
+  listen: ":1984"
+  origin: "*"  # Allow CORS from NVR UI
+
+# Logging
+log:
+  level: info

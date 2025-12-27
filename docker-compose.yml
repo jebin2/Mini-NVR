@@ -11,3 +11,14 @@ services:
     volumes:
       - ./recordings:/recordings
       - ./logs:/logs
+
+  # go2rtc for low-latency WebRTC live streaming
+  go2rtc:
+    image: alexxit/go2rtc
+    container_name: go2rtc
+    restart: always
+    network_mode: host  # Required for WebRTC STUN/TURN
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+    environment:
+      - TZ=${TZ:-Asia/Kolkata}
