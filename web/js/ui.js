@@ -1,4 +1,5 @@
 import { fmtDuration } from './utils.js';
+import { CONFIG } from './config.js';
 
 // Store interval ID for cleanup
 let gridRefreshInterval = null;
@@ -37,7 +38,7 @@ export function renderGrid(channels, onOpenCam) {
         card.onclick = () => onOpenCam(chId);
 
         // Use go2rtc snapshot for live preview
-        const snapshotUrl = `http://${go2rtcHost}:1984/api/frame.jpeg?src=cam${chId}&t=${Date.now()}`;
+        const snapshotUrl = `http://${go2rtcHost}:${CONFIG.go2rtcPort}/api/frame.jpeg?src=cam${chId}&t=${Date.now()}`;
 
         card.innerHTML = `
             <div class="cam-overlay">
@@ -61,7 +62,7 @@ export function renderGrid(channels, onOpenCam) {
         images.forEach(img => {
             const camId = img.dataset.cam;
             if (camId) {
-                img.src = `http://${go2rtcHost}:1984/api/frame.jpeg?src=cam${camId}&t=${Date.now()}`;
+                img.src = `http://${go2rtcHost}:${CONFIG.go2rtcPort}/api/frame.jpeg?src=cam${camId}&t=${Date.now()}`;
             }
         });
     }, 2000);

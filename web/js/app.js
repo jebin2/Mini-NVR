@@ -110,9 +110,9 @@ function playLive() {
     }
 
     // go2rtc WebRTC stream URL
-    // Use the hostname from current URL, port 1984 for go2rtc API
+    // Use the hostname from current URL with configured go2rtc port
     const go2rtcHost = window.location.hostname;
-    const go2rtcUrl = `http://${go2rtcHost}:1984/stream.html?src=cam${currentCam}`;
+    const go2rtcUrl = `http://${go2rtcHost}:${CONFIG.go2rtcPort}/stream.html?src=cam${currentCam}`;
 
     // Hide video element and show iframe
     video.pause();
