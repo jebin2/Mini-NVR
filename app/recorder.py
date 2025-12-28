@@ -194,16 +194,17 @@ def main():
     )
     converter.start()
 
-    # --- Start YouTube Streamer (if enabled) ---
-    youtube_rotator = None
+    # --- Start YouTube Streamers (if enabled) ---
+    youtube_streamers = []
     if config.YOUTUBE_ENABLED:
-        from services.youtube_rotator import create_youtube_rotator
-        youtube_rotator = create_youtube_rotator()
-        if youtube_rotator:
-            youtube_rotator.start()
-            logger.info("[✓] YouTube Rotator started")
+        from services.youtube_rotator import create_youtube_streamers
+        youtube_streamers = create_youtube_streamers()
+        for streamer in youtube_streamers:
+            streamer.start()
+        if youtube_streamers:
+            logger.info(f"[✓] YouTube Streamers started ({len(youtube_streamers)} channels)")
         else:
-            logger.warning("[!] YouTube enabled but not properly configured")
+            logger.warning("[!] YouTube enabled but no stream keys configured")
 
     while True:
         time.sleep(60)

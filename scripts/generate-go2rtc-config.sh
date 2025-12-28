@@ -90,11 +90,31 @@ log:
   level: info
 EOF
 
+# Add YouTube streams with audio transcoding for each configured stream key
+# Stream key 1 -> cam1_youtube, Stream key 2 -> cam2_youtube, etc. up to 8
+if [ "$YOUTUBE_ENABLED" = "true" ]; then
+    youtube_count=0
+    
+    # Check each stream key (1-8) and add corresponding YouTube stream
+    for i in 1 2 3 4 5 6 7 8; do
+        # Get stream key value using indirect reference
+        key_var="YOUTUBE_STREAM_KEY_$i"
+        key_value="${!key_var}"
+        
+        if [ -n "$key_value" ]; then
+            sed -i "/^streams:/a\\  cam${i}_youtube: ffmpeg:cam${i}#video=copy#audio=aac" "$OUTPUT_FILE"
+            log_info "Added cam${i}_youtube stream (with AAC audio for YouTube)"
+            youtube_count=$((youtube_count + 1))
+        fi
+    done
+    
+    if [ $youtube_count -gt 0 ]; then
+        log_info "YouTube streaming: ENABLED ($youtube_count channel(s))"
+        log_info "Each stream restarts hourly to create separate YouTube videos"
+    else
+        log_warn "YouTube enabled but no stream keys configured (YOUTUBE_STREAM_KEY_1 to YOUTUBE_STREAM_KEY_8)"
+    fi
+fi
+
 log_info "Generated: $OUTPUT_FILE"
 log_info "Channels: $NUM_CHANNELS | API: $GO2RTC_API_PORT | WebRTC: $GO2RTC_WEBRTC_PORT | RTSP: $GO2RTC_RTSP_PORT"
-
-# YouTube info
-if [ "$YOUTUBE_ENABLED" = "true" ]; then
-    log_info "YouTube streaming: ENABLED (Channel: ${YOUTUBE_CHANNEL:-1})"
-    log_warn "YouTube RTMP output is managed dynamically via API (see youtube_rotator.py)"
-fi

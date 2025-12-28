@@ -42,11 +42,16 @@ GO2RTC_API_URL = f"http://localhost:{GO2RTC_API_PORT}"
 
 # YouTube Streaming (via go2rtc)
 YOUTUBE_ENABLED = get_env("YOUTUBE_ENABLED", "false").lower() == "true"
-YOUTUBE_STREAM_KEY_1 = get_env("YOUTUBE_STREAM_KEY_1")
-YOUTUBE_STREAM_KEY_2 = get_env("YOUTUBE_STREAM_KEY_2")
 YOUTUBE_RTMP_URL = get_env("YOUTUBE_RTMP_URL", "rtmp://a.rtmp.youtube.com/live2")
-YOUTUBE_CHANNEL = int(get_env("YOUTUBE_CHANNEL", 1))
 YOUTUBE_ROTATION_MINUTES = int(get_env("YOUTUBE_ROTATION_MINUTES", 60))
+
+# Stream keys: YOUTUBE_STREAM_KEY_1 through YOUTUBE_STREAM_KEY_8
+# Each key maps to corresponding channel (key1 -> cam1, etc.)
+YOUTUBE_STREAM_KEYS = {}
+for i in range(1, 9):  # 1-8
+    key = get_env(f"YOUTUBE_STREAM_KEY_{i}")
+    if key:
+        YOUTUBE_STREAM_KEYS[i] = key
 
 # Ensure dirs
 os.makedirs(CONTROL_DIR, exist_ok=True)

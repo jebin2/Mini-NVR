@@ -1,108 +1,115 @@
 """
-YouTube Live Stream Rotator Service
+YouTube Live Stream Service
 
-Manages YouTube Live streaming via go2rtc with automatic stream key rotation.
-Uses go2rtc's native RTMP output capability - no additional FFmpeg process needed.
+Streams camera to YouTube and creates separate videos by pausing/resuming hourly.
+Uses go2rtc's native RTMP output capability with FFmpeg audio transcoding.
 
 Architecture:
-    DVR (RTSP) -> go2rtc (hub) -> YouTube (RTMP)
+    DVR (RTSP) -> go2rtc (hub) -> FFmpeg (audio->AAC) -> YouTube (RTMP)
                       |
                       +-> WebRTC (live view)
                       +-> RTSP relay (recorder)
+
+Behavior:
+    - Each channel gets its own stream key (1:1 mapping)
+    - Every hour: stop stream briefly, then restart
+    - This creates separate YouTube videos for easy archiving
 """
 import threading
 import time
 import requests
-from typing import List, Optional, Callable
+from typing import Optional, Callable
 from core import config
 from core.logger import setup_logger
 
 logger = setup_logger("youtube")
 
+# Default pause duration when restarting stream (seconds)
+PAUSE_DURATION = 10
 
-class YouTubeRotator(threading.Thread):
+
+class YouTubeStreamer(threading.Thread):
     """
-    Rotate YouTube stream keys via go2rtc API.
+    Stream camera to YouTube with periodic restart to create video segments.
     
-    go2rtc handles the actual RTSP->RTMP transcoding.
-    This service just manages the stream destination rotation.
+    Each restart creates a new video on YouTube, making it easy to archive
+    and playback specific time periods.
     """
     
     def __init__(
         self,
         go2rtc_api: str,
         channel: int,
-        stream_keys: List[str],
+        stream_key: str,
         rtmp_url: str = "rtmp://a.rtmp.youtube.com/live2",
-        rotation_minutes: int = 60,
-        on_rotation: Optional[Callable[[int, str], None]] = None
+        segment_minutes: int = 60,
+        pause_seconds: int = PAUSE_DURATION,
+        on_restart: Optional[Callable[[int], None]] = None
     ):
         """
-        Initialize YouTube rotator.
+        Initialize YouTube streamer.
         
         Args:
             go2rtc_api: go2rtc API URL (e.g., "http://localhost:2127")
             channel: Camera channel number to stream
-            stream_keys: List of YouTube stream keys to rotate between
+            stream_key: YouTube stream key for this channel
             rtmp_url: YouTube RTMP ingest URL
-            rotation_minutes: Minutes between key rotations
-            on_rotation: Optional callback(key_index, key) on rotation
+            segment_minutes: Minutes between restarts (creates new video)
+            pause_seconds: Seconds to pause when restarting
+            on_restart: Optional callback(segment_count) on restart
         """
         super().__init__()
         self.go2rtc_api = go2rtc_api.rstrip('/')
         self.channel = channel
-        self.stream_keys = stream_keys
+        self.stream_key = stream_key
         self.rtmp_url = rtmp_url.rstrip('/')
-        self.rotation_minutes = rotation_minutes
-        self.on_rotation = on_rotation
+        self.segment_minutes = segment_minutes
+        self.pause_seconds = pause_seconds
+        self.on_restart = on_restart
         
-        self.current_key_index = 0
         self.streaming = False
-        self.last_rotation_time: Optional[float] = None
+        self.segment_count = 0
+        self.last_start_time: Optional[float] = None
         self._stop_event = threading.Event()
         self.daemon = True
-        
-        # Validate
-        if len(stream_keys) < 1:
-            raise ValueError("At least one stream key required")
     
     @property
-    def current_key(self) -> str:
-        """Get current stream key."""
-        return self.stream_keys[self.current_key_index]
-    
-    @property
-    def next_rotation_seconds(self) -> int:
-        """Seconds until next rotation."""
-        if not self.last_rotation_time:
+    def next_restart_seconds(self) -> int:
+        """Seconds until next restart."""
+        if not self.last_start_time:
             return 0
-        elapsed = time.time() - self.last_rotation_time
-        remaining = (self.rotation_minutes * 60) - elapsed
+        elapsed = time.time() - self.last_start_time
+        remaining = (self.segment_minutes * 60) - elapsed
         return max(0, int(remaining))
     
-    def _build_rtmp_destination(self, key: str) -> str:
-        """Build RTMP destination URL for go2rtc."""
-        # go2rtc RTMP output format: rtmp://server/app/key#video=copy
-        return f"{self.rtmp_url}/{key}#video=copy"
+    def _get_youtube_stream_name(self) -> str:
+        """Get the YouTube-ready stream name with AAC audio transcoding."""
+        return f"cam{self.channel}_youtube"
     
-    def _add_stream_output(self, key: str) -> bool:
-        """Add RTMP output to go2rtc stream via API."""
-        stream_name = f"cam{self.channel}"
-        rtmp_dest = self._build_rtmp_destination(key)
+    def _build_rtmp_destination(self) -> str:
+        """Build RTMP destination URL for YouTube."""
+        return f"{self.rtmp_url}/{self.stream_key}"
+    
+    def _start_stream(self) -> bool:
+        """Start streaming to YouTube."""
+        youtube_stream = self._get_youtube_stream_name()
+        rtmp_dest = self._build_rtmp_destination()
         
         try:
-            # go2rtc API: POST /api/streams?dst=stream_name&src=output_url
             response = requests.post(
                 f"{self.go2rtc_api}/api/streams",
                 params={
-                    "dst": stream_name,
-                    "src": rtmp_dest
+                    "src": youtube_stream,
+                    "dst": rtmp_dest
                 },
-                timeout=10
+                timeout=60
             )
             
             if response.status_code == 200:
-                logger.info(f"[📺] Streaming cam{self.channel} to YouTube (Key {self.current_key_index + 1})")
+                self.streaming = True
+                self.last_start_time = time.time()
+                self.segment_count += 1
+                logger.info(f"[📺] cam{self.channel} -> YouTube (Segment #{self.segment_count})")
                 return True
             else:
                 logger.error(f"[❌] go2rtc API error: {response.status_code} - {response.text}")
@@ -112,101 +119,79 @@ class YouTubeRotator(threading.Thread):
             logger.error(f"[❌] Failed to connect to go2rtc: {e}")
             return False
     
-    def _remove_stream_output(self, key: str) -> bool:
-        """Remove RTMP output from go2rtc stream."""
-        stream_name = f"cam{self.channel}"
-        rtmp_dest = self._build_rtmp_destination(key)
+    def _stop_stream(self) -> bool:
+        """Stop streaming to YouTube."""
+        if not self.streaming:
+            return True
+            
+        youtube_stream = self._get_youtube_stream_name()
+        rtmp_dest = self._build_rtmp_destination()
         
         try:
-            # go2rtc API: DELETE /api/streams?dst=stream_name&src=output_url
             response = requests.delete(
                 f"{self.go2rtc_api}/api/streams",
                 params={
-                    "dst": stream_name,
-                    "src": rtmp_dest
+                    "src": youtube_stream,
+                    "dst": rtmp_dest
                 },
                 timeout=10
             )
+            self.streaming = False
             return response.status_code == 200
         except requests.RequestException:
+            self.streaming = False
             return False
     
-    def _rotate_key(self):
-        """Rotate to next stream key."""
-        old_key = self.current_key
-        old_index = self.current_key_index
+    def _restart_stream(self):
+        """Stop and restart stream to create new YouTube video."""
+        logger.info(f"[🔄] Restarting stream for cam{self.channel} (creates new video)")
         
-        # Calculate next key index
-        self.current_key_index = (self.current_key_index + 1) % len(self.stream_keys)
-        new_key = self.current_key
+        # Stop current stream
+        self._stop_stream()
         
-        logger.info(f"[🔄] Rotating from Key {old_index + 1} to Key {self.current_key_index + 1}")
+        # Brief pause - YouTube needs time to finalize the video
+        logger.info(f"[⏸] Pausing {self.pause_seconds}s before restart...")
+        time.sleep(self.pause_seconds)
         
-        # Add new output first (overlap for seamless transition)
-        if self._add_stream_output(new_key):
-            # Small delay to ensure new stream is established
+        # Start new stream
+        retry_count = 0
+        while not self._stop_event.is_set() and retry_count < 3:
+            if self._start_stream():
+                if self.on_restart:
+                    self.on_restart(self.segment_count)
+                return
+            retry_count += 1
             time.sleep(5)
-            # Remove old output
-            self._remove_stream_output(old_key)
-            
-            if self.on_rotation:
-                self.on_rotation(self.current_key_index, new_key)
-        else:
-            # Failed to add new, revert
-            self.current_key_index = old_index
-            logger.error("[❌] Rotation failed, keeping current key")
-    
-    def start_streaming(self) -> bool:
-        """Start streaming to YouTube."""
-        if self.streaming:
-            return True
         
-        if self._add_stream_output(self.current_key):
-            self.streaming = True
-            self.last_rotation_time = time.time()
-            return True
-        return False
-    
-    def stop_streaming(self):
-        """Stop streaming to YouTube."""
-        if not self.streaming:
-            return
-        
-        self._remove_stream_output(self.current_key)
-        self.streaming = False
-        logger.info("[⏹] YouTube streaming stopped")
+        logger.error(f"[❌] Failed to restart stream after {retry_count} attempts")
     
     def stop(self):
-        """Stop the rotator thread."""
+        """Stop the streamer thread."""
         self._stop_event.set()
-        self.stop_streaming()
+        self._stop_stream()
     
     def run(self):
-        """Main rotation loop."""
-        logger.info(f"[▶] YouTube Rotator started for cam{self.channel}")
-        logger.info(f"[📋] Rotation interval: {self.rotation_minutes} minutes")
-        logger.info(f"[🔑] Stream keys configured: {len(self.stream_keys)}")
+        """Main streaming loop."""
+        logger.info(f"[▶] YouTube Streamer started for cam{self.channel}")
+        logger.info(f"[📋] Segment duration: {self.segment_minutes} minutes")
+        logger.info(f"[⏸] Pause between segments: {self.pause_seconds}s")
         
         # Initial connection with retry
         retry_delay = 5
         while not self._stop_event.is_set():
-            if self.start_streaming():
+            if self._start_stream():
                 break
             logger.warning(f"[⏳] Retrying in {retry_delay}s...")
             time.sleep(retry_delay)
-            retry_delay = min(retry_delay * 2, 60)  # Exponential backoff, max 60s
+            retry_delay = min(retry_delay * 2, 60)
         
-        # Rotation loop
+        # Main loop: check for restart every 10 seconds
         while not self._stop_event.is_set():
-            # Check if time for rotation
-            if self.next_rotation_seconds <= 0:
-                self._rotate_key()
-                self.last_rotation_time = time.time()
-            
-            # Sleep in small intervals for responsive shutdown
+            if self.next_restart_seconds <= 0:
+                self._restart_stream()
             time.sleep(10)
         
-        logger.info("[⏹] YouTube Rotator stopped")
+        logger.info(f"[⏹] YouTube Streamer stopped for cam{self.channel}")
     
     def get_status(self) -> dict:
         """Get current streaming status."""
@@ -214,36 +199,48 @@ class YouTubeRotator(threading.Thread):
             "enabled": True,
             "streaming": self.streaming,
             "channel": self.channel,
-            "current_key_index": self.current_key_index + 1,
-            "total_keys": len(self.stream_keys),
-            "next_rotation_seconds": self.next_rotation_seconds,
-            "rotation_interval_minutes": self.rotation_minutes
+            "segment_count": self.segment_count,
+            "next_restart_seconds": self.next_restart_seconds,
+            "segment_duration_minutes": self.segment_minutes
         }
 
 
-def create_youtube_rotator() -> Optional[YouTubeRotator]:
+def create_youtube_streamers() -> list:
     """
-    Factory function to create YouTubeRotator from config.
-    Returns None if YouTube streaming is not enabled or configured.
+    Factory function to create YouTubeStreamer instances from config.
+    
+    Creates one streamer per configured stream key:
+    - YOUTUBE_STREAM_KEY_1 -> cam1
+    - YOUTUBE_STREAM_KEY_2 -> cam2
+    - ... up to YOUTUBE_STREAM_KEY_8 -> cam8
+    
+    Returns list of streamers (empty if disabled or no keys configured).
     """
     if not config.YOUTUBE_ENABLED:
-        return None
+        return []
     
-    # Collect stream keys
-    stream_keys = []
-    if config.YOUTUBE_STREAM_KEY_1:
-        stream_keys.append(config.YOUTUBE_STREAM_KEY_1)
-    if config.YOUTUBE_STREAM_KEY_2:
-        stream_keys.append(config.YOUTUBE_STREAM_KEY_2)
+    streamers = []
     
-    if not stream_keys:
-        logger.warning("[!] YouTube enabled but no stream keys configured")
-        return None
+    # Use the YOUTUBE_STREAM_KEYS dict: {channel: stream_key}
+    for channel, stream_key in config.YOUTUBE_STREAM_KEYS.items():
+        streamer = YouTubeStreamer(
+            go2rtc_api=config.GO2RTC_API_URL,
+            channel=channel,
+            stream_key=stream_key,
+            rtmp_url=config.YOUTUBE_RTMP_URL,
+            segment_minutes=config.YOUTUBE_ROTATION_MINUTES,
+        )
+        streamers.append(streamer)
+        logger.info(f"[+] Configured YouTube stream: cam{channel}")
     
-    return YouTubeRotator(
-        go2rtc_api=config.GO2RTC_API_URL,
-        channel=config.YOUTUBE_CHANNEL,
-        stream_keys=stream_keys,
-        rtmp_url=config.YOUTUBE_RTMP_URL,
-        rotation_minutes=config.YOUTUBE_ROTATION_MINUTES
-    )
+    if not streamers:
+        logger.warning("[!] YouTube enabled but no stream keys configured (YOUTUBE_STREAM_KEY_1 to YOUTUBE_STREAM_KEY_8)")
+    
+    return streamers
+
+
+# Legacy function for backward compatibility
+def create_youtube_rotator():
+    """Legacy function - returns first streamer or None."""
+    streamers = create_youtube_streamers()
+    return streamers[0] if streamers else None
