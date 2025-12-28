@@ -47,7 +47,7 @@ def parse_filename(filepath):
     try:
         parent_dir = os.path.basename(os.path.dirname(filepath)) # 2025-12-26
         if re.match(r'\d{4}-\d{2}-\d{2}', parent_dir):
-            time_part = fname.split('.')[0] # 153024 (removes extension automatically)
+            time_part = fname.replace('_uploaded', '').split('.')[0] # 153024 (removes extension automatically)
             if len(time_part) == 6:
                 h, m, s = time_part[0:2], time_part[2:4], time_part[4:6]
                 Y, M, D = parent_dir.split('-')

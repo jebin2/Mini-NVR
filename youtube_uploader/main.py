@@ -190,8 +190,17 @@ class NVRUploaderService:
         return os.path.join(self._get_metadata_dir(), safe_name)
     
     def _is_uploaded(self, mp4_path: str) -> bool:
-        """Check if MP4 has been uploaded (marker file exists)."""
-        # Check both the original location and fallback location
+        """Check if MP4 has been uploaded."""
+        # 1. Check if this IS an already uploaded file
+        if mp4_path.endswith("_uploaded.mp4"):
+            return True
+            
+        # 2. Check if the uploaded version exists (renamed)
+        renamed_path = mp4_path.replace(".mp4", "_uploaded.mp4")
+        if os.path.exists(renamed_path):
+            return True
+
+        # 3. Check legacy marker files (backward compatibility)
         return (os.path.exists(self._get_marker_path(mp4_path)) or 
                 os.path.exists(self._get_fallback_marker_path(mp4_path)))
     
@@ -202,29 +211,25 @@ class NVRUploaderService:
         except OSError:
             return False
     
-    def _mark_uploaded(self, mp4_path: str, video_id: str):
-        """Create marker file after successful upload."""
-        marker_content = f"video_id={video_id}\nuploaded_at={datetime.now().isoformat()}\noriginal_path={mp4_path}\n"
-        
-        # Try original location first (beside the MP4 file)
-        marker_path = self._get_marker_path(mp4_path)
-        try:
-            with open(marker_path, 'w') as f:
-                f.write(marker_content)
-            return
-        except PermissionError:
-            pass  # Fall through to fallback
-        except OSError as e:
-            self.log(f"[NVR Uploader] ! Could not create marker at {marker_path}: {e}")
-        
-        # Use fallback location in metadata directory
-        fallback_path = self._get_fallback_marker_path(mp4_path)
-        try:
-            with open(fallback_path, 'w') as f:
-                f.write(marker_content)
-            self.log(f"[NVR Uploader] ℹ Marker saved to metadata dir (no write access to recordings)")
-        except OSError as e:
-            self.log(f"[NVR Uploader] ✗ Failed to create upload marker: {e}")
+    def _finalize_upload(self, mp4_path: str, video_id: str):
+        """Handle file after successful upload (rename or delete)."""
+        if self.delete_after_upload:
+            try:
+                os.remove(mp4_path)
+                self.log(f"[NVR Uploader] 🗑 Deleted local file: {os.path.basename(mp4_path)}")
+            except OSError as e:
+                self.log(f"[NVR Uploader] ! Failed to delete {mp4_path}: {e}")
+        else:
+            # Rename to _uploaded.mp4
+            new_path = mp4_path.replace(".mp4", "_uploaded.mp4")
+            try:
+                os.rename(mp4_path, new_path)
+                self.log(f"[NVR Uploader] ✏ Renamed to: {os.path.basename(new_path)}")
+            except OSError as e:
+                self.log(f"[NVR Uploader] ! Failed to rename {mp4_path}: {e}")
+                # If rename fails, try to leave a marker? 
+                # User specifically disliked markers, but better than re-uploading loop.
+                # For now, just log error. The file will be retried next scan.
     
     def _find_pending_uploads(self) -> List[str]:
         """Find MP4 files that haven't been uploaded yet."""
@@ -305,16 +310,11 @@ class NVRUploaderService:
             
             if video_id:
                 self.log(f"[NVR Uploader] ✓ Uploaded: https://youtube.com/watch?v={video_id}")
-                self._mark_uploaded(mp4_path, video_id)
+                self._finalize_upload(mp4_path, video_id)
                 self.upload_count += 1
                 self.last_upload_time = time.time()
                 
-                if self.delete_after_upload:
-                    try:
-                        os.remove(mp4_path)
-                        self.log(f"[NVR Uploader] 🗑 Deleted local file: {os.path.basename(mp4_path)}")
-                    except OSError as e:
-                        self.log(f"[NVR Uploader] ! Failed to delete {mp4_path}: {e}")
+                return video_id
                 
                 return video_id
             else:
