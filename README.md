@@ -6,7 +6,7 @@ A lightweight, Docker-based Network Video Recorder for RTSP cameras with live st
 
 - 📹 **Multi-channel RTSP recording** with automatic MKV → MP4 conversion
 - 🎥 **Live View** via WebRTC (low-latency, powered by go2rtc)
-- 📺 **YouTube Live Streaming** with automatic 1-hour key rotation
+- 📺 **YouTube Live Streaming** with hourly video segmentation (per channel)
 - 🌐 **Web-based viewer** with timeline controls and playback
 - 🔒 **Secure authentication** with rate limiting & CSRF protection
 - 🧹 **Automatic cleanup** when storage limit reached
@@ -115,16 +115,25 @@ All configuration is done via `.env` file. Configs are auto-generated at startup
 
 ### YouTube Live Streaming
 
+Stream cameras to YouTube Live with automatic hourly segmentation.
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `YOUTUBE_ENABLED` | Enable streaming | `false` |
-| `YOUTUBE_STREAM_KEY_1` | First stream key | *required if enabled* |
-| `YOUTUBE_STREAM_KEY_2` | Second key (rotation) | *required if enabled* |
-| `YOUTUBE_CHANNEL` | Camera to stream | `1` |
-| `YOUTUBE_ROTATION_MINUTES` | Rotation interval | `60` |
+| `YOUTUBE_STREAM_KEY_1` | Stream key for cam1 | - |
+| `YOUTUBE_STREAM_KEY_2` | Stream key for cam2 | - |
+| ... | ... | ... |
+| `YOUTUBE_STREAM_KEY_8` | Stream key for cam8 | - |
+| `YOUTUBE_ROTATION_MINUTES` | Segment duration | `60` |
+| `YOUTUBE_RTMP_URL` | RTMP ingest URL | `rtmp://a.rtmp.youtube.com/live2` |
 
-> **Setup:** Create 2 stream keys in [YouTube Studio](https://studio.youtube.com) → Create → Go Live → Stream.
-> Keys rotate hourly to avoid YouTube's 12-hour session limit.
+**How it works:**
+- Each channel gets its own stream key (1:1 mapping)
+- Streams restart every hour (configurable) creating separate YouTube videos
+- Great for archiving: each hour becomes a separate video on YouTube
+
+> **Setup:** Create stream keys in [YouTube Studio](https://studio.youtube.com) → Create → Go Live → Stream.
+> You only need to configure stream keys for the channels you want to stream.
 
 ### Security Settings
 
