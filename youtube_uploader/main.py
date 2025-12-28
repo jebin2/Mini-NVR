@@ -14,8 +14,10 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime
-from typing import Optional, List
+import subprocess
+import json
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict
 
 # Try to import youtube_auto_pub - either installed or from sibling directory
 try:
@@ -46,12 +48,25 @@ def load_env_file(path: str) -> dict:
     return env
 
 
+class VideoBatch:
+    """Represents a collection of video files to be merged and uploaded together."""
+    def __init__(self, channel: str, date: str, files: List[str]):
+        self.channel = channel
+        self.date = date
+        self.files = sorted(files)  # Ensure chronological order
+        self.merged_path: Optional[str] = None
+        
+    @property
+    def id(self) -> str:
+        return f"{self.channel}_{self.date}_{len(self.files)}files"
+
+
 class NVRUploaderService:
     """
     Background service to upload Mini-NVR recordings to YouTube.
     
-    Watches for MP4 files in the NVR recordings directory and uploads
-    them with appropriate metadata. Uses marker files to track uploads.
+    Watches for MP4 files, batches them by channel/date, merges them,
+    and uploads the result with detailed timestamps.
     """
     
     def __init__(
@@ -88,6 +103,8 @@ class NVRUploaderService:
         self.upload_count = 0
         self.last_upload_time: Optional[float] = None
         self.last_error: Optional[str] = None
+        
+        self._check_dependencies()
     
     def log(self, message: str):
         """Log message to stdout and optionally to file."""
@@ -101,7 +118,16 @@ class NVRUploaderService:
                     f.write(log_line + "\n")
             except Exception:
                 pass
-        
+
+    def _check_dependencies(self):
+        """Check if FFmpeg is available."""
+        try:
+            subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            subprocess.run(["ffprobe", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            self.log("[NVR Uploader] ✗ FFmpeg or FFprobe not found in path! Merging will fail.")
+            sys.exit(1)
+            
     def _init_uploader(self) -> bool:
         """Initialize the YouTube uploader with config."""
         try:
@@ -139,14 +165,12 @@ class NVRUploaderService:
         
         try:
             # youtube_auto_pub expects just filenames, not full paths
-            # Extract the basename and ensure the file is in encrypt folder
             import shutil
             
             token_filename = os.path.basename(self.token_path)
             client_filename = os.path.basename(self.client_secret_path)
             
             # Copy client_secret to encrypt folder if it exists locally
-            # (for first-time setup when HuggingFace doesn't have it yet)
             if os.path.exists(self.client_secret_path):
                 dest = os.path.join(self.encrypt_path, client_filename)
                 if not os.path.exists(dest):
@@ -160,35 +184,13 @@ class NVRUploaderService:
             self.log("[NVR Uploader] ✓ YouTube API service authenticated")
             return self._service
         except Exception as e:
+            # Only log auth errors once per batch scan attempts or implement backoff?
+            # For now standard logging
             self.log(f"[NVR Uploader] ✗ Failed to get YouTube service: {e}")
             self.last_error = str(e)
             self._service = None
             return None
-    
-    def _get_metadata_dir(self) -> str:
-        """Get the metadata directory for storing upload markers."""
-        metadata_dir = os.path.join(self.recordings_dir, ".upload_metadata")
-        if not os.path.exists(metadata_dir):
-            try:
-                os.makedirs(metadata_dir, exist_ok=True)
-            except OSError:
-                # Fall back to a directory we definitely control
-                metadata_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".upload_metadata")
-                os.makedirs(metadata_dir, exist_ok=True)
-        return metadata_dir
-    
-    def _get_marker_path(self, mp4_path: str) -> str:
-        """Get the .uploaded marker file path for an MP4."""
-        return mp4_path + ".uploaded"
-    
-    def _get_fallback_marker_path(self, mp4_path: str) -> str:
-        """Get fallback marker path in metadata directory."""
-        # Create a unique filename based on the full path
-        # Replace path separators and use the relative path from recordings_dir
-        rel_path = os.path.relpath(mp4_path, self.recordings_dir)
-        safe_name = rel_path.replace(os.sep, "_").replace("/", "_") + ".uploaded"
-        return os.path.join(self._get_metadata_dir(), safe_name)
-    
+
     def _is_uploaded(self, mp4_path: str) -> bool:
         """Check if MP4 has been uploaded."""
         # 1. Check if this IS an already uploaded file
@@ -201,54 +203,42 @@ class NVRUploaderService:
             return True
 
         # 3. Check legacy marker files (backward compatibility)
-        return (os.path.exists(self._get_marker_path(mp4_path)) or 
-                os.path.exists(self._get_fallback_marker_path(mp4_path)))
+        marker_path = mp4_path + ".uploaded"
+        return os.path.exists(marker_path)
     
-    def _is_file_stable(self, filepath: str, stable_seconds: int = 30) -> bool:
+    def _finalize_batch(self, batch: VideoBatch):
+        """Handle files after successful upload (rename or delete)."""
+        for mp4_path in batch.files:
+            if self.delete_after_upload:
+                try:
+                    os.remove(mp4_path)
+                    self.log(f"[NVR Uploader] 🗑 Deleted local file: {os.path.basename(mp4_path)}")
+                except OSError as e:
+                    self.log(f"[NVR Uploader] ! Failed to delete {mp4_path}: {e}")
+            else:
+                # Rename to _uploaded.mp4
+                new_path = mp4_path.replace(".mp4", "_uploaded.mp4")
+                try:
+                    os.rename(mp4_path, new_path)
+                    # self.log(f"[NVR Uploader] ✏ Renamed to: {os.path.basename(new_path)}")
+                except OSError as e:
+                    self.log(f"[NVR Uploader] ! Failed to rename {mp4_path}: {e}")
+
+        # Delete the merged file if it exists
+        if batch.merged_path and os.path.exists(batch.merged_path):
+            try:
+                os.remove(batch.merged_path)
+                self.log(f"[NVR Uploader] 🧹 Removed temporary merged file")
+            except OSError:
+                pass
+
+    def _is_file_stable(self, filepath: str, stable_seconds: int = 15) -> bool:
         """Check if file has stopped being written to."""
         try:
             return (time.time() - os.path.getmtime(filepath)) > stable_seconds
         except OSError:
             return False
-    
-    def _finalize_upload(self, mp4_path: str, video_id: str):
-        """Handle file after successful upload (rename or delete)."""
-        if self.delete_after_upload:
-            try:
-                os.remove(mp4_path)
-                self.log(f"[NVR Uploader] 🗑 Deleted local file: {os.path.basename(mp4_path)}")
-            except OSError as e:
-                self.log(f"[NVR Uploader] ! Failed to delete {mp4_path}: {e}")
-        else:
-            # Rename to _uploaded.mp4
-            new_path = mp4_path.replace(".mp4", "_uploaded.mp4")
-            try:
-                os.rename(mp4_path, new_path)
-                self.log(f"[NVR Uploader] ✏ Renamed to: {os.path.basename(new_path)}")
-            except OSError as e:
-                self.log(f"[NVR Uploader] ! Failed to rename {mp4_path}: {e}")
-                # If rename fails, try to leave a marker? 
-                # User specifically disliked markers, but better than re-uploading loop.
-                # For now, just log error. The file will be retried next scan.
-    
-    def _find_pending_uploads(self) -> List[str]:
-        """Find MP4 files that haven't been uploaded yet."""
-        # Pattern: recordings_dir/ch*/date/*.mp4
-        pattern = os.path.join(self.recordings_dir, "ch*", "*", "*.mp4")
-        all_mp4s = glob.glob(pattern)
-        
-        pending = []
-        for mp4_path in all_mp4s:
-            if self._is_uploaded(mp4_path):
-                continue
-            if not self._is_file_stable(mp4_path):
-                continue
-            if mp4_path.endswith(".tmp"):
-                continue
-            pending.append(mp4_path)
-        
-        return sorted(pending)
-    
+            
     def _parse_video_path(self, mp4_path: str) -> dict:
         """Parse video path to extract metadata."""
         try:
@@ -258,7 +248,15 @@ class NVRUploaderService:
             channel_dir = parts[-3]
             
             channel = channel_dir.replace("ch", "Channel ")
-            time_str = f"{filename[:2]}:{filename[2:4]}:{filename[4:6]}"
+            
+            # Remove _uploaded suffix if present for parsing
+            clean_filename = filename.replace("_uploaded", "")
+            
+            # Filename is usually TIME (041115)
+            if len(clean_filename) == 6 and clean_filename.isdigit():
+                 time_str = f"{clean_filename[:2]}:{clean_filename[2:4]}:{clean_filename[4:6]}"
+            else:
+                 time_str = clean_filename
             
             return {
                 "channel": channel,
@@ -270,64 +268,195 @@ class NVRUploaderService:
             return {
                 "channel": "Unknown",
                 "date": datetime.now().strftime("%Y-%m-%d"),
-                "time": datetime.now().strftime("%H:%M:%S"),
+                "time": "00:00:00",
                 "filename": os.path.basename(mp4_path)
             }
-    
-    def _upload_video(self, mp4_path: str) -> Optional[str]:
-        """Upload a single video to YouTube."""
-        service = self._get_service()
-        if service is None:
+
+    def _get_video_duration(self, filepath: str) -> float:
+        """Get video duration in seconds using ffprobe."""
+        cmd = [
+            "ffprobe", 
+            "-v", "error", 
+            "-show_entries", "format=duration", 
+            "-of", "default=noprint_wrappers=1:nokey=1", 
+            filepath
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            return float(result.stdout.strip())
+        except Exception:
+            return 0.0
+
+    def _find_batches(self) -> List[VideoBatch]:
+        """Group pending files into batches by Channel and Date."""
+        # Pattern: recordings_dir/ch*/date/*.mp4
+        pattern = os.path.join(self.recordings_dir, "ch*", "*", "*.mp4")
+        all_mp4s = glob.glob(pattern)
+        
+        # Grouping dictionary: key=(channel, date), value=[files]
+        groups: Dict[tuple, List[str]] = {}
+        
+        for mp4_path in all_mp4s:
+            if self._is_uploaded(mp4_path):
+                continue
+            if not self._is_file_stable(mp4_path):
+                continue
+            if mp4_path.endswith(".tmp"): # Skip temp files from converter
+                continue
+                
+            info = self._parse_video_path(mp4_path)
+            key = (info['channel'], info['date'])
+            
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(mp4_path)
+        
+        batches = []
+        for (channel, date), files in groups.items():
+            if files:
+                batches.append(VideoBatch(channel, date, files))
+                
+        return sorted(batches, key=lambda b: (b.channel, b.date))
+
+    def _merge_videos(self, batch: VideoBatch) -> Optional[str]:
+        """Merge videos in batch into a single file using ffmpeg concat."""
+        if not batch.files:
             return None
+            
+        # If only one file, no actual merge needed, but we treat it as "merged"
+        if len(batch.files) == 1:
+            return batch.files[0]
+            
+        try:
+            # Create list file
+            list_path = os.path.join(self.recordings_dir, f"concat_list_{os.getpid()}.txt")
+            merged_output = os.path.join(self.recordings_dir, f"merged_{batch.files[0].split(os.sep)[-2]}_{len(batch.files)}.mp4")
+            
+            with open(list_path, 'w') as f:
+                for file_path in batch.files:
+                    # FFmpeg concat requires absolute paths
+                    f.write(f"file '{file_path}'\n")
+            
+            self.log(f"[NVR Uploader] ⚙ Merging {len(batch.files)} clips for {batch.channel}...")
+            
+            # Run ffmpeg concat
+            cmd = [
+                "ffmpeg", 
+                "-y", "-v", "error",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", list_path,
+                "-c", "copy",
+                merged_output
+            ]
+            
+            subprocess.run(cmd, check=True)
+            
+            # Cleanup list
+            os.remove(list_path)
+            
+            batch.merged_path = merged_output # Mark for deletion later
+            return merged_output
+            
+        except subprocess.CalledProcessError as e:
+            self.log(f"[NVR Uploader] ✗ Merge failed: {e}")
+            if os.path.exists(list_path):
+                os.remove(list_path)
+            return None
+        except Exception as e:
+            self.log(f"[NVR Uploader] ✗ Error during merge prep: {e}")
+            return None
+
+    def _generate_description(self, batch: VideoBatch) -> str:
+        """Generate description with timestamps."""
+        desc_lines = [
+            f"Security camera recording for {batch.channel}",
+            f"Date: {batch.date}",
+            f"Merged clips: {len(batch.files)}",
+            "",
+            "Timeline:"
+        ]
         
-        info = self._parse_video_path(mp4_path)
+        current_time = 0.0
         
-        title = f"NVR {info['channel']} - {info['date']} {info['time']}"
-        description = (
-            f"Security camera recording\n"
-            f"Channel: {info['channel']}\n"
-            f"Date: {info['date']}\n"
-            f"Time: {info['time']}\n"
-            f"\nRecorded by Mini-NVR"
-        )
+        for file_path in batch.files:
+            info = self._parse_video_path(file_path)
+            duration = self._get_video_duration(file_path)
+            
+            # Format elapsed time as HH:MM:SS
+            m, s = divmod(int(current_time), 60)
+            h, m = divmod(m, 60)
+            if h > 0:
+                ts = f"{h:02d}:{m:02d}:{s:02d}"
+            else:
+                ts = f"{m:02d}:{s:02d}"
+                
+            desc_lines.append(f"{ts} - {info['time']}")
+            current_time += duration
+            
+        desc_lines.append("")
+        desc_lines.append("Recorded by Mini-NVR")
+        
+        return "\n".join(desc_lines)
+
+    def _process_batch(self, batch: VideoBatch) -> bool:
+        """Process a single batch: Merge -> Upload -> Finalize."""
+        
+        # 1. Merge
+        upload_path = self._merge_videos(batch)
+        if not upload_path:
+            return False
+            
+        # 2. Metadata
+        description = self._generate_description(batch)
+        
+        # Construct Title
+        # Title: Channel X - Date - FirstTime - LastTime
+        first_info = self._parse_video_path(batch.files[0])
+        last_info = self._parse_video_path(batch.files[-1])
+        title = f"{batch.channel} - {batch.date} ({first_info['time']} to {last_info['time']})"
         
         metadata = VideoMetadata(
             title=title,
             description=description,
-            tags=["NVR", "security", "camera", info['channel'].replace(" ", "")],
+            tags=["NVR", "security", "camera", batch.channel.replace(" ", ""), "merged"],
             privacy_status=self.privacy_status,
             category_id="22"
         )
         
-        try:
-            self.log(f"[NVR Uploader] 📤 Uploading: {os.path.basename(mp4_path)}...")
+        # 3. Upload
+        service = self._get_service()
+        if not service:
+            return False
             
+        try:
+            self.log(f"[NVR Uploader] 📤 Uploading batch: {title}")
             video_id = self._uploader.upload_video(
                 service=service,
-                video_path=mp4_path,
+                video_path=upload_path,
                 metadata=metadata
             )
             
             if video_id:
                 self.log(f"[NVR Uploader] ✓ Uploaded: https://youtube.com/watch?v={video_id}")
-                self._finalize_upload(mp4_path, video_id)
+                self._finalize_batch(batch)
                 self.upload_count += 1
                 self.last_upload_time = time.time()
-                
-                return video_id
-                
-                return video_id
+                return True
             else:
-                self.log(f"[NVR Uploader] ✗ Upload failed (no video ID): {mp4_path}")
-                return None
+                self.log(f"[NVR Uploader] ✗ Upload failed (no video ID)")
+                return False
                 
         except Exception as e:
-            self.log(f"[NVR Uploader] ✗ Upload error for {mp4_path}: {e}")
-            self.last_error = str(e)
-            if "auth" in str(e).lower() or "credential" in str(e).lower():
+            # Handle Upload Limit specifically or just generic error
+            self.log(f"[NVR Uploader] ✗ Upload error: {e}")
+            if "uploadLimitExceeded" in str(e):
+                 self.log("[NVR Uploader] 🛑 DAILY UPLOAD LIMIT REACHED. Sleeping for 1 hour...")
+                 time.sleep(3600) 
+            elif "auth" in str(e).lower():
                 self._service = None
-            return None
-    
+            return False
+
     def stop(self):
         """Stop the upload service."""
         self._running = False
@@ -338,12 +467,11 @@ class NVRUploaderService:
         self._running = True
         
         self.log("[NVR Uploader] =========================================")
-        self.log("[NVR Uploader] YouTube NVR Upload Service Started")
+        self.log("[NVR Uploader] YouTube NVR Upload Service Started (Batch Mode)")
         self.log("[NVR Uploader] =========================================")
         self.log(f"[NVR Uploader] 📁 Watching: {self.recordings_dir}")
         self.log(f"[NVR Uploader] 🔒 Privacy: {self.privacy_status}")
         self.log(f"[NVR Uploader] ⏱ Scan interval: {self.scan_interval}s")
-        self.log(f"[NVR Uploader] 🗑 Delete after upload: {self.delete_after_upload}")
         
         if not os.path.isdir(self.recordings_dir):
             self.log(f"[NVR Uploader] ✗ Recordings directory not found: {self.recordings_dir}")
@@ -353,16 +481,25 @@ class NVRUploaderService:
         
         while self._running:
             try:
-                pending = self._find_pending_uploads()
+                batches = self._find_batches()
                 
-                if pending:
-                    self.log(f"[NVR Uploader] 📋 Found {len(pending)} videos to upload")
+                if batches:
+                    self.log(f"[NVR Uploader] 📋 Found {len(batches)} batches pending upload")
                 
-                for mp4_path in pending:
+                for batch in batches:
                     if not self._running:
                         break
-                    self._upload_video(mp4_path)
-                    time.sleep(5)
+                    
+                    # Log batch details
+                    self.log(f"[NVR Uploader] > Processing batch {batch.channel} {batch.date}: {len(batch.files)} files")
+                    
+                    if self._process_batch(batch):
+                         # If successful, maybe short sleep
+                         time.sleep(5)
+                    else:
+                         # If failed, longer sleep or continue?
+                         # Continue to next batch, maybe it was a file specific issue
+                         time.sleep(5)
                     
             except Exception as e:
                 self.log(f"[NVR Uploader] ✗ Scan error: {e}")
@@ -392,10 +529,9 @@ def main():
     # Check if upload is enabled
     if os.environ.get("YOUTUBE_UPLOAD_ENABLED", "false").lower() != "true":
         print("[NVR Uploader] YouTube upload is disabled (YOUTUBE_UPLOAD_ENABLED != true)")
-        print("[NVR Uploader] Set YOUTUBE_UPLOAD_ENABLED=true in .env to enable")
         sys.exit(0)
     
-    # Read config from env (same vars as Docker)
+    # Read config from env
     recordings_dir = os.path.join(project_dir, "recordings")
     client_secret_path = os.environ.get("YOUTUBE_CLIENT_SECRET_PATH", "./ytktclient_secret.json")
     token_path = os.environ.get("YOUTUBE_TOKEN_PATH", "./ytkttoken.json")
@@ -413,12 +549,10 @@ def main():
     if not os.path.isabs(encrypt_path):
         encrypt_path = os.path.join(project_dir, encrypt_path.lstrip("./"))
     
-    # Log file (same as Mini-NVR Docker)
+    # Log file
     log_file = os.environ.get("LOG_FILE")
     if log_file and not os.path.isabs(log_file):
         log_file = os.path.join(project_dir, log_file.lstrip("./"))
-    
-    # Append to same log or create separate one
     if log_file:
         log_dir = os.path.dirname(log_file)
         log_file = os.path.join(log_dir, "youtube_uploader.log")
