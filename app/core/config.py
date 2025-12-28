@@ -53,6 +53,11 @@ for i in range(1, 9):  # 1-8
     if key:
         YOUTUBE_STREAM_KEYS[i] = key
 
+# YouTube Upload Settings
+# NOTE: YouTube upload now runs on HOST (not in Docker) via start.sh
+# This allows Neko browser automation for OAuth re-authentication
+# Config is read directly from .env by youtube_uploader/main.py
+
 # Ensure dirs
 os.makedirs(CONTROL_DIR, exist_ok=True)
 

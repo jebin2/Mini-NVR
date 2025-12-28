@@ -206,6 +206,9 @@ def main():
         else:
             logger.warning("[!] YouTube enabled but no stream keys configured")
 
+    # NOTE: YouTube Upload Service now runs on host (not in Docker) via start.sh
+    # This allows it to use Neko browser automation for OAuth re-authentication
+
     while True:
         time.sleep(60)
         ensure_dir(config.RECORD_DIR)

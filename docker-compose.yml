@@ -5,11 +5,14 @@ services:
     build: .
     container_name: mini-nvr
     restart: always
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"  # Run as host user to fix file permissions
     env_file: .env
     network_mode: host  # Required to access go2rtc at localhost
     volumes:
       - ./recordings:/recordings
       - ./logs:/logs
+      # NOTE: YouTube upload credentials not needed in Docker
+      # YouTube upload now runs on HOST via start.sh
 
   # go2rtc for low-latency WebRTC live streaming
   # Also serves as central RTSP hub for YouTube streaming

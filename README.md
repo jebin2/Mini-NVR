@@ -135,6 +135,47 @@ Stream cameras to YouTube Live with automatic hourly segmentation.
 > **Setup:** Create stream keys in [YouTube Studio](https://studio.youtube.com) → Create → Go Live → Stream.
 > You only need to configure stream keys for the channels you want to stream.
 
+### YouTube Video Upload (Recorded Videos)
+
+Automatically upload converted MP4 recordings to YouTube.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `YOUTUBE_UPLOAD_ENABLED` | Enable video uploading | `false` |
+| `YOUTUBE_CLIENT_SECRET_PATH` | Path to client_secret.json | `./client_secret.json` |
+| `YOUTUBE_TOKEN_PATH` | OAuth token storage | `./yttoken.json` |
+| `YOUTUBE_VIDEO_PRIVACY` | Video privacy status | `unlisted` |
+| `YOUTUBE_DELETE_AFTER_UPLOAD` | Delete local file after upload | `false` |
+| `YOUTUBE_UPLOAD_INTERVAL` | Seconds between upload scans | `60` |
+| `GOOGLE_EMAIL` | Google account email for OAuth | - |
+| `GOOGLE_PASSWORD` | Google account password/app password | - |
+
+**Setup:**
+
+1. **Create Google Cloud Project:**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project
+   - Enable the YouTube Data API v3
+
+2. **Create OAuth Credentials:**
+   - Go to APIs & Services → Credentials
+   - Create OAuth 2.0 Client ID (Desktop application)
+   - Download `client_secret.json` to project root
+
+3. **Configure:**
+   ```bash
+   YOUTUBE_UPLOAD_ENABLED=true
+   YOUTUBE_CLIENT_SECRET_PATH=./client_secret.json
+   YOUTUBE_VIDEO_PRIVACY=unlisted  # or private/public
+   ```
+
+4. **First Run:**
+   - On first start, you'll need to complete OAuth in the browser
+   - Token will be saved for future use
+
+> **Video Metadata:** Videos are automatically titled with channel, date, and time.
+> Example: "NVR Channel 1 - 2025-12-28 23:31:27"
+
 ### Security Settings
 
 | Variable | Description |
@@ -177,7 +218,8 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 │   ├── core/                 # Config, logging, security
 │   └── services/
 │       ├── converter.py      # MKV → MP4 converter
-│       ├── youtube_rotator.py # YouTube stream rotation
+│       ├── youtube_rotator.py # YouTube live stream rotation
+│       ├── youtube_uploader.py # Upload recordings to YouTube
 │       └── ...
 ├── web/                      # Frontend (HTML/CSS/JS)
 ├── recordings/               # Video storage (volume)
