@@ -196,7 +196,7 @@ def main():
 
     # --- Start YouTube Streamers (if enabled) ---
     youtube_streamers = []
-    if config.YOUTUBE_ENABLED:
+    if config.YOUTUBE_LIVE_ENABLED:
         from services.youtube_rotator import create_youtube_streamers
         youtube_streamers = create_youtube_streamers()
         for streamer in youtube_streamers:

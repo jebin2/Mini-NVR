@@ -216,7 +216,7 @@ def create_youtube_streamers() -> list:
     
     Returns list of streamers (empty if disabled or no keys configured).
     """
-    if not config.YOUTUBE_ENABLED:
+    if not config.YOUTUBE_LIVE_ENABLED:
         return []
     
     streamers = []

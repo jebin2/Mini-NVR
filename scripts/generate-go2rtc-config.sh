@@ -92,7 +92,7 @@ EOF
 
 # Add YouTube streams with audio transcoding for each configured stream key
 # Stream key 1 -> cam1_youtube, Stream key 2 -> cam2_youtube, etc. up to 8
-if [ "$YOUTUBE_ENABLED" = "true" ]; then
+if [ "$YOUTUBE_LIVE_ENABLED" = "true" ]; then
     youtube_count=0
     
     # Check each stream key (1-8) and add corresponding YouTube stream

@@ -119,7 +119,7 @@ Stream cameras to YouTube Live with automatic hourly segmentation.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `YOUTUBE_ENABLED` | Enable streaming | `false` |
+| `YOUTUBE_LIVE_ENABLED` | Enable streaming | `false` |
 | `YOUTUBE_STREAM_KEY_1` | Stream key for cam1 | - |
 | `YOUTUBE_STREAM_KEY_2` | Stream key for cam2 | - |
 | ... | ... | ... |
@@ -297,7 +297,7 @@ docker compose down && docker compose up -d --build
 |-------|----------|
 | Live view not connecting | Check `GO2RTC_API_PORT` matches in browser console |
 | Recording not starting | Verify go2rtc is running: `docker logs go2rtc` |
-| YouTube not streaming | Ensure `YOUTUBE_ENABLED=true` and keys configured |
+| YouTube not streaming | Ensure `YOUTUBE_LIVE_ENABLED=true` and keys configured |
 | Port conflicts | Change ports in `.env`, run `./scripts/start.sh -d` |
 
 ---

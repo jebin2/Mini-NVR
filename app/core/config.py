@@ -41,7 +41,7 @@ GO2RTC_RTSP_PORT = int(get_env("GO2RTC_RTSP_PORT", 8554))
 GO2RTC_API_URL = f"http://localhost:{GO2RTC_API_PORT}"
 
 # YouTube Streaming (via go2rtc)
-YOUTUBE_ENABLED = get_env("YOUTUBE_ENABLED", "false").lower() == "true"
+YOUTUBE_LIVE_ENABLED = get_env("YOUTUBE_LIVE_ENABLED", "false").lower() == "true"
 YOUTUBE_RTMP_URL = get_env("YOUTUBE_RTMP_URL", "rtmp://a.rtmp.youtube.com/live2")
 YOUTUBE_ROTATION_MINUTES = int(get_env("YOUTUBE_ROTATION_MINUTES", 60))
 
