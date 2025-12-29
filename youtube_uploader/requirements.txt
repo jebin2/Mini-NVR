@@ -1,3 +1,11 @@
+# Common
+fastapi
+uvicorn
+itsdangerous
+slowapi
+bcrypt
+requests
+
 # Requirements for YouTube Uploader (runs on HOST, not in Docker)
 # Install with: pip install -r youtube_uploader/requirements.txt
 
