@@ -1,0 +1,20 @@
+[Unit]
+Description=Mini-NVR YouTube Uploader
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=jebin
+WorkingDirectory=/home/jebin/git/Mini-NVR
+ExecStart=/home/jebin/git/Mini-NVR/Mini-NVR_env/bin/python youtube_uploader/main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/jebin/git/Mini-NVR/logs/youtube_uploader.log
+StandardError=append:/home/jebin/git/Mini-NVR/logs/youtube_uploader.log
+
+# Environment file (optional, loads .env)
+EnvironmentFile=-/home/jebin/git/Mini-NVR/.env
+
+[Install]
+WantedBy=multi-user.target
