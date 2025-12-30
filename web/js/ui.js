@@ -151,7 +151,13 @@ export function renderPlaylist(recordings, onPlayClip, onDeleteClip) {
                 ytBtn.title = 'Watch on YouTube';
                 ytBtn.innerHTML = '▶'; // Or use an SVG icon
                 ytBtn.style.color = '#ff0000';
-                ytBtn.onclick = (e) => e.stopPropagation();
+                ytBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (rec.size === "Cloud Only") {
+                        e.preventDefault();
+                        onPlayClip(index);
+                    }
+                };
                 actions.appendChild(ytBtn);
             }
 
