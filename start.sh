@@ -1,9 +1,8 @@
 #!/bin/bash
 # Start Mini-NVR Docker stack
-# Usage: ./scripts/start.sh [options]
+# Usage: ./start.sh [options]
 #   -d  Run in background (detached)
 #   -c  Clean logs and recordings before starting
-#   -s  Stop all services (Docker + YouTube uploader)
 
 set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -11,13 +10,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # Parse arguments
 DETACHED=false
 CLEAN=false
-STOP_ONLY=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -d) DETACHED=true; shift ;;
         -c) CLEAN=true; shift ;;
-        -s) STOP_ONLY=true; shift ;;
         -cd|-dc) DETACHED=true; CLEAN=true; shift ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
@@ -38,14 +35,7 @@ is_uploader_running() {
     pgrep -f "youtube_uploader/main.py" > /dev/null 2>&1
 }
 
-# Stop only mode
-if [ "$STOP_ONLY" = true ]; then
-    echo "Stopping all services..."
-    stop_uploader
-    docker compose down 2>/dev/null || true
-    echo "All services stopped"
-    exit 0
-fi
+
 
 echo "Stopping existing containers..."
 docker compose down 2>/dev/null || true

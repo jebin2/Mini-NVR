@@ -18,8 +18,14 @@ echo ""
 
 # Docker containers
 echo -e "${YELLOW}📦 Docker Containers:${NC}"
-if docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null | grep -q "running"; then
-    docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null
+# Check for containers by name (works regardless of how they were started)
+MINI_NVR_STATUS=$(docker ps --filter "name=mini-nvr" --format "{{.Names}}\t{{.Status}}" 2>/dev/null)
+GO2RTC_STATUS=$(docker ps --filter "name=go2rtc" --format "{{.Names}}\t{{.Status}}" 2>/dev/null)
+
+if [ -n "$MINI_NVR_STATUS" ] || [ -n "$GO2RTC_STATUS" ]; then
+    echo -e "  NAME\t\tSTATUS"
+    [ -n "$MINI_NVR_STATUS" ] && echo -e "  ${GREEN}✓${NC} $MINI_NVR_STATUS"
+    [ -n "$GO2RTC_STATUS" ] && echo -e "  ${GREEN}✓${NC} $GO2RTC_STATUS"
 else
     echo -e "  ${RED}✗ Not running${NC}"
 fi

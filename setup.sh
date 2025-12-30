@@ -113,4 +113,19 @@ fi
 
 
 
+# 4. Uploader Service Setup (Optional)
+echo ""
+read -p "Do you want to install the YouTube uploader as a systemd service (auto-start on boot)? (y/n) " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if [ -f "scripts/setup-uploader-service.sh" ]; then
+        bash scripts/setup-uploader-service.sh install
+    else
+        log_error "Uploader service script not found: scripts/setup-uploader-service.sh"
+    fi
+else
+    log_info "Skipped uploader service installation."
+    log_info "You can install it later with: ./scripts/setup-uploader-service.sh install"
+fi
+
 log_info "Setup complete! Environment '$ENV_NAME' is active."

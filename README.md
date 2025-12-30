@@ -260,6 +260,15 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 # Start (background)
 ./start.sh -d
 
+# Start with clean logs/recordings
+./start.sh -cd
+
+# Stop all services
+./stop.sh
+
+# Check status
+./status.sh
+
 # View logs
 docker compose logs -f
 

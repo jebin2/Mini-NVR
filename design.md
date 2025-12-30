@@ -323,9 +323,14 @@ Mini-NVR/
 │   └── main.py                  # NVRUploaderService class
 │
 ├── 📁 scripts/                  # Setup & control
-│   ├── start.sh                 # Main startup script
 │   ├── generate-go2rtc-config.sh
-│   └── generate-web-config.sh
+│   ├── generate-web-config.sh
+│   ├── setup-uploader-service.sh # Install/remove uploader systemd service
+│   └── mini-nvr-uploader.service # Systemd service definition
+├── 📄 setup.sh                  # Environment & dependency setup
+├── 📄 start.sh                  # Start all services
+├── 📄 stop.sh                   # Stop all services
+├── 📄 status.sh                 # Check service status
 │
 └── 📁 recordings/               # Video storage (Docker volume)
     └── ch{X}/
