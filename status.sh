@@ -44,6 +44,24 @@ else
 fi
 echo ""
 
+# Cloudflare Tunnel
+echo -e "${YELLOW}🚇 Cloudflare Tunnel:${NC}"
+if systemctl is-active --quiet cloudflared 2>/dev/null; then
+    echo -e "  ${GREEN}✓ Running (systemd)${NC}"
+    # Try to extract tunnel name from config
+    CF_TUNNEL_NAME=$(grep "tunnel:" ~/.cloudflared/config.yml 2>/dev/null | awk '{print $2}')
+    [ -z "$CF_TUNNEL_NAME" ] && CF_TUNNEL_NAME=$(grep "tunnel:" /etc/cloudflared/config.yml 2>/dev/null | awk '{print $2}')
+    
+    if [ -n "$CF_TUNNEL_NAME" ]; then
+        echo "  Tunnel ID: $CF_TUNNEL_NAME"
+    fi
+elif pgrep "cloudflared" > /dev/null 2>&1; then
+    echo -e "  ${GREEN}✓ Running (process)${NC}"
+else
+    echo -e "  ${RED}✗ Not running${NC}"
+fi
+echo ""
+
 # Recent logs
 echo -e "${YELLOW}📜 Recent Uploader Logs:${NC}"
 if [ -f "./logs/youtube_uploader.log" ]; then

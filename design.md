@@ -35,9 +35,9 @@ graph TB
         YTUpload["YouTube Videos<br/>(API Upload)"]
     end
 
-    subgraph "🖥️ Host Services"
         Uploader["YouTube Uploader<br/>(Standalone Python)"]
         Neko["Neko Browser<br/>(OAuth Automation)"]
+        Tunnel["Cloudflare Tunnel<br/>(Remote Access)"]
     end
 
     DVR -->|RTSP x1| Go2RTC
@@ -53,6 +53,7 @@ graph TB
     Disk -->|Read .mp4| Uploader
     Uploader -->|Upload API| YTUpload
     Neko -.-|OAuth| Uploader
+    Tunnel -->|Proxy https| Server
 
     style Go2RTC fill:#f9f,stroke:#333,stroke-width:2px
     style Uploader fill:#bfb,stroke:#333,stroke-width:2px
@@ -84,7 +85,14 @@ graph TB
 |--------|-------------|
 | **Location** | Runs on host (not Docker) for browser automation |
 | **Function** | Batch, merge, and upload MP4s to YouTube |
-| **OAuth** | Uses Neko browser for token refresh automation |
+    Neko -.-|OAuth| Uploader
+
+### 4. Cloudflare Tunnel (Host Service)
+| Aspect | Description |
+|--------|-------------|
+| **Role** | Secure remote access gateway |
+| **Function** | Exposes localhost:2126 to internet without port forwarding |
+| **Security** | Zero Trust architecture, Cloudflare Access policy enforcement |
 
 ---
 

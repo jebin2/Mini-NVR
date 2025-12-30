@@ -85,6 +85,17 @@ This will:
 
 Default login: `admin` / `changeme` (configure in `.env`)
 
+### 4. Remote Access (Optional)
+
+Securely access your NVR from anywhere using Cloudflare Tunnel (no port forwarding required).
+
+```bash
+./scripts/setup_cloudflare_tunnel.sh
+```
+
+- **URL:** `https://cctv.yourdomain.com`
+- **Security:** Protected by Cloudflare Access (requires setup) + NVR Login
+
 ---
 
 ## Configuration
