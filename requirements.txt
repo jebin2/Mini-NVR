@@ -5,3 +5,5 @@ slowapi
 bcrypt
 requests
 psutil
+httpx
+websockets

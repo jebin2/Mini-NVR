@@ -44,7 +44,6 @@ cat > "$OUTPUT_FILE" << EOF
 
 export const CONFIG = {
     apiBase: '/api',
-    go2rtcPort: ${GO2RTC_API_PORT},
     webPort: ${WEB_PORT},
     gridRefreshInterval: 10000,
     storageRefreshInterval: 60000,

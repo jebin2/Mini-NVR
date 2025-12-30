@@ -2,7 +2,6 @@
  * go2rtc integration module
  * Centralizes all go2rtc URL building and streaming helpers
  */
-import { CONFIG } from './config.js';
 
 /**
  * Get the go2rtc host (same as current page hostname)
@@ -12,10 +11,11 @@ export function getHost() {
 }
 
 /**
- * Get the base URL for go2rtc API
+ * Get the base URL for go2rtc API (proxied through Mini-NVR for auth)
  */
 export function getBaseUrl() {
-    return `http://${getHost()}:${CONFIG.go2rtcPort}`;
+    // Route through Mini-NVR for authentication
+    return `${window.location.origin}/api/go2rtc`;
 }
 
 /**

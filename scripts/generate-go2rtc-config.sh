@@ -83,7 +83,7 @@ webrtc:
     - urls: [stun:stun.l.google.com:19302]
 
 api:
-  listen: ":${GO2RTC_API_PORT}"
+  listen: "127.0.0.1:${GO2RTC_API_PORT}"
   origin: "*"
 
 log:

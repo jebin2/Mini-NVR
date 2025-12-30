@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from starlette.middleware.sessions import SessionMiddleware
 from api.routes import router as api_router
 from api.auth import router as auth_router
+from api.go2rtc_proxy import router as go2rtc_router, ws_router as go2rtc_ws_router
 from core import config
 from core.logger import setup_logger
 
@@ -23,6 +24,9 @@ app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
 # Mount API
 app.include_router(auth_router, prefix="/api")
 app.include_router(api_router, prefix="/api")
+# go2rtc proxy: WebSocket router first (specific path), then HTTP router (catch-all)
+app.include_router(go2rtc_ws_router, prefix="/api/go2rtc")
+app.include_router(go2rtc_router, prefix="/api/go2rtc")
 
 # --- Static & File Serving ---
 
