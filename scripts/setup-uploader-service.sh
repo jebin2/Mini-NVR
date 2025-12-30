@@ -28,14 +28,34 @@ install_service() {
     
     # Auto-detect current user and paths
     CURRENT_USER=$(whoami)
-    PYTHON_PATH="$PROJECT_DIR/Mini-NVR_env/bin/python"
+    ENV_NAME="Mini-NVR_env"
     LOG_FILE="$PROJECT_DIR/logs/youtube_uploader.log"
     ENV_FILE="$PROJECT_DIR/.env"
     
-    # Verify python exists
-    if [ ! -f "$PYTHON_PATH" ]; then
-        print_error "Python not found at: $PYTHON_PATH"
-        print_error "Please run setup.sh first to create the virtual environment."
+    # Detect Python path - check pyenv first, then local venv
+    PYTHON_PATH=""
+    
+    # Check pyenv virtualenv location
+    PYENV_PYTHON="$HOME/.pyenv/versions/$ENV_NAME/bin/python"
+    if [ -f "$PYENV_PYTHON" ]; then
+        PYTHON_PATH="$PYENV_PYTHON"
+        print_status "Found pyenv environment: $PYTHON_PATH"
+    fi
+    
+    # Check local venv in project directory
+    LOCAL_PYTHON="$PROJECT_DIR/$ENV_NAME/bin/python"
+    if [ -z "$PYTHON_PATH" ] && [ -f "$LOCAL_PYTHON" ]; then
+        PYTHON_PATH="$LOCAL_PYTHON"
+        print_status "Found local venv: $PYTHON_PATH"
+    fi
+    
+    # Verify python was found
+    if [ -z "$PYTHON_PATH" ]; then
+        print_error "Virtual environment '$ENV_NAME' not found."
+        print_error "Checked locations:"
+        print_error "  - pyenv: $PYENV_PYTHON"
+        print_error "  - local: $LOCAL_PYTHON"
+        print_error "Please run 'source setup.sh' first to create the environment."
         exit 1
     fi
     
