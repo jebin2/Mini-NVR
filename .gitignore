@@ -215,3 +215,4 @@ web/js/config.js
 ytktclient_secret.json
 encrypt/
 youtube_auto_pub/
+nvr_youtube_auto_pub/
