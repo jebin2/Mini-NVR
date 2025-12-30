@@ -100,7 +100,7 @@ async def proxy_websocket(websocket: WebSocket):
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 async def proxy_go2rtc(path: str, request: Request):
     """
-    Proxy HTTP requests to go2rtc.
+    Proxy HTTP requests to go2rtc using StreamingResponse.
     
     Supports:
     - Static files (stream.html, js, css)
@@ -117,46 +117,44 @@ async def proxy_go2rtc(path: str, request: Request):
         target_url += f"?{request.query_params}"
     
     try:
-        # Forward the request
-        if request.method == "GET":
-            response = await client.get(target_url)
-        elif request.method == "POST":
-            body = await request.body()
-            content_type = request.headers.get("content-type", "")
-            response = await client.post(
-                target_url,
-                content=body,
-                headers={"Content-Type": content_type} if content_type else {}
-            )
-        elif request.method == "PUT":
-            body = await request.body()
-            response = await client.put(target_url, content=body)
-        elif request.method == "DELETE":
-            response = await client.delete(target_url)
-        elif request.method == "OPTIONS":
-            response = await client.options(target_url)
-        else:
-            raise HTTPException(status_code=405, detail="Method not allowed")
+        # Prepare request arguments
+        kwargs = {}
+        if request.method in ["POST", "PUT"]:
+            # For large bodies we should probably stream, but for now just read it 
+            # (signaling payloads are small)
+            kwargs["content"] = await request.body()
+            
+        # Forward headers (excluding host/length which httpx handles)
+        # Also strip upgrade headers as we handle those separately if needed
+        headers = dict(request.headers)
+        headers.pop("host", None)
+        headers.pop("content-length", None)
+        headers.pop("transfer-encoding", None)
+        kwargs["headers"] = headers
+
+        # Create upstream request
+        req = client.build_request(request.method, target_url, **kwargs)
         
-        # Determine content type
-        content_type = response.headers.get("content-type", "application/octet-stream")
+        # Send request and stream response
+        r = await client.send(req, stream=True)
         
-        # Stream binary content (images, video)
-        if "image" in content_type or "video" in content_type or "octet-stream" in content_type:
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                media_type=content_type
-            )
-        
-        # Return text/html/json content
-        return Response(
-            content=response.content,
-            status_code=response.status_code,
-            media_type=content_type,
-            headers={
-                "Cache-Control": response.headers.get("cache-control", "no-cache")
-            }
+        # Filter response headers
+        # We MUST strip Content-Length and Transfer-Encoding because Starlette/Uvicorn
+        # will handle framing for the downstream streaming response.
+        # Keeping upstream Content-Length can cause "Too much data" errors if
+        # we stream chunks slightly differently or if framing overhead counts.
+        excluded_headers = {"content-length", "transfer-encoding", "connection", "keep-alive"}
+        response_headers = {
+            k: v for k, v in r.headers.items() 
+            if k.lower() not in excluded_headers
+        }
+
+        return StreamingResponse(
+            r.aiter_bytes(),
+            status_code=r.status_code,
+            media_type=r.headers.get("content-type"),
+            headers=response_headers,
+            background=None # We could close r here if needed, but client is long-lived
         )
         
     except httpx.ConnectError:
@@ -167,4 +165,5 @@ async def proxy_go2rtc(path: str, request: Request):
         raise HTTPException(status_code=504, detail="go2rtc request timed out")
     except Exception as e:
         logger.error(f"Proxy error: {e}")
+        # Only raise if we haven't started streaming yet
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")

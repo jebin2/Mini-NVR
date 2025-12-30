@@ -20,7 +20,7 @@ set +a
 # Config from .env (with defaults)
 TUNNEL_NAME="${CF_TUNNEL_NAME:-cctv}"
 DOMAIN="${CF_TUNNEL_DOMAIN:-}"
-LOCAL_PORT_UI="${WEB_PORT:-2126}"
+LOCAL_PORT_UI="${WEB_PORT:-}"
 CLOUDFLARED_DIR="$HOME/.cloudflared"
 CONFIG_FILE="$CLOUDFLARED_DIR/config.yml"
 

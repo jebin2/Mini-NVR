@@ -62,6 +62,66 @@ class VideoBatch:
     def id(self) -> str:
         return f"{self.channel}_{self.date}_part{self.part_number}_of_{self.total_parts}"
 
+# -----------------------------------------------------------------------------
+# Monkeypatch YouTubeUploader.upload_video to propagate exceptions
+# -----------------------------------------------------------------------------
+from googleapiclient.http import MediaFileUpload
+
+def monkeypatched_upload_video(self, service, video_path, metadata, thumbnail_path=None):
+    """
+    Monkeypatched version of upload_video that allows exceptions to propagate
+    so we can catch 'uploadLimitExceeded'.
+    """
+    request_body = {
+        'snippet': {
+            'categoryId': metadata.category_id,
+            'title': metadata.title[:100],  # Max 100 chars
+            'description': metadata.description,
+            'tags': metadata.tags,
+        },
+        'status': {
+            'privacyStatus': metadata.privacy_status,
+            'madeForKids': metadata.made_for_kids,
+            'selfDeclaredMadeForKids': metadata.made_for_kids,
+        }
+    }
+    
+    if metadata.publish_at:
+        request_body['status']['publishAt'] = metadata.publish_at
+
+    # Upload the video
+    media_file = MediaFileUpload(video_path, chunksize=-1, resumable=True)
+    request = service.videos().insert(
+        part='snippet,status',
+        body=request_body,
+        media_body=media_file
+    )
+
+    print(f"[Uploader] Uploading video: {video_path}")
+    response = None
+    
+    # Intentionally removed the try/except block here
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            print(f'[Uploader] Uploaded {int(status.progress() * 100)}% of the video.')
+
+    video_id = response['id']
+    print(f'[Uploader] Video uploaded successfully with ID: {video_id}')
+
+    # Upload thumbnail if provided
+    if thumbnail_path and video_id:
+        self.set_thumbnail(service, video_id, thumbnail_path)
+
+    return video_id
+
+# Apply the monkeypatch
+if 'YouTubeUploader' in globals():
+    YouTubeUploader.upload_video = monkeypatched_upload_video
+elif 'youtube_auto_pub' in sys.modules:
+    sys.modules['youtube_auto_pub'].YouTubeUploader.upload_video = monkeypatched_upload_video
+# -----------------------------------------------------------------------------
+
 
 class NVRUploaderService:
     """
@@ -507,13 +567,25 @@ class NVRUploaderService:
                 return False
                 
         except Exception as e:
-            # Handle Upload Limit specifically or just generic error
-            self.log(f"[NVR Uploader] ✗ Upload error: {e}")
-            if "uploadLimitExceeded" in str(e):
-                 self.log("[NVR Uploader] 🛑 DAILY UPLOAD LIMIT REACHED. Sleeping for 1 hour...")
-                 time.sleep(3600) 
-            elif "auth" in str(e).lower():
+            err_str = str(e)
+            self.log(f"[NVR Uploader] ✗ Upload error: {err_str}")
+            
+            # Check for generic authentication errors
+            if "auth" in err_str.lower() or "token" in err_str.lower():
+                self.log("[NVR Uploader] ! Authentication issue detected, resetting service...")
                 self._service = None
+                return False
+
+            # Check for YouTube Upload Limit
+            # Error usually looks like: <HttpError 400 ... reason': 'uploadLimitExceeded' ...>
+            if "uploadLimitExceeded" in err_str:
+                 self.log("[NVR Uploader] 🛑 DAILY UPLOAD LIMIT REACHED. Pausing uploads for 12 hours.")
+                 # Sleep for 12 hours or just stop trying for a long time
+                 # For safety, let's sleep 1 hour in loop or just return False and let the main loop handle it.
+                 # But sticking to the plan: explicit sleep here to block this thread.
+                 time.sleep(12 * 3600) 
+                 return False
+            
             return False
 
     def stop(self):
