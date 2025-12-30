@@ -68,7 +68,7 @@ SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 ### 2. Start
 
 ```bash
-./scripts/start.sh -d
+./start.sh -d
 ```
 
 This will:
@@ -255,10 +255,10 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 
 ```bash
 # Start (foreground, see logs)
-./scripts/start.sh
+./start.sh
 
 # Start (background)
-./scripts/start.sh -d
+./start.sh -d
 
 # View logs
 docker compose logs -f
@@ -277,7 +277,7 @@ docker compose down && docker compose up -d --build
 | `app/*.py` | ✅ Yes | `docker compose up -d --build` |
 | `.env` | ❌ No | `docker compose restart` |
 | `web/**` | ❌ No | Refresh browser |
-| go2rtc ports | ⚠️ Regenerate | `./scripts/start.sh -d` |
+| go2rtc ports | ⚠️ Regenerate | `./start.sh -d` |
 
 ---
 
@@ -298,7 +298,7 @@ docker compose down && docker compose up -d --build
 | Live view not connecting | Check `GO2RTC_API_PORT` matches in browser console |
 | Recording not starting | Verify go2rtc is running: `docker logs go2rtc` |
 | YouTube not streaming | Ensure `YOUTUBE_LIVE_ENABLED=true` and keys configured |
-| Port conflicts | Change ports in `.env`, run `./scripts/start.sh -d` |
+| Port conflicts | Change ports in `.env`, run `./start.sh -d` |
 
 ---
 

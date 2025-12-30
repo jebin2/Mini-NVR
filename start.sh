@@ -6,7 +6,7 @@
 #   -s  Stop all services (Docker + YouTube uploader)
 
 set -e
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
 # Parse arguments
 DETACHED=false
