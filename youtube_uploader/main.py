@@ -147,7 +147,7 @@ class NVRUploaderService:
         hf_token: Optional[str] = None,
         encryption_key: Optional[str] = None,
         log_file: Optional[str] = None,
-        allowed_emails: Optional[List[str]] = None,
+
     ):
         self.recordings_dir = os.path.abspath(recordings_dir)
         self.client_secret_path = client_secret_path
@@ -160,7 +160,7 @@ class NVRUploaderService:
         self.hf_token = hf_token
         self.encryption_key = encryption_key
         self.log_file = log_file
-        self.allowed_emails = allowed_emails or []
+
         
         self._running = False
         self._uploader: Optional[YouTubeUploader] = None
@@ -210,7 +210,7 @@ class NVRUploaderService:
                 docker_name="nvr_youtube_auto_pub",
                 google_email=os.environ.get("GOOGLE_EMAIL"),
                 google_password=os.environ.get("GOOGLE_PASSWORD"),
-                allowed_emails=self.allowed_emails,
+
             )
             
             self._uploader = YouTubeUploader(config)
@@ -734,9 +734,7 @@ def main():
     hf_token = os.environ.get("HF_TOKEN")
     encryption_key = os.environ.get("YT_ENCRYP_KEY")
     
-    # Parse allowed emails (comma-separated list)
-    allowed_emails_str = os.environ.get("YOUTUBE_ALLOWED_EMAILS", "")
-    allowed_emails = [e.strip() for e in allowed_emails_str.split(",") if e.strip()]
+
     
     # Resolve relative paths
     if not os.path.isabs(client_secret_path):
@@ -765,7 +763,7 @@ def main():
         hf_token=hf_token,
         encryption_key=encryption_key,
         log_file=log_file,
-        allowed_emails=allowed_emails,
+
     )
     
     # Handle graceful shutdown
