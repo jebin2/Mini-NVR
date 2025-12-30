@@ -14,6 +14,8 @@ RECORD_DIR = get_env("RECORD_DIR", "./recordings")
 NUM_CHANNELS = int(get_env("NUM_CHANNELS", 8))
 SEGMENT_DURATION = int(get_env("SEGMENT_DURATION", 600)) 
 MAX_STORAGE_GB = int(get_env("MAX_STORAGE_GB", 500))
+MAX_STORAGE_EXCEED_ALLOWED_GB = int(get_env("MAX_STORAGE_EXCEED_ALLOWED_GB", 10))
+YOUTUBE_UPLOAD_ENABLED = get_env("YOUTUBE_UPLOAD_ENABLED", "false").lower() == "true"
 WEB_PORT = int(get_env("WEB_PORT", 2126))
 CONTROL_DIR = "/tmp/nvr-control"
 STATIC_DIR = "./web" # Pointing to web folder directly now, or we can copy to static. 
