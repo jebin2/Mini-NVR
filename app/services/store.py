@@ -170,11 +170,51 @@ def get_recordings_for_date(ch, date):
                     if entry.is_file():
                         process_entry(entry)
                         
+                        
     except OSError:
         pass
-    
-    # Sort by mtime ascending
-    raw_recordings.sort(key=lambda x: x['mtime'])
+
+    # Track found relative paths to identify missing ones
+    found_rel_paths = {r['rel_path'] for r in raw_recordings}
+
+    # 3. Add Cloud-Only entries from YouTube Map
+    for rel_path, url in youtube_map.items():
+        if rel_path in found_rel_paths:
+            continue
+            
+        # Check if parsing succeeds and matches filter
+        # parse_filename expects full path or at least basename, but it handles hierarchy if passed as "ch1/date/..."
+        # Actually parse_filename implementation:
+        # Pattern 2: "os.path.basename(os.path.dirname(filepath))" 
+        # If I pass "ch1/2025-12-30/130139.mp4", basename is 130139.mp4. dirname is ch1/2025-12-30. basename(dirname) is 2025-12-30.
+        # So it SHOULD work on relative paths too if they match the structure.
+        meta = parse_filename(rel_path)
+        
+        # We need to manually filter by channel since parse_filename might return ch=0 for nested
+        # Start checking channel from path string
+        path_parts = rel_path.split(os.sep)
+        # Expect ch1/2025-... or ch1_...
+        
+        # Validating channel match
+        matches_channel = False
+        if rel_path.startswith(f"ch{ch}_") or rel_path.startswith(f"ch{ch}/"):
+             matches_channel = True
+        
+        if not matches_channel:
+             continue
+
+        if meta and meta['date'] == date:
+            raw_recordings.append({
+                "full_path": None, # Indicates cloud only
+                "rel_path": rel_path,
+                "meta": meta,
+                "size": 0, # Unknown
+                "mtime": 0 # Unknown
+            })
+
+    # Sort by start time (extracted from filename)
+    # Using datetime string for sorting: YYYY/MM/DD HH:MM:SS
+    raw_recordings.sort(key=lambda x: x['meta']['datetime'])
     
     # Logic to Determine "Live" Status (Strictly one or zero)
     now = time.time()
@@ -206,11 +246,16 @@ def get_recordings_for_date(ch, date):
                      duration = dur
                      meta_cache.set_duration(rec['rel_path'], rec['size'], rec['mtime'], duration)
 
+        
+        size_display = format_size(rec['size'])
+        if rec['full_path'] is None:
+            size_display = "Cloud Only"
+
         recordings.append({
             "name": rec['rel_path'],
             "startTime": rec['meta']['time'],
             "datetime": rec['meta']['datetime'],
-            "size": format_size(rec['size']),
+            "size": size_display,
             "duration": duration,
             "duration": duration,
             "live": is_live,

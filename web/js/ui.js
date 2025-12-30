@@ -87,7 +87,8 @@ export function renderTimeline(recordings, onPlayClip) {
         const widthPct = (duration / SECONDS_IN_DAY) * 100;
 
         const seg = document.createElement('div');
-        seg.className = `timeline-segment ${rec.live ? 'live' : ''}`;
+        const isCloud = rec.size === "Cloud Only";
+        seg.className = `timeline-segment ${rec.live ? 'live' : ''} ${isCloud ? 'cloud' : ''}`;
         seg.style.left = `${leftPct}%`;
         seg.style.width = `${Math.max(widthPct, 0.2)}%`;
         seg.title = `${rec.startTime} (${rec.size})`;
@@ -129,15 +130,17 @@ export function renderPlaylist(recordings, onPlayClip, onDeleteClip) {
             const actions = document.createElement('div');
             actions.className = 'clip-actions';
 
-            // Download button
-            const downloadBtn = document.createElement('a');
-            downloadBtn.href = `/recordings/${rec.name}`;
-            downloadBtn.download = rec.name.split('/').pop();
-            downloadBtn.className = 'clip-btn download';
-            downloadBtn.title = 'Download';
-            downloadBtn.innerHTML = '⬇';
-            downloadBtn.onclick = (e) => e.stopPropagation();
-            actions.appendChild(downloadBtn);
+            // Download button (Only if local)
+            if (rec.size !== "Cloud Only") {
+                const downloadBtn = document.createElement('a');
+                downloadBtn.href = `/recordings/${rec.name}`;
+                downloadBtn.download = rec.name.split('/').pop();
+                downloadBtn.className = 'clip-btn download';
+                downloadBtn.title = 'Download';
+                downloadBtn.innerHTML = '⬇';
+                downloadBtn.onclick = (e) => e.stopPropagation();
+                actions.appendChild(downloadBtn);
+            }
 
             // YouTube Button
             if (rec.youtube_url) {
@@ -152,18 +155,20 @@ export function renderPlaylist(recordings, onPlayClip, onDeleteClip) {
                 actions.appendChild(ytBtn);
             }
 
-            // Delete button
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'clip-btn delete';
-            deleteBtn.title = 'Delete';
-            deleteBtn.innerHTML = '🗑';
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation();
-                if (confirm(`Delete recording ${rec.startTime}?`)) {
-                    onDeleteClip(index, rec.name);
-                }
-            };
-            actions.appendChild(deleteBtn);
+            // Delete button (Only if local)
+            if (rec.size !== "Cloud Only") {
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'clip-btn delete';
+                deleteBtn.title = 'Delete';
+                deleteBtn.innerHTML = '🗑';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (confirm(`Delete recording ${rec.startTime}?`)) {
+                        onDeleteClip(index, rec.name);
+                    }
+                };
+                actions.appendChild(deleteBtn);
+            }
 
             div.appendChild(actions);
         }

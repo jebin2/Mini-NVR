@@ -87,6 +87,49 @@ function playClip(index) {
     const rec = recordingsMap[index];
     if (!rec) return;
 
+    // Handle Cloud Only
+    if (rec.size === "Cloud Only") {
+        if (rec.youtube_url) {
+            // Extract Video ID
+            let videoId = "";
+            try {
+                const urlObj = new URL(rec.youtube_url);
+                videoId = urlObj.searchParams.get("v");
+            } catch (e) {
+                // Fallback for flat links if any
+                console.error("Invalid YouTube URL", rec.youtube_url);
+            }
+
+            if (videoId) {
+                const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+                const video = document.getElementById('mainPlayer');
+                const container = video.parentElement;
+
+                // Remove existing live/youtube frame
+                const existingFrame = document.getElementById('liveFrame');
+                if (existingFrame) existingFrame.remove();
+
+                // Hide video, show iframe
+                video.style.display = 'none';
+                video.pause();
+
+                const iframe = document.createElement('iframe');
+                iframe.src = embedUrl;
+                iframe.id = 'liveFrame'; // Reuse ID for easier cleanup
+                iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
+                iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
+                iframe.allowFullscreen = true;
+                container.appendChild(iframe);
+
+                UI.highlightClip(index);
+                return;
+            }
+        }
+
+        alert('This recording is deleted locally and has no YouTube link.');
+        return;
+    }
+
     const video = document.getElementById('mainPlayer');
     const liveFrame = document.getElementById('liveFrame');
 
