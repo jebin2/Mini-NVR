@@ -43,6 +43,22 @@ def serve_ui():
 def serve_login():
     return serve_static(config.STATIC_DIR, "login.html", "text/html")
 
+@app.get("/{filename}")
+def serve_root_files(filename: str):
+    """Serve PWA files and other root assets."""
+    allowed = {
+        "sw.js": "application/javascript",
+        "manifest.json": "application/manifest+json",
+        "icon-192.png": "image/png",
+        "icon-512.png": "image/png",
+        "favicon.ico": "image/x-icon"
+    }
+    
+    if filename in allowed:
+        return serve_static(config.STATIC_DIR, filename, allowed[filename])
+        
+    raise HTTPException(status_code=404, detail="File not found")
+
 @app.get("/recordings/{path:path}")
 def serve_video(path: str):
     # Security check to prevent directory traversal
