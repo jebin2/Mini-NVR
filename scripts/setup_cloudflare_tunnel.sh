@@ -54,11 +54,31 @@ else
 fi
 
 # Extract tunnel UUID
+# Extract tunnel UUID
 TUNNEL_ID=$(cloudflared tunnel list | grep "$TUNNEL_NAME" | awk '{print $1}')
 
 if [ -z "$TUNNEL_ID" ]; then
   echo "❌ Failed to detect tunnel UUID"
   exit 1
+fi
+
+# Check for credentials file
+CRED_FILE="$CLOUDFLARED_DIR/$TUNNEL_ID.json"
+if [ ! -f "$CRED_FILE" ]; then
+  echo "⚠️  Tunnel '$TUNNEL_NAME' exists ($TUNNEL_ID), but credentials file is missing at $CRED_FILE"
+  echo "   ↳ Deleting stale tunnel..."
+  cloudflared tunnel delete -f "$TUNNEL_ID" || true
+  
+  echo "   ↳ Recreating tunnel..."
+  cloudflared tunnel create "$TUNNEL_NAME"
+  
+  # Re-fetch ID
+  TUNNEL_ID=$(cloudflared tunnel list | grep "$TUNNEL_NAME" | awk '{print $1}')
+  
+  if [ -z "$TUNNEL_ID" ]; then
+    echo "❌ Failed to detect new tunnel UUID after recreation"
+    exit 1
+  fi
 fi
 
 echo "🆔 Tunnel UUID: $TUNNEL_ID"
