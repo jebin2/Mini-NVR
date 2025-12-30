@@ -50,15 +50,17 @@ def load_env_file(path: str) -> dict:
 
 class VideoBatch:
     """Represents a collection of video files to be merged and uploaded together."""
-    def __init__(self, channel: str, date: str, files: List[str]):
+    def __init__(self, channel: str, date: str, files: List[str], part_number: int = 1, total_parts: int = 1):
         self.channel = channel
         self.date = date
         self.files = sorted(files)  # Ensure chronological order
+        self.part_number = part_number
+        self.total_parts = total_parts
         self.merged_path: Optional[str] = None
         
     @property
     def id(self) -> str:
-        return f"{self.channel}_{self.date}_{len(self.files)}files"
+        return f"{self.channel}_{self.date}_part{self.part_number}_of_{self.total_parts}"
 
 
 class NVRUploaderService:
@@ -68,6 +70,9 @@ class NVRUploaderService:
     Watches for MP4 files, batches them by channel/date, merges them,
     and uploads the result with detailed timestamps.
     """
+    
+    # Safe limit: 11.5 hours in seconds (11.5 * 3600 = 41400)
+    MAX_DURATION_SECONDS = 41400
     
     def __init__(
         self,
@@ -288,7 +293,7 @@ class NVRUploaderService:
             return 0.0
 
     def _find_batches(self) -> List[VideoBatch]:
-        """Group pending files into batches by Channel and Date."""
+        """Group pending files into batches by Channel and Date, splitting if > limit."""
         # Pattern: recordings_dir/ch*/date/*.mp4
         pattern = os.path.join(self.recordings_dir, "ch*", "*", "*.mp4")
         all_mp4s = glob.glob(pattern)
@@ -311,12 +316,48 @@ class NVRUploaderService:
                 groups[key] = []
             groups[key].append(mp4_path)
         
-        batches = []
+        final_batches = []
+        
         for (channel, date), files in groups.items():
-            if files:
-                batches.append(VideoBatch(channel, date, files))
+            if not files:
+                continue
                 
-        return sorted(batches, key=lambda b: (b.channel, b.date))
+            sorted_files = sorted(files)
+            
+            # Check total duration and split if necessary
+            current_batch_files = []
+            current_duration = 0.0
+            split_batches = []
+            
+            for file_path in sorted_files:
+                duration = self._get_video_duration(file_path)
+                
+                # If adding this file would exceed limit, finalize current batch
+                if current_duration + duration > self.MAX_DURATION_SECONDS and current_batch_files:
+                    split_batches.append(current_batch_files)
+                    current_batch_files = []
+                    current_duration = 0.0
+                
+                current_batch_files.append(file_path)
+                current_duration += duration
+            
+            # Append last batch
+            if current_batch_files:
+                split_batches.append(current_batch_files)
+            
+            # Create VideoBatch objects
+            total_parts = len(split_batches)
+            for i, batch_files in enumerate(split_batches):
+                part_number = i + 1
+                # Only use "parts" if we actually split
+                if total_parts > 1:
+                     batch_obj = VideoBatch(channel, date, batch_files, part_number, total_parts)
+                else:
+                     batch_obj = VideoBatch(channel, date, batch_files)
+                
+                final_batches.append(batch_obj)
+                
+        return sorted(final_batches, key=lambda b: (b.channel, b.date, b.part_number))
 
     def _merge_videos(self, batch: VideoBatch) -> Optional[str]:
         """Merge videos in batch into a single file using ffmpeg concat."""
@@ -330,14 +371,23 @@ class NVRUploaderService:
         try:
             # Create list file
             list_path = os.path.join(self.recordings_dir, f"concat_list_{os.getpid()}.txt")
-            merged_output = os.path.join(self.recordings_dir, f"merged_{batch.files[0].split(os.sep)[-2]}_{len(batch.files)}.mp4")
+            
+            # Add part suffix to merged filename if needed
+            part_suffix = ""
+            if batch.total_parts > 1:
+                part_suffix = f"_p{batch.part_number}"
+                
+            merged_output = os.path.join(
+                self.recordings_dir, 
+                f"merged_{batch.files[0].split(os.sep)[-2]}_{len(batch.files)}files{part_suffix}.mp4"
+            )
             
             with open(list_path, 'w') as f:
                 for file_path in batch.files:
                     # FFmpeg concat requires absolute paths
                     f.write(f"file '{file_path}'\n")
             
-            self.log(f"[NVR Uploader] ⚙ Merging {len(batch.files)} clips for {batch.channel}...")
+            self.log(f"[NVR Uploader] ⚙ Merging {len(batch.files)} clips for {batch.channel} (Part {batch.part_number}/{batch.total_parts})...")
             
             # Run ffmpeg concat
             cmd = [
@@ -371,11 +421,17 @@ class NVRUploaderService:
         """Generate description with timestamps."""
         desc_lines = [
             f"Security camera recording for {batch.channel}",
-            f"Date: {batch.date}",
+            f"Date: {batch.date}"
+        ]
+        
+        if batch.total_parts > 1:
+            desc_lines.append(f"Part {batch.part_number} of {batch.total_parts}")
+            
+        desc_lines.extend([
             f"Merged clips: {len(batch.files)}",
             "",
             "Timeline:"
-        ]
+        ])
         
         current_time = 0.0
         
@@ -411,10 +467,13 @@ class NVRUploaderService:
         description = self._generate_description(batch)
         
         # Construct Title
-        # Title: Channel X - Date - FirstTime - LastTime
+        # Title: Channel X - Date - FirstTime - LastTime [(Part X)]
         first_info = self._parse_video_path(batch.files[0])
         last_info = self._parse_video_path(batch.files[-1])
+        
         title = f"{batch.channel} - {batch.date} ({first_info['time']} to {last_info['time']})"
+        if batch.total_parts > 1:
+            title += f" (Part {batch.part_number}/{batch.total_parts})"
         
         metadata = VideoMetadata(
             title=title,
