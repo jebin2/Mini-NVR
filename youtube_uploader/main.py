@@ -555,76 +555,80 @@ class NVRUploaderService:
     def _process_batch(self, batch: VideoBatch) -> bool:
         """Process a single batch: Merge -> Upload -> Finalize."""
         
-        # 1. Merge
-        upload_path = self._merge_videos(batch)
-        if not upload_path:
-            return False
-            
-        # 2. Metadata
-        description = self._generate_description(batch)
-        
-        # Construct Title
-        # Title: Channel X - Date - FirstTime - LastTime [(Part X)]
-        first_info = self._parse_video_path(batch.files[0])
-        last_info = self._parse_video_path(batch.files[-1])
-        
-        title = f"{batch.channel} - {batch.date} ({first_info['time']} to {last_info['time']})"
-        if batch.total_parts > 1:
-            title += f" (Part {batch.part_number}/{batch.total_parts})"
-        
-        metadata = VideoMetadata(
-            title=title,
-            description=description,
-            tags=["NVR", "security", "camera", batch.channel.replace(" ", ""), "merged"],
-            privacy_status=self.privacy_status,
-            category_id="22"
-        )
-        
-        # 3. Upload
-        service = self._get_service()
-        if not service:
-            return False
-            
         try:
-            self.log(f"[NVR Uploader] 📤 Uploading batch: {title}")
-            video_id = self._uploader.upload_video(
-                service=service,
-                video_path=upload_path,
-                metadata=metadata
-            )
-            
-            if video_id:
-                self.log(f"[NVR Uploader] ✓ Uploaded: https://youtube.com/watch?v={video_id}")
-                self._log_upload_to_csv(batch, video_id)
-                self._finalize_batch(batch)
-                self.upload_count += 1
-                self.last_upload_time = time.time()
-                return True
-            else:
-                self.log(f"[NVR Uploader] ✗ Upload failed (no video ID)")
+            # 1. Merge
+            upload_path = self._merge_videos(batch)
+            if not upload_path:
                 return False
                 
-        except Exception as e:
-            err_str = str(e)
-            self.log(f"[NVR Uploader] ✗ Upload error: {err_str}")
+            # 2. Metadata
+            description = self._generate_description(batch)
             
-            # Check for generic authentication errors
-            if "auth" in err_str.lower() or "token" in err_str.lower():
-                self.log("[NVR Uploader] ! Authentication issue detected, resetting service...")
-                self._service = None
+            # Construct Title
+            first_info = self._parse_video_path(batch.files[0])
+            last_info = self._parse_video_path(batch.files[-1])
+            
+            title = f"{batch.channel} - {batch.date} ({first_info['time']} to {last_info['time']})"
+            if batch.total_parts > 1:
+                title += f" (Part {batch.part_number}/{batch.total_parts})"
+            
+            metadata = VideoMetadata(
+                title=title,
+                description=description,
+                tags=["NVR", "security", "camera", batch.channel.replace(" ", ""), "merged"],
+                privacy_status=self.privacy_status,
+                category_id="22"
+            )
+            
+            # 3. Upload
+            service = self._get_service()
+            if not service:
                 return False
+                
+            try:
+                self.log(f"[NVR Uploader] 📤 Uploading batch: {title}")
+                video_id = self._uploader.upload_video(
+                    service=service,
+                    video_path=upload_path,
+                    metadata=metadata
+                )
+                
+                if video_id:
+                    self.log(f"[NVR Uploader] ✓ Uploaded: https://youtube.com/watch?v={video_id}")
+                    self._log_upload_to_csv(batch, video_id)
+                    self._finalize_batch(batch)
+                    self.upload_count += 1
+                    self.last_upload_time = time.time()
+                    return True
+                else:
+                    self.log(f"[NVR Uploader] ✗ Upload failed (no video ID)")
+                    return False
+                    
+            except Exception as e:
+                err_str = str(e)
+                self.log(f"[NVR Uploader] ✗ Upload error: {err_str}")
+                
+                if "auth" in err_str.lower() or "token" in err_str.lower():
+                    self.log("[NVR Uploader] ! Authentication issue detected, resetting service...")
+                    self._service = None
+                    return False
 
-            # Check for YouTube Upload Limit
-            # Error usually looks like: <HttpError 400 ... reason': 'uploadLimitExceeded' ...>
-            if "uploadLimitExceeded" in err_str:
-                 self.log("[NVR Uploader] 🛑 DAILY UPLOAD LIMIT REACHED. Pausing uploads for 12 hours.")
-                 # Sleep for 12 hours or just stop trying for a long time
-                 # For safety, let's sleep 1 hour in loop or just return False and let the main loop handle it.
-                 # But sticking to the plan: explicit sleep here to block this thread.
-                 time.sleep(12 * 3600) 
-                 return False
-            
-            return False
+                if "uploadLimitExceeded" in err_str:
+                     self.log("[NVR Uploader] 🛑 DAILY UPLOAD LIMIT REACHED. Pausing uploads for 12 hours.")
+                     time.sleep(12 * 3600) 
+                     return False
+                
+                return False
+                
+        finally:
+            # Always clean up temporary merged file if it exists and wasn't cleaned by finalize
+            # (finalize removes it, but if finalize wasn't called, we do it here)
+            if batch.merged_path and os.path.exists(batch.merged_path):
+                try:
+                    os.remove(batch.merged_path)
+                    self.log(f"[NVR Uploader] 🧹 Cleaned up temporary merged file (finally block)")
+                except OSError:
+                    pass
 
     def stop(self):
         """Stop the upload service."""
