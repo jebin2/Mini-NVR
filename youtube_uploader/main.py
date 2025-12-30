@@ -653,6 +653,21 @@ class NVRUploaderService:
             self.log(f"[NVR Uploader] ✗ Recordings directory not found: {self.recordings_dir}")
             return
         
+        # ---------------------------------------------------------------------
+        # Initial Authentication Loop
+        # ---------------------------------------------------------------------
+        self.log("[NVR Uploader] 🔑 Authenticating with YouTube...")
+        while self._running:
+            if self._get_service():
+                self.log("[NVR Uploader] ✓ Authentication successful!")
+                break
+            
+            self.log("[NVR Uploader] ⚠ Authentication failed or pending. Retrying in 10s...")
+            for _ in range(10): 
+                if not self._running: break
+                time.sleep(1)
+        # ---------------------------------------------------------------------
+
         time.sleep(5)
         
         while self._running:
