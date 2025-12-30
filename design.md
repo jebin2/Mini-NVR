@@ -380,6 +380,117 @@ flowchart LR
 
 ---
 
+## Edge Cases & Failure Handling
+
+This section documents how each component handles failures, edge cases, and recovery scenarios.
+
+### 1. Recorder Service (`recorder.py`)
+
+| Scenario | Handling | Code Location |
+|----------|----------|---------------|
+| **FFmpeg crash** | Exponential backoff retry: 2s → 4s → ... → 30s max | `start_camera()` L125-129 |
+| **Midnight date rollover** | Detects date change, terminates current process, restarts with new folder | `start_camera()` L72-82 |
+| **No output files created** | After running with no MKV/MP4 output, restarts FFmpeg | `start_camera()` L139-146 |
+| **go2rtc not available** | Retries connection every 2s until go2rtc starts | `start_camera()` L117-120 |
+| **Directory deleted during recording** | Recreates directory every 60s in main loop | `main()` L214 |
+| **Process start failure** | Catches exception, logs error, retries after 2s | `start_camera()` L113-120 |
+
+```mermaid
+flowchart TD
+    Start[Start Recording] --> Check{Process Running?}
+    Check -->|No| Spawn[Spawn FFmpeg]
+    Spawn -->|Fail| Backoff[Wait 2s × failures<br/>max 30s]
+    Backoff --> Spawn
+    Spawn -->|Success| Monitor[Monitor Process]
+    Check -->|Yes| Monitor
+    Monitor -->|Crash| IncrFail[Increment Failures]
+    IncrFail --> Backoff
+    Monitor -->|No Output| Restart[Terminate & Restart]
+    Restart --> Spawn
+```
+
+---
+
+### 2. Converter Service (`converter.py`)
+
+| Scenario | Handling | Code Location |
+|----------|----------|---------------|
+| **Incomplete MKV (still writing)** | Skips files modified < 15 seconds ago | `is_file_stable()` L21-27 |
+| **Leftover temp file from crash** | Deletes `.tmp` file before converting | `convert_to_mp4()` L37-42 |
+| **Conversion timeout** | 5-minute timeout on FFmpeg subprocess | `convert_to_mp4()` L70 |
+| **Empty output file** | Detects zero-byte output, deletes temp, logs warning | `convert_to_mp4()` L77-80 |
+| **Atomic file write** | Writes to `.tmp` then `os.rename()` for atomicity | `convert_to_mp4()` L74 |
+| **FFmpeg error** | Catches exception, cleans up temp file | `convert_to_mp4()` L82-89 |
+| **Scan loop exception** | Caught and logged, loop continues | `run()` L103-104 |
+
+---
+
+### 3. YouTube Rotator (`youtube_rotator.py`)
+
+| Scenario | Handling | Code Location |
+|----------|----------|---------------|
+| **Initial connection failure** | Retry with exponential backoff: 5s → 10s → ... → 60s max | `run()` L180-186 |
+| **Restart failure** | Retries up to 3 times with 5s delay | `_restart_stream()` L157-166 |
+| **go2rtc API timeout** | 60s timeout for start, 10s for stop | L105, L138 |
+| **Graceful shutdown** | `_stop_event` allows clean thread termination | `stop()` L168-171 |
+| **No stream keys configured** | Logs warning, returns empty list | `create_youtube_streamers()` L236-237 |
+
+---
+
+### 4. YouTube Uploader (`youtube_uploader/main.py`)
+
+| Scenario | Handling | Code Location |
+|----------|----------|---------------|
+| **Upload limit exceeded** | Detects `uploadLimitExceeded` error → sleeps 1 hour | `_process_batch()` L512-514 |
+| **Auth token expired** | Resets `_service = None`, triggers re-auth on next attempt | `_process_batch()` L515-516 |
+| **File still being written** | Skips files modified < 15 seconds ago | `_is_file_stable()` L240-245 |
+| **Duration > 11.5 hours** | Auto-splits batch into multiple "Part X/Y" uploads | `_find_batches()` L327-358 |
+| **Merge failure** | Cleans up concat list file, returns None | `_merge_videos()` L411-418 |
+| **Missing FFmpeg** | Checks on startup, exits with error | `_check_dependencies()` L127-134 |
+| **Graceful shutdown** | SIGINT/SIGTERM handlers call `stop()` | `main()` L635-639 |
+| **Single file batch** | Skips merge step, uploads directly | `_merge_videos()` L368-369 |
+| **Batch finalization failure** | Logs error but continues to next file | `_finalize_batch()` L221-222, L229-230 |
+
+```mermaid
+flowchart TD
+    Upload[Upload Video] --> Success{Success?}
+    Success -->|Yes| Finalize[Rename to *_uploaded.mp4]
+    Success -->|No| CheckErr{Error Type?}
+    CheckErr -->|Upload Limit| Sleep1h[🛑 Sleep 1 hour]
+    CheckErr -->|Auth Error| ResetAuth[Reset service, retry auth]
+    CheckErr -->|Other| Log[Log error, continue]
+    Sleep1h --> Retry[Retry batch]
+    ResetAuth --> Retry
+```
+
+---
+
+### 5. Cleanup Service (`cleanup.py`)
+
+| Scenario | Handling | Code Location |
+|----------|----------|---------------|
+| **Storage over soft limit** | Stage 1: Delete only `*_uploaded.mp4` files (safe) | `main()` L56-67 |
+| **No uploaded files to delete** | Logs warning, waits for uploader to catch up | `main()` L64-65 |
+| **Storage critical (over hard limit)** | Stage 2: Delete ANY 5 oldest files | `main()` L96-110 |
+| **Empty directory after deletion** | Removes empty parent directory | `main()` L89-91 |
+| **File deletion error** | Catches OSError, logs warning, continues | `main()` L92-93 |
+
+---
+
+### 6. Security & Authentication (`security.py`, `auth.py`)
+
+| Scenario | Handling | Code Location |
+|----------|----------|---------------|
+| **Login brute force** | Rate limited to 5 attempts/minute per IP | `auth.py` L13 |
+| **Session limit exceeded** | Evicts oldest session when > 5 per user | `security.py` L57-58 |
+| **Session file corrupted** | Falls back to empty sessions dict | `security.py` L30-31 |
+| **Atomic session save** | Writes to `.tmp` then `os.rename()` | `security.py` L37-40 |
+| **Thread safety** | All session operations protected by `_session_lock` | `security.py` L20, L52, L64, L70 |
+| **Bcrypt hash fallback** | Supports both hashed and plaintext passwords | `auth.py` L20-24 |
+| **Invalid bcrypt hash** | `verify_password()` catches ValueError/TypeError | `security.py` L84-85 |
+
+---
+
 ## Configuration Reference
 
 See [README.md](./README.md#configuration) for complete environment variable reference.
