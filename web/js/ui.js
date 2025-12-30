@@ -139,6 +139,19 @@ export function renderPlaylist(recordings, onPlayClip, onDeleteClip) {
             downloadBtn.onclick = (e) => e.stopPropagation();
             actions.appendChild(downloadBtn);
 
+            // YouTube Button
+            if (rec.youtube_url) {
+                const ytBtn = document.createElement('a');
+                ytBtn.href = rec.youtube_url;
+                ytBtn.target = '_blank';
+                ytBtn.className = 'clip-btn youtube';
+                ytBtn.title = 'Watch on YouTube';
+                ytBtn.innerHTML = '▶'; // Or use an SVG icon
+                ytBtn.style.color = '#ff0000';
+                ytBtn.onclick = (e) => e.stopPropagation();
+                actions.appendChild(ytBtn);
+            }
+
             // Delete button
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'clip-btn delete';

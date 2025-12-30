@@ -303,6 +303,43 @@ class NVRUploaderService:
             return (time.time() - os.path.getmtime(filepath)) > stable_seconds
         except OSError:
             return False
+
+    def _log_upload_to_csv(self, batch: VideoBatch, video_id: str):
+        """Log successful upload to CSV file."""
+        csv_path = os.path.join(self.recordings_dir, "youtube_uploads.csv")
+        youtube_url = f"https://youtube.com/watch?v={video_id}"
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        try:
+            # Check if file exists to write header (optional, but good practice)
+            file_exists = os.path.exists(csv_path)
+            
+            with open(csv_path, 'a') as f:
+                # Format: relative_path,video_id,video_url,timestamp
+                # We log EACH original file in the batch as pointing to this video
+                for file_path in batch.files:
+                    rel_path = os.path.relpath(file_path, self.recordings_dir)
+                    # If we renamed it to _uploaded, we should probably log the _uploaded version?
+                    # But the store sees the current file. 
+                    # If delete_after_upload is True, the file is gone.
+                    # If false, it's renamed to _uploaded.mp4.
+                    # Let's log the version that will exist (or would have existed).
+                    # 'batch.files' has the ORIGINAL paths (e.g. .mp4)
+                    
+                    # Store logic will look for the CURRENT filename.
+                    # If we rename to _uploaded, store sees _uploaded.mp4.
+                    # So we should log the _uploaded.mp4 path if we are not deleting.
+                    
+                    final_path = rel_path
+                    if not self.delete_after_upload:
+                         final_path = rel_path.replace(".mp4", "_uploaded.mp4")
+                    
+                    line = f"{final_path},{video_id},{youtube_url},{timestamp}\n"
+                    f.write(line)
+                    
+            self.log(f"[NVR Uploader] 📝 Logged to CSV: {video_id}")
+        except Exception as e:
+            self.log(f"[NVR Uploader] ! Failed to write log CSV: {e}")
             
     def _parse_video_path(self, mp4_path: str) -> dict:
         """Parse video path to extract metadata."""
@@ -558,6 +595,7 @@ class NVRUploaderService:
             
             if video_id:
                 self.log(f"[NVR Uploader] ✓ Uploaded: https://youtube.com/watch?v={video_id}")
+                self._log_upload_to_csv(batch, video_id)
                 self._finalize_batch(batch)
                 self.upload_count += 1
                 self.last_upload_time = time.time()

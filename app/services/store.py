@@ -100,9 +100,30 @@ def get_available_dates(channel=None):
     logger.info(f"[PERF] get_dates(ch={channel}) total={t3-t0:.4f}s")
     return sorted(list(dates), reverse=True)
 
+def load_youtube_map():
+    """Load YouTube uploads CSV into a dictionary: rel_path -> url."""
+    mapping = {}
+    csv_path = os.path.join(config.RECORD_DIR, "youtube_uploads.csv")
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, 'r') as f:
+                for line in f:
+                    parts = line.strip().split(',')
+                    if len(parts) >= 3:
+                        # Format: path, id, url, timestamp
+                        rel_path = parts[0]
+                        url = parts[2]
+                        mapping[rel_path] = url
+        except Exception as e:
+            logger.error(f"Failed to load youtube map: {e}")
+    return mapping
+
 def get_recordings_for_date(ch, date):
     recordings = []
     raw_recordings = []
+    
+    # Load YouTube Map
+    youtube_map = load_youtube_map()
     
     # Helper to process a file entry
     def process_entry(entry):
@@ -191,7 +212,9 @@ def get_recordings_for_date(ch, date):
             "datetime": rec['meta']['datetime'],
             "size": format_size(rec['size']),
             "duration": duration,
-            "live": is_live
+            "duration": duration,
+            "live": is_live,
+            "youtube_url": youtube_map.get(rec['rel_path'])
         })
         
     return recordings

@@ -20,28 +20,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Function to stop YouTube uploader
-stop_uploader() {
-    if pgrep -f "youtube_uploader/main.py" > /dev/null 2>&1; then
-        echo "Stopping YouTube Uploader..."
-        pkill -f "youtube_uploader/main.py" 2>/dev/null || true
-        sleep 1
-        echo "YouTube Uploader stopped"
-    fi
-}
+# duplicate service won't run
+echo "Stopping any running instances..."
+./stop.sh
 
-# Function to check if uploader is already running
-is_uploader_running() {
-    pgrep -f "youtube_uploader/main.py" > /dev/null 2>&1
-}
-
-
-
-echo "Stopping existing containers..."
+echo "Removing existing containers..."
 docker compose down 2>/dev/null || true
-
-# Also stop uploader when restarting
-stop_uploader
 
 # Clean logs and recordings if requested
 if [ "$CLEAN" = true ]; then
@@ -72,23 +56,19 @@ docker compose build --no-cache
 # Function to start uploader if enabled and not already running
 start_uploader_if_needed() {
     if grep -q "YOUTUBE_UPLOAD_ENABLED=true" .env 2>/dev/null; then
-        if is_uploader_running; then
-            echo "YouTube Uploader already running, skipping..."
+        if [ "$1" = "detached" ]; then
+            echo "Starting YouTube Uploader (host, background)..."
+            mkdir -p logs
+            nohup python3 youtube_uploader/main.py > logs/youtube_uploader.log 2>&1 &
+            echo "YouTube Uploader PID: $!"
+            echo "View logs: tail -f logs/youtube_uploader.log"
         else
-            if [ "$1" = "detached" ]; then
-                echo "Starting YouTube Uploader (host, background)..."
-                mkdir -p logs
-                nohup python3 youtube_uploader/main.py > logs/youtube_uploader.log 2>&1 &
-                echo "YouTube Uploader PID: $!"
-                echo "View logs: tail -f logs/youtube_uploader.log"
-            else
-                echo "Starting YouTube Uploader (host, background)..."
-                python3 youtube_uploader/main.py &
-                UPLOADER_PID=$!
-                echo "YouTube Uploader PID: $UPLOADER_PID"
-                # Cleanup uploader when docker compose exits
-                trap "kill $UPLOADER_PID 2>/dev/null" EXIT
-            fi
+            echo "Starting YouTube Uploader (host, background)..."
+            python3 youtube_uploader/main.py &
+            UPLOADER_PID=$!
+            echo "YouTube Uploader PID: $UPLOADER_PID"
+            # Cleanup uploader when docker compose exits
+            trap "kill $UPLOADER_PID 2>/dev/null" EXIT
         fi
     fi
 }
