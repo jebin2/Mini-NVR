@@ -1,9 +1,10 @@
 import os
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
 from api.routes import router as api_router
+from utils.helpers import is_file_live
 from api.auth import router as auth_router
 from api.go2rtc_proxy import router as go2rtc_router, ws_router as go2rtc_ws_router
 from core import config
@@ -58,6 +59,17 @@ def serve_video(path: str):
     else:
         media_type = "video/x-matroska"
         
+    # Fix for LocalProtocolError: Too much data for declared Content-Length
+    # If file is live (growing), FileResponse sets Content-Length to X but might read X+Y bytes.
+    # Use StreamingResponse for live files to avoid setting Content-Length (uses Chunked encoding).
+    if is_file_live(abs_path):
+        def iter_file():
+            with open(abs_path, "rb") as f:
+                while chunk := f.read(64 * 1024):
+                    yield chunk
+                    
+        return StreamingResponse(iter_file(), media_type=media_type)
+
     return FileResponse(abs_path, media_type=media_type)
 
 @app.get("/css/{path:path}")
