@@ -26,11 +26,21 @@ print_error() { echo -e "${RED}✗${NC} $1"; }
 install_service() {
     echo "Installing $SERVICE_NAME service..."
     
-    # Check if service file exists
-    if [ ! -f "$SERVICE_FILE" ]; then
-        print_error "Service file not found: $SERVICE_FILE"
+    # Auto-detect current user and paths
+    CURRENT_USER=$(whoami)
+    PYTHON_PATH="$PROJECT_DIR/Mini-NVR_env/bin/python"
+    LOG_FILE="$PROJECT_DIR/logs/youtube_uploader.log"
+    ENV_FILE="$PROJECT_DIR/.env"
+    
+    # Verify python exists
+    if [ ! -f "$PYTHON_PATH" ]; then
+        print_error "Python not found at: $PYTHON_PATH"
+        print_error "Please run setup.sh first to create the virtual environment."
         exit 1
     fi
+    
+    # Create logs directory if needed
+    mkdir -p "$PROJECT_DIR/logs"
     
     # Stop existing service if running
     if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
@@ -38,9 +48,35 @@ install_service() {
         sudo systemctl stop "$SERVICE_NAME"
     fi
     
-    # Copy service file
-    sudo cp "$SERVICE_FILE" "$SYSTEMD_DIR/"
-    print_status "Service file copied to $SYSTEMD_DIR"
+    # Generate service file dynamically with correct user and paths
+    print_status "Generating service file for user: $CURRENT_USER"
+    cat > /tmp/$SERVICE_NAME.service << EOF
+[Unit]
+Description=Mini-NVR YouTube Uploader
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=$CURRENT_USER
+WorkingDirectory=$PROJECT_DIR
+ExecStart=$PYTHON_PATH youtube_uploader/main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:$LOG_FILE
+StandardError=append:$LOG_FILE
+
+# Environment file (optional, loads .env)
+EnvironmentFile=-$ENV_FILE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # Copy generated service file
+    sudo cp /tmp/$SERVICE_NAME.service "$SYSTEMD_DIR/"
+    rm /tmp/$SERVICE_NAME.service
+    print_status "Service file installed to $SYSTEMD_DIR"
     
     # Reload systemd
     sudo systemctl daemon-reload
