@@ -4,3 +4,4 @@ itsdangerous
 slowapi
 bcrypt
 requests
+psutil

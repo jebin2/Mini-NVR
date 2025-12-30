@@ -5,6 +5,7 @@ itsdangerous
 slowapi
 bcrypt
 requests
+psutil
 
 # Requirements for YouTube Uploader (runs on HOST, not in Docker)
 # Install with: pip install -r youtube_uploader/requirements.txt
