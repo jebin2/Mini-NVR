@@ -278,8 +278,8 @@ class NVRUploaderService:
                 google_email=os.environ.get("GOOGLE_EMAIL"),
                 google_password=os.environ.get("GOOGLE_PASSWORD"),
                 project_path=os.environ.get("PROJECT_DIR"),
-                client_secret_path=os.path.basename(self.client_secret_path),
-                token_path=os.path.basename(self.token_path)
+                client_secret_filename=os.path.basename(self.client_secret_path),
+                token_filename=os.path.basename(self.token_path)
             )
             
             self._uploader = YouTubeUploader(config)
