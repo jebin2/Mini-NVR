@@ -145,8 +145,8 @@ def main():
             google_email=os.environ.get("GOOGLE_EMAIL"),
             google_password=os.environ.get("GOOGLE_PASSWORD"),
             project_path=PROJECT_DIR,  # For client secret override detection
-            client_secret_path=client_filename,
-            token_path=token_filename
+            client_secret_filename=client_filename,
+            token_filename=token_filename
         )
         
         # Create uploader
