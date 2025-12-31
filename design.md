@@ -333,8 +333,9 @@ Mini-NVR/
 ├── 📁 scripts/                  # Setup & control
 │   ├── generate-go2rtc-config.sh
 │   ├── generate-web-config.sh
-│   ├── setup-uploader-service.sh # Install/remove uploader systemd service
-│   └── mini-nvr-uploader.service # Systemd service definition
+│   ├── setup-ssh-auth.sh        # SSH setup for Docker-to-host auth triggering
+│   ├── setup_cloudflare_tunnel.sh
+│   └── reauth.py                # Host-side OAuth script for re-authentication
 ├── 📄 setup.sh                  # Environment & dependency setup
 ├── 📄 start.sh                  # Start all services
 ├── 📄 stop.sh                   # Stop all services

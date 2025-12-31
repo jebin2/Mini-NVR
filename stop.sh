@@ -17,14 +17,14 @@ echo -e "${YELLOW}           Stopping Mini-NVR               ${NC}"
 echo -e "${YELLOW}═══════════════════════════════════════════${NC}"
 echo ""
 
-# Stop Docker containers
+# Stop Docker containers (includes YouTube uploader)
 echo -e "${YELLOW}📦 Stopping Docker containers...${NC}"
 MINI_NVR_RUNNING=$(docker ps --filter "name=mini-nvr" --format "{{.Names}}" 2>/dev/null)
 GO2RTC_RUNNING=$(docker ps --filter "name=go2rtc" --format "{{.Names}}" 2>/dev/null)
 
 if [ -n "$MINI_NVR_RUNNING" ]; then
     docker stop mini-nvr >/dev/null 2>&1
-    echo -e "  ${GREEN}✓${NC} Stopped mini-nvr"
+    echo -e "  ${GREEN}✓${NC} Stopped mini-nvr (includes uploader)"
 else
     echo -e "  ${YELLOW}○${NC} mini-nvr was not running"
 fi
@@ -37,19 +37,8 @@ else
 fi
 echo ""
 
-# Stop YouTube Uploader Service
-echo -e "${YELLOW}📤 Stopping YouTube Uploader...${NC}"
-if systemctl is-active --quiet mini-nvr-uploader 2>/dev/null; then
-    sudo systemctl stop mini-nvr-uploader
-    echo -e "  ${GREEN}✓${NC} Stopped uploader (systemd)"
-elif pgrep -f "youtube_uploader/main.py" > /dev/null 2>&1; then
-    pkill -f "youtube_uploader/main.py"
-    echo -e "  ${GREEN}✓${NC} Stopped uploader (manual)"
-else
-    echo -e "  ${YELLOW}○${NC} Uploader was not running"
-fi
-echo ""
-
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
 echo -e "${GREEN}           Mini-NVR Stopped                ${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
+
+

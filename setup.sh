@@ -136,19 +136,13 @@ if [ -f ".env" ] && [ -f ".env.example" ]; then
     fi
 fi
 
-# 5. Uploader Service Setup (Optional)
+# 5. SSH Auth Setup for Docker (Required for YouTube uploader)
 echo ""
-read -p "Do you want to install the YouTube uploader as a systemd service (auto-start on boot)? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    if [ -f "scripts/setup-uploader-service.sh" ]; then
-        bash scripts/setup-uploader-service.sh install
-    else
-        log_error "Uploader service script not found: scripts/setup-uploader-service.sh"
-    fi
+log_info "Setting up SSH for Docker-to-host auth triggering..."
+if [ -f "scripts/setup-ssh-auth.sh" ]; then
+    bash scripts/setup-ssh-auth.sh
 else
-    log_info "Skipped uploader service installation."
-    log_info "You can install it later with: ./scripts/setup-uploader-service.sh install"
+    log_error "SSH auth setup script not found: scripts/setup-ssh-auth.sh"
 fi
 
 # 6. Cloudflare Tunnel Setup (Optional)

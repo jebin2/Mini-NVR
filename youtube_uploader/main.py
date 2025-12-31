@@ -147,7 +147,6 @@ class NVRUploaderService:
         hf_token: Optional[str] = None,
         encryption_key: Optional[str] = None,
         log_file: Optional[str] = None,
-
     ):
         self.recordings_dir = os.path.abspath(recordings_dir)
         self.client_secret_path = client_secret_path
@@ -161,7 +160,6 @@ class NVRUploaderService:
         self.encryption_key = encryption_key
         self.log_file = log_file
 
-        
         self._running = False
         self._uploader: Optional[YouTubeUploader] = None
         self._service = None
@@ -171,7 +169,72 @@ class NVRUploaderService:
         self.last_upload_time: Optional[float] = None
         self.last_error: Optional[str] = None
         
+        # Docker detection
+        self._is_docker = self._detect_docker()
+        self._reauth_triggered = False
+        
         self._check_dependencies()
+    
+    def _detect_docker(self) -> bool:
+        """Detect if running inside Docker container."""
+        # Check for /.dockerenv file
+        if os.path.exists('/.dockerenv'):
+            return True
+        # Check cgroup
+        try:
+            with open('/proc/1/cgroup', 'rt') as f:
+                return 'docker' in f.read()
+        except Exception:
+            pass
+        return False
+    
+    def _trigger_ssh_reauth(self) -> bool:
+        """
+        SSH to host machine to trigger reauth.py for OAuth.
+        This is used when running in Docker and auth fails.
+        
+        Returns:
+            True if reauth was triggered successfully, False otherwise.
+        """
+        ssh_user = os.environ.get('SSH_HOST_USER', 'jebin')
+        project_dir = os.environ.get('PROJECT_DIR', '/home/jebin/git/Mini-NVR')
+        python_path = f"/home/{ssh_user}/.pyenv/versions/Mini-NVR_env/bin/python"
+        
+        self.log(f"[NVR Uploader] 🔐 Triggering SSH reauth on host...")
+        self.log(f"[NVR Uploader]    User: {ssh_user}, Project: {project_dir}")
+        
+        cmd = [
+            'ssh',
+            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'BatchMode=yes',
+            '-o', 'ConnectTimeout=10',
+            f'{ssh_user}@host.docker.internal',
+            f'{python_path} {project_dir}/scripts/reauth.py'
+        ]
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout for OAuth flow
+            )
+            
+            if result.returncode == 0:
+                self.log("[NVR Uploader] ✓ SSH reauth completed successfully!")
+                return True
+            else:
+                self.log(f"[NVR Uploader] ✗ SSH reauth failed (exit {result.returncode})")
+                if result.stderr:
+                    self.log(f"[NVR Uploader]   stderr: {result.stderr[:200]}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            self.log("[NVR Uploader] ✗ SSH reauth timed out (5 min)")
+            return False
+        except Exception as e:
+            self.log(f"[NVR Uploader] ✗ SSH reauth error: {e}")
+            return False
     
     def log(self, message: str):
         """Log message to stdout and optionally to file."""
@@ -198,23 +261,26 @@ class NVRUploaderService:
     def _init_uploader(self) -> bool:
         """Initialize the YouTube uploader with config."""
         try:
+            # When running in Docker, use headless mode (no browser automation)
+            # Browser-based OAuth is triggered via SSH to host
             config = YouTubeConfig(
                 encrypt_path=self.encrypt_path,
                 hf_repo_id=self.hf_repo_id,
                 hf_token=self.hf_token,
                 encryption_key=self.encryption_key,
-                # Running on host with display - enable Neko
-                is_docker=False,
-                has_display=True,
-                headless_mode=False,
+                # Docker: headless mode, no browser automation
+                # Host: can use Neko browser
+                is_docker=self._is_docker,
+                has_display=not self._is_docker,
+                headless_mode=self._is_docker,
                 docker_name="nvr_youtube_auto_pub",
                 google_email=os.environ.get("GOOGLE_EMAIL"),
                 google_password=os.environ.get("GOOGLE_PASSWORD"),
-
             )
             
             self._uploader = YouTubeUploader(config)
-            self.log("[NVR Uploader] ✓ YouTube uploader initialized")
+            mode = "Docker (headless)" if self._is_docker else "Host (with display)"
+            self.log(f"[NVR Uploader] ✓ YouTube uploader initialized [{mode}]")
             return True
             
         except Exception as e:
@@ -222,8 +288,12 @@ class NVRUploaderService:
             self.last_error = str(e)
             return False
     
-    def _get_service(self):
-        """Get authenticated YouTube API service."""
+    def _get_service(self, allow_ssh_reauth: bool = True):
+        """Get authenticated YouTube API service.
+        
+        Args:
+            allow_ssh_reauth: If True and running in Docker, trigger SSH reauth on failure.
+        """
         if self._service is not None:
             return self._service
         
@@ -250,13 +320,29 @@ class NVRUploaderService:
                 client_path=client_filename
             )
             self.log("[NVR Uploader] ✓ YouTube API service authenticated")
+            self._reauth_triggered = False  # Reset on successful auth
             return self._service
+            
         except Exception as e:
-            # Only log auth errors once per batch scan attempts or implement backoff?
-            # For now standard logging
             self.log(f"[NVR Uploader] ✗ Failed to get YouTube service: {e}")
             self.last_error = str(e)
             self._service = None
+            
+            # In Docker: trigger SSH reauth on host
+            if self._is_docker and allow_ssh_reauth and not self._reauth_triggered:
+                self.log("[NVR Uploader] 🔐 Running in Docker, triggering SSH reauth...")
+                self._reauth_triggered = True
+                
+                if self._trigger_ssh_reauth():
+                    self.log("[NVR Uploader] 🔄 Reauth complete, retrying authentication...")
+                    # Reset uploader to reload credentials
+                    self._uploader = None
+                    time.sleep(2)  # Brief pause
+                    return self._get_service(allow_ssh_reauth=False)  # Retry once
+                else:
+                    self.log("[NVR Uploader] ⚠ SSH reauth failed. Manual auth may be needed.")
+                    self.log(f"[NVR Uploader]   Run: python3 scripts/reauth.py")
+            
             return None
 
     def _is_uploaded(self, mp4_path: str) -> bool:
@@ -723,7 +809,8 @@ def main():
         sys.exit(0)
     
     # Read config from env
-    recordings_dir = os.path.join(project_dir, "recordings")
+    # RECORD_DIR is /recordings in Docker, fallback to project_dir/recordings on host
+    recordings_dir = os.environ.get("RECORD_DIR", os.path.join(project_dir, "recordings"))
     client_secret_path = os.environ.get("YOUTUBE_CLIENT_SECRET_PATH")
     token_path = os.environ.get("YOUTUBE_TOKEN_PATH")
     encrypt_path = os.environ.get("YOUTUBE_ENCRYPT_PATH")

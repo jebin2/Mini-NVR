@@ -41,8 +41,7 @@ export DOCKER_UID=$(id -u)
 export DOCKER_GID=$(id -g)
 
 # Create directories with correct ownership before Docker mounts them
-mkdir -p ./logs ./recordings
-touch ./logs/.keep ./recordings/.keep
+mkdir -p ./logs ./recordings ./encrypt
 
 echo "Generating go2rtc config..."
 ./scripts/generate-go2rtc-config.sh
@@ -53,33 +52,19 @@ echo "Generating web config..."
 echo "Building without cache..."
 docker compose build --no-cache
 
-# Function to start uploader if enabled and not already running
-start_uploader_if_needed() {
-    if grep -q "YOUTUBE_UPLOAD_ENABLED=true" .env 2>/dev/null; then
-        if [ "$1" = "detached" ]; then
-            echo "Starting YouTube Uploader (host, background)..."
-            mkdir -p logs
-            nohup python3 youtube_uploader/main.py > logs/youtube_uploader.log 2>&1 &
-            echo "YouTube Uploader PID: $!"
-            echo "View logs: tail -f logs/youtube_uploader.log"
-        else
-            echo "Starting YouTube Uploader (host, background)..."
-            python3 youtube_uploader/main.py &
-            UPLOADER_PID=$!
-            echo "YouTube Uploader PID: $UPLOADER_PID"
-            # Cleanup uploader when docker compose exits
-            trap "kill $UPLOADER_PID 2>/dev/null" EXIT
-        fi
-    fi
-}
+# YouTube Uploader now runs INSIDE Docker container
+# Auth is triggered via SSH when needed (see scripts/reauth.py)
+# For manual auth: python3 scripts/reauth.py
 
 if [ "$DETACHED" = true ]; then
     echo "Starting containers (background)..."
     docker compose up -d
-    echo "Running in background. View logs: docker compose logs -f"
-    start_uploader_if_needed "detached"
+    echo "Running in background."
+    echo ""
+    echo "View logs: docker compose logs -f"
+    echo "View uploader: docker logs mini-nvr 2>&1 | grep 'NVR Uploader'"
 else
     echo "Starting containers (foreground)..."
-    start_uploader_if_needed "foreground"
     docker compose up
 fi
+
