@@ -140,6 +140,7 @@ def main():
             docker_name="nvr_youtube_reauth",
             google_email=os.environ.get("GOOGLE_EMAIL"),
             google_password=os.environ.get("GOOGLE_PASSWORD"),
+            project_path=PROJECT_DIR,  # For client secret override detection
         )
         
         # Create uploader

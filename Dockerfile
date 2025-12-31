@@ -24,6 +24,9 @@ COPY web/ /app/web/
 # Copy youtube uploader
 COPY youtube_uploader/ /app/youtube_uploader/
 
+# Ensure Python output is not buffered (for real-time logs)
+ENV PYTHONUNBUFFERED=1
+
 # Expose web port (default matches WEB_PORT in config)
 EXPOSE 2126
 

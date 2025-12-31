@@ -2,7 +2,8 @@
 # Start Mini-NVR Docker stack
 # Usage: ./start.sh [options]
 #   -d  Run in background (detached)
-#   -c  Clean logs and recordings before starting
+#   -c  Clean logs, recordings, and encrypt before starting
+#   -b  Force rebuild Docker image without cache
 
 set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -10,12 +11,16 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # Parse arguments
 DETACHED=false
 CLEAN=false
+BUILD_NO_CACHE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -d) DETACHED=true; shift ;;
         -c) CLEAN=true; shift ;;
+        -b) BUILD_NO_CACHE=true; shift ;;
         -cd|-dc) DETACHED=true; CLEAN=true; shift ;;
+        -bd|-db) DETACHED=true; BUILD_NO_CACHE=true; shift ;;
+        -cb|-bc) CLEAN=true; BUILD_NO_CACHE=true; shift ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
@@ -29,10 +34,18 @@ docker compose down 2>/dev/null || true
 
 # Clean logs and recordings if requested
 if [ "$CLEAN" = true ]; then
-    echo "Cleaning logs and recordings..."
+    echo "Cleaning logs, recordings, and encrypt..."
     rm -rf ./logs/* 2>/dev/null || true
     rm -rf ./recordings/* 2>/dev/null || true
-    echo "Cleaned: logs/, recordings/"
+    rm -rf ./encrypt/* 2>/dev/null || true
+    echo "Cleaned: logs/, recordings/, encrypt/"
+fi
+
+# Docker cleanup when building or cleaning (removes dangling images, build cache)
+if [ "$CLEAN" = true ] || [ "$BUILD_NO_CACHE" = true ]; then
+    echo "Cleaning up Docker resources (dangling images, build cache)..."
+    docker system prune -f >/dev/null 2>&1 || true
+    echo "Docker cleanup complete."
 fi
 
 # Export UID/GID for docker-compose to run container as current user
@@ -43,14 +56,28 @@ export DOCKER_GID=$(id -g)
 # Create directories with correct ownership before Docker mounts them
 mkdir -p ./logs ./recordings ./encrypt
 
+# Fix ownership if directories are owned by root (from Docker running as root)
+for dir in ./logs ./recordings ./encrypt; do
+    if [ -d "$dir" ] && [ "$(stat -c '%u' $dir 2>/dev/null)" = "0" ]; then
+        echo "Fixing $dir directory ownership..."
+        sudo chown -R $(id -u):$(id -g) "$dir"
+    fi
+done
+
 echo "Generating go2rtc config..."
 ./scripts/generate-go2rtc-config.sh
 
 echo "Generating web config..."
 ./scripts/generate-web-config.sh
 
-echo "Building without cache..."
-docker compose build --no-cache
+# Build Docker image
+if [ "$BUILD_NO_CACHE" = true ]; then
+    echo "Building without cache (force rebuild)..."
+    docker compose build --no-cache
+else
+    echo "Building Docker image..."
+    docker compose build
+fi
 
 # YouTube Uploader now runs INSIDE Docker container
 # Auth is triggered via SSH when needed (see scripts/reauth.py)
@@ -67,4 +94,3 @@ else
     echo "Starting containers (foreground)..."
     docker compose up
 fi
-

@@ -261,6 +261,7 @@ class NVRUploaderService:
     def _init_uploader(self) -> bool:
         """Initialize the YouTube uploader with config."""
         try:
+            
             # When running in Docker, use headless mode (no browser automation)
             # Browser-based OAuth is triggered via SSH to host
             config = YouTubeConfig(
@@ -276,6 +277,7 @@ class NVRUploaderService:
                 docker_name="nvr_youtube_auto_pub",
                 google_email=os.environ.get("GOOGLE_EMAIL"),
                 google_password=os.environ.get("GOOGLE_PASSWORD"),
+                project_path=os.environ.get("PROJECT_DIR"),  # For client secret override detection
             )
             
             self._uploader = YouTubeUploader(config)
@@ -303,17 +305,8 @@ class NVRUploaderService:
         
         try:
             # youtube_auto_pub expects just filenames, not full paths
-            import shutil
-            
             token_filename = os.path.basename(self.token_path)
             client_filename = os.path.basename(self.client_secret_path)
-            
-            # Copy client_secret to encrypt folder if it exists locally
-            if os.path.exists(self.client_secret_path):
-                dest = os.path.join(self.encrypt_path, client_filename)
-                if not os.path.exists(dest):
-                    shutil.copy2(self.client_secret_path, dest)
-                    self.log(f"[NVR Uploader] Copied {client_filename} to encrypt folder")
             
             self._service = self._uploader.get_service(
                 token_path=token_filename,
@@ -725,11 +718,11 @@ class NVRUploaderService:
         self.log("[NVR Uploader] ⏹ Stopping...")
     
     def run(self):
-        """Main upload loop."""
+        """Main entry point with blocking auth followed by upload loop."""
         self._running = True
         
         self.log("[NVR Uploader] =========================================")
-        self.log("[NVR Uploader] YouTube NVR Upload Service Started (Batch Mode)")
+        self.log("[NVR Uploader] YouTube NVR Upload Service Started")
         self.log("[NVR Uploader] =========================================")
         self.log(f"[NVR Uploader] 📁 Watching: {self.recordings_dir}")
         self.log(f"[NVR Uploader] 🔒 Privacy: {self.privacy_status}")
@@ -739,23 +732,100 @@ class NVRUploaderService:
             self.log(f"[NVR Uploader] ✗ Recordings directory not found: {self.recordings_dir}")
             return
         
-        # ---------------------------------------------------------------------
-        # Initial Authentication Loop
-        # ---------------------------------------------------------------------
-        self.log("[NVR Uploader] 🔑 Authenticating with YouTube...")
-        while self._running:
-            if self._get_service():
-                self.log("[NVR Uploader] ✓ Authentication successful!")
-                break
-            
-            self.log("[NVR Uploader] ⚠ Authentication failed or pending. Retrying in 10s...")
-            for _ in range(10): 
-                if not self._running: break
-                time.sleep(1)
-        # ---------------------------------------------------------------------
-
-        time.sleep(5)
+        # =====================================================================
+        # PHASE 1: AUTHENTICATION (BLOCKING)
+        # Must complete before upload service starts
+        # =====================================================================
+        self.log("[NVR Uploader] ─────────────────────────────────────────────")
+        self.log("[NVR Uploader] Phase 1: Authentication")
+        self.log("[NVR Uploader] ─────────────────────────────────────────────")
         
+        if not self._authenticate():
+            self.log("[NVR Uploader] ✗ Failed to authenticate after multiple attempts.")
+            self.log("[NVR Uploader] ✗ Check your credentials and try again.")
+            return
+        
+        self.log("[NVR Uploader] ✓ Authentication complete!")
+        
+        # =====================================================================
+        # PHASE 2: UPLOAD SERVICE
+        # Only runs after successful authentication
+        # =====================================================================
+        self.log("[NVR Uploader] ─────────────────────────────────────────────")
+        self.log("[NVR Uploader] Phase 2: Upload Service")
+        self.log("[NVR Uploader] ─────────────────────────────────────────────")
+        
+        self._run_upload_loop()
+        
+        self.log("[NVR Uploader] ⏹ Service Stopped")
+
+    def _authenticate(self) -> bool:
+        """
+        Blocking authentication flow.
+        
+        Flow:
+        1. Try to get service with existing credentials
+        2. If Docker and no credentials, trigger SSH reauth on host
+        3. Wait for auth to complete and files to sync
+        4. Retry authentication
+        
+        Returns:
+            True if authentication successful, False otherwise
+        """
+        max_attempts = 10
+        
+        for attempt in range(max_attempts):
+            self.log(f"[NVR Uploader] 🔑 Authentication attempt {attempt + 1}/{max_attempts}...")
+            
+            # Try to get service (without triggering SSH reauth in _get_service)
+            try:
+                if self._uploader is None:
+                    if not self._init_uploader():
+                        raise Exception("Failed to initialize uploader")
+                
+                # Get service
+                token_filename = os.path.basename(self.token_path)
+                client_filename = os.path.basename(self.client_secret_path)
+                
+                self._service = self._uploader.get_service(
+                    token_path=token_filename,
+                    client_path=client_filename
+                )
+                
+                if self._service:
+                    self.log("[NVR Uploader] ✓ YouTube API service authenticated")
+                    return True
+                    
+            except Exception as e:
+                self.log(f"[NVR Uploader] ✗ Auth attempt failed: {e}")
+                self._service = None
+            
+            # If running in Docker and first failure, trigger SSH reauth
+            if self._is_docker and attempt == 0 and not self._reauth_triggered:
+                self.log("[NVR Uploader] 🔐 Triggering SSH reauth on host...")
+                self._reauth_triggered = True
+                
+                if self._trigger_ssh_reauth():
+                    self.log("[NVR Uploader] ✓ SSH reauth completed! Waiting for sync...")
+                    # Wait for files to sync via volume mount
+                    time.sleep(5)
+                    # Reset uploader to pick up new credentials
+                    self._uploader = None
+                else:
+                    self.log("[NVR Uploader] ⚠ SSH reauth failed")
+            
+            # Wait before retry
+            if attempt < max_attempts - 1:
+                self.log(f"[NVR Uploader] ⏳ Waiting 10s before retry...")
+                for _ in range(10):
+                    if not self._running:
+                        return False
+                    time.sleep(1)
+        
+        return False
+
+    def _run_upload_loop(self):
+        """Upload loop - only runs after successful authentication."""
         while self._running:
             try:
                 batches = self._find_batches()
@@ -767,16 +837,12 @@ class NVRUploaderService:
                     if not self._running:
                         break
                     
-                    # Log batch details
                     self.log(f"[NVR Uploader] > Processing batch {batch.channel} {batch.date}: {len(batch.files)} files")
                     
                     if self._process_batch(batch):
-                         # If successful, maybe short sleep
-                         time.sleep(5)
+                        time.sleep(5)
                     else:
-                         # If failed, longer sleep or continue?
-                         # Continue to next batch, maybe it was a file specific issue
-                         time.sleep(5)
+                        time.sleep(5)
                     
             except Exception as e:
                 self.log(f"[NVR Uploader] ✗ Scan error: {e}")
@@ -786,8 +852,6 @@ class NVRUploaderService:
                 if not self._running:
                     break
                 time.sleep(1)
-        
-        self.log("[NVR Uploader] ⏹ Service Stopped")
 
 
 def main():

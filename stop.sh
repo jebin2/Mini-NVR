@@ -17,24 +17,12 @@ echo -e "${YELLOW}           Stopping Mini-NVR               ${NC}"
 echo -e "${YELLOW}═══════════════════════════════════════════${NC}"
 echo ""
 
-# Stop Docker containers (includes YouTube uploader)
-echo -e "${YELLOW}📦 Stopping Docker containers...${NC}"
-MINI_NVR_RUNNING=$(docker ps --filter "name=mini-nvr" --format "{{.Names}}" 2>/dev/null)
-GO2RTC_RUNNING=$(docker ps --filter "name=go2rtc" --format "{{.Names}}" 2>/dev/null)
-
-if [ -n "$MINI_NVR_RUNNING" ]; then
-    docker stop mini-nvr >/dev/null 2>&1
-    echo -e "  ${GREEN}✓${NC} Stopped mini-nvr (includes uploader)"
-else
-    echo -e "  ${YELLOW}○${NC} mini-nvr was not running"
-fi
-
-if [ -n "$GO2RTC_RUNNING" ]; then
-    docker stop go2rtc >/dev/null 2>&1
-    echo -e "  ${GREEN}✓${NC} Stopped go2rtc"
-else
-    echo -e "  ${YELLOW}○${NC} go2rtc was not running"
-fi
+# Stop and remove Docker containers (includes YouTube uploader)
+# Using 'docker compose down' ensures containers are fully removed,
+# which prevents volume mount caching issues when directories are deleted/recreated
+echo -e "${YELLOW}📦 Stopping and removing Docker containers...${NC}"
+docker compose down >/dev/null 2>&1
+echo -e "  ${GREEN}✓${NC} Stopped and removed all containers"
 echo ""
 
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"

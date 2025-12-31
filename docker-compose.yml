@@ -12,9 +12,11 @@ services:
       - ./recordings:/recordings
       - ./logs:/logs
       - ./encrypt:/app/encrypt
+      # Mount client secret for auto-detection of changes
+      - ./ytktclient_secret.json:/app/ytktclient_secret.json:ro
       # SSH keys for Docker-to-host auth triggering (mounted to root's ssh dir)
       - ${HOME}/.ssh/id_rsa:/root/.ssh/id_rsa:ro
-      - ${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts:ro
+      - ${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
