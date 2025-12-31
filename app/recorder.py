@@ -53,8 +53,15 @@ def get_latest_file(out_dir, channel):
     """Get the latest recording file (MKV or MP4) for a channel."""
     # Check both types to avoid restarting just because we converted the file
     files = glob.glob(os.path.join(out_dir, "*.mkv")) + glob.glob(os.path.join(out_dir, "*.mp4"))
+    
+    def safe_getctime(path):
+        try:
+            return os.path.getctime(path)
+        except OSError:
+            return 0
+            
     if files:
-        return max(files, key=os.path.getctime)
+        return max(files, key=safe_getctime)
     return None
 
 def start_camera(channel, rtsp_url, base_dir, segment_duration):

@@ -31,4 +31,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 2126
 
 # Start all services including YouTube uploader
-CMD ["sh", "-c", "if [ -n \"$LOG_FILE\" ]; then rm -f \"$LOG_FILE\"; fi && python server.py & python recorder.py & python cleanup.py & python youtube_uploader/main.py & wait"]
+CMD ["./start_services.sh"]
