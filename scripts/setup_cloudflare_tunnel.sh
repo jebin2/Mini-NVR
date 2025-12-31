@@ -83,8 +83,8 @@ fi
 
 echo "🆔 Tunnel UUID: $TUNNEL_ID"
 
-echo "🌐 Step 3: Creating DNS route for $DOMAIN"
-cloudflared tunnel route dns "$TUNNEL_NAME" "$DOMAIN" || echo "   ↳ DNS route may already exist"
+echo "🌐 Step 3: Creating DNS route for $DOMAIN (overwriting if exists)"
+cloudflared tunnel route dns --overwrite-dns "$TUNNEL_NAME" "$DOMAIN"
 
 echo "📝 Step 4: Writing config.yml"
 mkdir -p "$CLOUDFLARED_DIR"
