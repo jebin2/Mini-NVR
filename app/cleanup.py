@@ -6,7 +6,7 @@ from core.logger import setup_logger
 
 logger = setup_logger("cleanup")
 
-CHECK_INTERVAL = int(os.getenv("CLEANUP_INTERVAL", 60))
+CHECK_INTERVAL = int(os.getenv("CLEANUP_INTERVAL"))
 
 def get_size_gb(path):
     """Calculate total size of directory in GB."""
