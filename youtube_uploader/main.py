@@ -724,13 +724,13 @@ def main():
     
     # Read config from env
     recordings_dir = os.path.join(project_dir, "recordings")
-    client_secret_path = os.environ.get("YOUTUBE_CLIENT_SECRET_PATH", "./ytktclient_secret.json")
-    token_path = os.environ.get("YOUTUBE_TOKEN_PATH", "./ytkttoken.json")
-    encrypt_path = os.environ.get("YOUTUBE_ENCRYPT_PATH", "./encrypt")
-    privacy_status = os.environ.get("YOUTUBE_VIDEO_PRIVACY", "unlisted")
+    client_secret_path = os.environ.get("YOUTUBE_CLIENT_SECRET_PATH")
+    token_path = os.environ.get("YOUTUBE_TOKEN_PATH")
+    encrypt_path = os.environ.get("YOUTUBE_ENCRYPT_PATH")
+    privacy_status = os.environ.get("YOUTUBE_VIDEO_PRIVACY")
     delete_after_upload = os.environ.get("YOUTUBE_DELETE_AFTER_UPLOAD", "false").lower() == "true"
-    scan_interval = int(os.environ.get("YOUTUBE_UPLOAD_INTERVAL", "60"))
-    hf_repo_id = os.environ.get("HF_REPO_ID", "jebin2/Data")
+    scan_interval = int(os.environ.get("YOUTUBE_UPLOAD_INTERVAL"))
+    hf_repo_id = os.environ.get("HF_REPO_ID")
     hf_token = os.environ.get("HF_TOKEN")
     encryption_key = os.environ.get("YT_ENCRYP_KEY")
     
