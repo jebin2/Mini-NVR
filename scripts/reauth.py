@@ -109,12 +109,12 @@ def main():
     log("")
     
     # Get config from environment
-    encrypt_path = os.environ.get("YOUTUBE_ENCRYPT_PATH", "./encrypt")
+    encrypt_path = os.environ.get("YOUTUBE_ENCRYPT_PATH")
     hf_repo_id = os.environ.get("HF_REPO_ID")
     hf_token = os.environ.get("HF_TOKEN")
     encryption_key = os.environ.get("YT_ENCRYP_KEY")
-    client_secret_path = os.environ.get("YOUTUBE_CLIENT_SECRET_PATH", "./ytktclient_secret.json")
-    token_path = os.environ.get("YOUTUBE_TOKEN_PATH", "./ytkttoken.json")
+    client_secret_path = os.environ.get("YOUTUBE_CLIENT_SECRET_PATH")
+    token_path = os.environ.get("YOUTUBE_TOKEN_PATH")
     
     # Resolve relative paths
     if not os.path.isabs(encrypt_path):
@@ -126,6 +126,10 @@ def main():
     log(f"[Reauth] Client secret: {client_secret_path}")
     log("")
     
+    # Get filenames (not full paths - youtube_auto_pub handles this)
+    token_filename = os.path.basename(token_path)
+    client_filename = os.path.basename(client_secret_path)
+
     try:
         # Create config - running on host with display
         config = YouTubeConfig(
@@ -141,14 +145,12 @@ def main():
             google_email=os.environ.get("GOOGLE_EMAIL"),
             google_password=os.environ.get("GOOGLE_PASSWORD"),
             project_path=PROJECT_DIR,  # For client secret override detection
+            client_secret_path=client_filename,
+            token_path=token_filename
         )
         
         # Create uploader
         uploader = YouTubeUploader(config)
-        
-        # Get filenames (not full paths - youtube_auto_pub handles this)
-        token_filename = os.path.basename(token_path)
-        client_filename = os.path.basename(client_secret_path)
         
         # Copy client_secret to encrypt folder if it exists locally
         if os.path.exists(client_secret_path):
@@ -163,10 +165,7 @@ def main():
         log("")
         
         # Get service (this triggers auth flow if needed)
-        service = uploader.get_service(
-            token_path=token_filename,
-            client_path=client_filename
-        )
+        service = uploader.get_service()
         
         if service:
             log("")

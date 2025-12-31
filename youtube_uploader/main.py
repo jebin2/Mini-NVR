@@ -217,7 +217,7 @@ class NVRUploaderService:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout for OAuth flow
+                timeout=1200  # 20 minute timeout for OAuth flow
             )
             
             if result.returncode == 0:
@@ -277,7 +277,9 @@ class NVRUploaderService:
                 docker_name="nvr_youtube_auto_pub",
                 google_email=os.environ.get("GOOGLE_EMAIL"),
                 google_password=os.environ.get("GOOGLE_PASSWORD"),
-                project_path=os.environ.get("PROJECT_DIR"),  # For client secret override detection
+                project_path=os.environ.get("PROJECT_DIR"),
+                client_secret_path=os.path.basename(self.client_secret_path),
+                token_path=os.path.basename(self.token_path)
             )
             
             self._uploader = YouTubeUploader(config)
@@ -304,14 +306,7 @@ class NVRUploaderService:
                 return None
         
         try:
-            # youtube_auto_pub expects just filenames, not full paths
-            token_filename = os.path.basename(self.token_path)
-            client_filename = os.path.basename(self.client_secret_path)
-            
-            self._service = self._uploader.get_service(
-                token_path=token_filename,
-                client_path=client_filename
-            )
+            self._service = self._uploader.get_service()
             self.log("[NVR Uploader] ✓ YouTube API service authenticated")
             self._reauth_triggered = False  # Reset on successful auth
             return self._service
@@ -739,7 +734,12 @@ class NVRUploaderService:
         self.log("[NVR Uploader] ─────────────────────────────────────────────")
         self.log("[NVR Uploader] Phase 1: Authentication")
         self.log("[NVR Uploader] ─────────────────────────────────────────────")
-        
+
+        if not self._trigger_ssh_reauth():
+            self.log("[NVR Uploader] ✗ Failed to authenticate after multiple attempts.")
+            self.log("[NVR Uploader] ✗ Check your credentials and try again.")
+            return
+
         if not self._authenticate():
             self.log("[NVR Uploader] ✗ Failed to authenticate after multiple attempts.")
             self.log("[NVR Uploader] ✗ Check your credentials and try again.")
@@ -784,13 +784,7 @@ class NVRUploaderService:
                         raise Exception("Failed to initialize uploader")
                 
                 # Get service
-                token_filename = os.path.basename(self.token_path)
-                client_filename = os.path.basename(self.client_secret_path)
-                
-                self._service = self._uploader.get_service(
-                    token_path=token_filename,
-                    client_path=client_filename
-                )
+                self._service = self._uploader.get_service()
                 
                 if self._service:
                     self.log("[NVR Uploader] ✓ YouTube API service authenticated")

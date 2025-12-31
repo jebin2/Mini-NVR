@@ -2,7 +2,8 @@
 # Start Mini-NVR Docker stack
 # Usage: ./start.sh [options]
 #   -d  Run in background (detached)
-#   -c  Clean logs, recordings, and encrypt before starting
+#   -c  Clean logs and encrypt before starting (excluding recordings)
+#   -r  Clean recordings before starting
 #   -b  Force rebuild Docker image without cache
 
 set -e
@@ -11,18 +12,27 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # Parse arguments
 DETACHED=false
 CLEAN=false
+CLEAN_RECORDINGS=false
 BUILD_NO_CACHE=false
 
 while [[ $# -gt 0 ]]; do
-    case $1 in
-        -d) DETACHED=true; shift ;;
-        -c) CLEAN=true; shift ;;
-        -b) BUILD_NO_CACHE=true; shift ;;
-        -cd|-dc) DETACHED=true; CLEAN=true; shift ;;
-        -bd|-db) DETACHED=true; BUILD_NO_CACHE=true; shift ;;
-        -cb|-bc) CLEAN=true; BUILD_NO_CACHE=true; shift ;;
-        *) echo "Unknown option: $1"; exit 1 ;;
-    esac
+    if [[ "$1" == -* ]]; then
+        # Iterate over each character in the argument (skip the first '-')
+        for (( i=1; i<${#1}; i++ )); do
+            char="${1:$i:1}"
+            case "$char" in
+                d) DETACHED=true ;;
+                c) CLEAN=true ;;
+                r) CLEAN_RECORDINGS=true ;;
+                b) BUILD_NO_CACHE=true ;;
+                *) echo "Unknown option: -$char"; exit 1 ;;
+            esac
+        done
+    else
+        echo "Unknown argument: $1"
+        exit 1
+    fi
+    shift
 done
 
 # duplicate service won't run
@@ -32,13 +42,19 @@ echo "Stopping any running instances..."
 echo "Removing existing containers..."
 docker compose down 2>/dev/null || true
 
-# Clean logs and recordings if requested
+# Clean logs and encrypt if requested
 if [ "$CLEAN" = true ]; then
-    echo "Cleaning logs, recordings, and encrypt..."
+    echo "Cleaning logs and encrypt..."
     rm -rf ./logs/* 2>/dev/null || true
-    rm -rf ./recordings/* 2>/dev/null || true
     rm -rf ./encrypt/* 2>/dev/null || true
-    echo "Cleaned: logs/, recordings/, encrypt/"
+    echo "Cleaned: logs/, encrypt/"
+fi
+
+# Clean recordings only if requested
+if [ "$CLEAN_RECORDINGS" = true ]; then
+    echo "Cleaning recordings..."
+    rm -rf ./recordings/* 2>/dev/null || true
+    echo "Cleaned: recordings/"
 fi
 
 # Docker cleanup when building or cleaning (removes dangling images, build cache)
