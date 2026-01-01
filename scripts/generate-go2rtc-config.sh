@@ -74,6 +74,10 @@ done
 # Add RTSP server section for relay functionality
 cat >> "$OUTPUT_FILE" << EOF
 
+hls:
+  segment_duration: 2
+  segment_count: 3
+
 rtsp:
   listen: ":${GO2RTC_RTSP_PORT}"
 
