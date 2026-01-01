@@ -116,6 +116,12 @@ function playClip(index) {
         return;
     }
 
+    // For LIVE segment on MOBILE: auto-play via WebRTC directly
+    if (rec.live && go2rtc.isMobile()) {
+        playLive();
+        return;
+    }
+
     // Local Playback via JellyJump Embed
     let recordingUrl = `${window.location.origin}/recordings/${rec.name}`;
     if (rec.live) {
