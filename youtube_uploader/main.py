@@ -430,27 +430,20 @@ class NVRUploaderService:
             file_exists = os.path.exists(csv_path)
             
             with open(csv_path, 'a') as f:
-                # Format: relative_path,video_id,video_url,timestamp
-                # We log EACH original file in the batch as pointing to this video
-                for file_path in batch.files:
-                    rel_path = os.path.relpath(file_path, self.recordings_dir)
-                    # If we renamed it to _uploaded, we should probably log the _uploaded version?
-                    # But the store sees the current file. 
-                    # If delete_after_upload is True, the file is gone.
-                    # If false, it's renamed to _uploaded.mp4.
-                    # Let's log the version that will exist (or would have existed).
-                    # 'batch.files' has the ORIGINAL paths (e.g. .mp4)
-                    
-                    # Store logic will look for the CURRENT filename.
-                    # If we rename to _uploaded, store sees _uploaded.mp4.
-                    # So we should log the _uploaded.mp4 path if we are not deleting.
-                    
-                    final_path = rel_path
-                    if not self.delete_after_upload:
-                         final_path = rel_path.replace(".mp4", "_uploaded.mp4")
-                    
-                    line = f"{final_path},{video_id},{youtube_url},{timestamp}\n"
-                    f.write(line)
+                # Format: channel,date,start_time,end_time,video_id,video_url,timestamp
+                # We log ONE row per merged video
+                
+                # Get start time from first file and end time from last file
+                first_info = self._parse_video_path(batch.files[0])
+                last_info = self._parse_video_path(batch.files[-1])
+                
+                start_time = first_info['time']
+                end_time = last_info['time']
+                
+                # CSV Format: Channel, Date, TimeRange, YouTubeURL, Timestamp
+                # e.g. "Channel 1,2025-05-20,08:00:00-09:00:00,https://youtu.be/...,2025-05-21 10:00:00"
+                line = f"{batch.channel},{batch.date},{start_time}-{end_time},{youtube_url},{timestamp}\n"
+                f.write(line)
                     
             self.log(f"[NVR Uploader] 📝 Logged to CSV: {video_id}")
         except Exception as e:
