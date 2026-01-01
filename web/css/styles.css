@@ -675,12 +675,17 @@ input:focus {
         justify-content: center;
     }
 
-    /* Video player */
+    /* Video player - taller aspect ratio to fit go2rtc control bar */
     .video-stage {
         width: 100%;
-        height: auto;
-        aspect-ratio: 16/9;
+        aspect-ratio: 16/13;
         flex: none;
+        background: #000;
+        border-radius: var(--border-radius);
+        overflow: hidden;
+        position: relative;
+        border: 1px solid var(--glass-border);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
     }
 
     /* Timeline adjustments */
