@@ -114,8 +114,8 @@ class YouTubeStreamer:
                 "-fflags", "+genpts+igndts+discardcorrupt",  # Discard corrupt packets
                 "-err_detect", "ignore_err",  # Ignore decoding errors
                 "-max_delay", "500000",  # 0.5 second max delay
-                "-probesize", "32",  # Reduce probe size for faster startup
-                "-analyzeduration", "0",  # Skip analysis
+                "-probesize", "5000000",  # Increased for better stream detection
+                "-analyzeduration", "5000000",  # Increased for better stream detection
                 "-i", rtsp
             ])
             
