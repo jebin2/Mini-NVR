@@ -104,6 +104,7 @@ header {
     align-items: center;
     letter-spacing: 0.5px;
     background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -479,6 +480,7 @@ input:focus {
     font-family: 'Outfit', sans-serif;
     font-size: 2rem;
     background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-bottom: 8px;
@@ -631,6 +633,9 @@ input:focus {
     /* Expanded view optimizations */
     .expanded-view {
         gap: 16px;
+        height: auto;
+        min-height: 100%;
+        padding-bottom: 30px;
     }
 
     .player-header {
@@ -672,8 +677,10 @@ input:focus {
 
     /* Video player */
     .video-stage {
-        max-height: 50vh;
+        height: auto;
         min-height: 220px;
+        aspect-ratio: 16/9;
+        flex: none;
     }
 
     /* Timeline adjustments */
