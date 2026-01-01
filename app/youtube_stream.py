@@ -99,8 +99,9 @@ class YouTubeStreamer:
         
         cmd = [
             "ffmpeg",
-            "-hide_banner", "-loglevel", "info",
-            "-progress", "pipe:1",
+            "-hide_banner", "-loglevel", "warning",
+            "-stats",  # Output encoding stats continuously (for health monitoring)
+            "-stats_period", "5",  # Stats every 5 seconds
             "-threads", "0"  # Use all CPU cores
         ]
         
