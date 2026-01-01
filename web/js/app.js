@@ -131,16 +131,33 @@ function playClip(index) {
     }
 
     const video = document.getElementById('mainPlayer');
-    const liveFrame = document.getElementById('liveFrame');
+    const container = video.parentElement;
+    const existingFrame = document.getElementById('liveFrame');
 
-    // Remove live iframe if present
-    if (liveFrame) {
-        liveFrame.remove();
-        video.style.display = '';
-    }
+    // Cleanup existing iframe
+    if (existingFrame) existingFrame.remove();
+    video.style.display = 'none';
+    video.pause();
 
-    video.src = `/recordings/${rec.name}`;
-    video.play().catch(e => console.log("Autoplay blocked or format unsupported"));
+    // Build JellyJump URL
+    // Use window.location.origin to get the full URL of the recording on the NVR server
+    const recordingUrl = `${window.location.origin}/recordings/${rec.name}`;
+    const baseUrl = 'https://www.voidall.com/JellyJump/embed.html';
+
+    // Configure controls (minimal set + volume + screenshot)
+    const controls = 'play,pause,volume,progress,time,fullscreen,speed,screenshot';
+
+    // Construct full embed URL
+    const embedUrl = `${baseUrl}?video_url=${encodeURIComponent(recordingUrl)}&controls=${controls}`;
+
+    // Create and inject iframe
+    const iframe = document.createElement('iframe');
+    iframe.src = embedUrl;
+    iframe.id = 'liveFrame'; // Reuse ID for easier cleanup logic
+    iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
+    iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+    iframe.allowFullscreen = true;
+    container.appendChild(iframe);
 
     UI.highlightClip(index);
 }

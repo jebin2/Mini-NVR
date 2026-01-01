@@ -84,6 +84,13 @@ def serve_video(path: str):
         media_type = "video/mp4"
     else:
         media_type = "video/x-matroska"
+    
+    # Explicit CORS headers for video responses (Cloudflare may cache before middleware applies)
+    cors_headers = {
+        "Access-Control-Allow-Origin": "https://www.voidall.com",
+        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    }
         
     # Fix for LocalProtocolError: Too much data for declared Content-Length
     # If file is live (growing), FileResponse sets Content-Length to X but might read X+Y bytes.
@@ -94,9 +101,9 @@ def serve_video(path: str):
                 while chunk := f.read(64 * 1024):
                     yield chunk
                     
-        return StreamingResponse(iter_file(), media_type=media_type)
+        return StreamingResponse(iter_file(), media_type=media_type, headers=cors_headers)
 
-    return FileResponse(abs_path, media_type=media_type)
+    return FileResponse(abs_path, media_type=media_type, headers=cors_headers)
 
 @app.get("/css/{path:path}")
 def serve_css(path: str):
