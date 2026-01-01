@@ -179,7 +179,7 @@ def main():
     # --- Start Recording Threads ---
     # Using go2rtc relay as unified RTSP source (single DVR connection)
     threads = []
-    for ch in range(1, config.NUM_CHANNELS + 1):
+    for ch in config.get_active_channels():
         # Use go2rtc as RTSP source for unified architecture
         rtsp_url = build_go2rtc_url(ch)
         t = threading.Thread(

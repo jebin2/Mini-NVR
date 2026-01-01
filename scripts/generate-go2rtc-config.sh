@@ -67,7 +67,26 @@ cat > "$OUTPUT_FILE" << EOF
 streams:
 EOF
 
+# Parse SKIP_CHANNELS into an array
+IFS=',' read -ra SKIP_ARRAY <<< "$SKIP_CHANNELS"
+
 for i in $(seq 1 "$NUM_CHANNELS"); do
+    # Check if channel should be skipped
+    skip=0
+    for val in "${SKIP_ARRAY[@]}"; do
+        # Strip whitespace from val just in case
+        val=$(echo "$val" | xargs)
+        if [[ "$val" == "$i" ]]; then
+            skip=1
+            break
+        fi
+    done
+
+    if [[ $skip -eq 1 ]]; then
+        log_info "Skipping channel $i (SKIP_CHANNELS)"
+        continue
+    fi
+
     echo "  cam${i}:" >> "$OUTPUT_FILE"
     echo "    - $(generate_url "$i")" >> "$OUTPUT_FILE"
     echo "    - \"ffmpeg:cam${i}#video=copy#audio=aac\"" >> "$OUTPUT_FILE"

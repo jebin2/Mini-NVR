@@ -12,6 +12,12 @@ def get_required_env(name):
 # Global Settings
 RECORD_DIR = get_env("RECORD_DIR")
 NUM_CHANNELS = int(get_env("NUM_CHANNELS"))
+SKIP_CHANNELS = [int(x) for x in get_env("SKIP_CHANNELS", "").split(",") if x.strip()]
+
+def get_active_channels():
+    """Get list of active channel numbers, excluding skipped ones."""
+    return [c for c in range(1, NUM_CHANNELS + 1) if c not in SKIP_CHANNELS]
+
 SEGMENT_DURATION = int(get_env("SEGMENT_DURATION")) 
 MAX_STORAGE_GB = int(get_env("MAX_STORAGE_GB"))
 MAX_STORAGE_EXCEED_ALLOWED_GB = int(get_env("MAX_STORAGE_EXCEED_ALLOWED_GB"))

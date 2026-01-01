@@ -11,6 +11,7 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 def get_config():
     return {
         "numChannels": config.NUM_CHANNELS,
+        "activeChannels": config.get_active_channels(),
         "storageLimit": config.MAX_STORAGE_GB
     }
 
@@ -28,8 +29,8 @@ def get_dates(channel: int = Query(None, ge=1, description="Channel number (1-ba
     Get dates using directory listing.
     Assumes nested structure: recordings/chX/YYYY-MM-DD
     """
-    if channel is not None and channel > config.NUM_CHANNELS:
-        raise HTTPException(status_code=400, detail=f"Invalid channel. Max is {config.NUM_CHANNELS}")
+    if channel is not None and channel not in config.get_active_channels():
+        raise HTTPException(status_code=400, detail=f"Invalid or skipped channel.")
     return {"dates": store.get_available_dates(channel)}
 
 @router.get("/channel/{ch}/recordings")
@@ -38,8 +39,9 @@ def get_recordings(
     date: str = Query(..., description="Date in YYYY-MM-DD format")
 ):
     # Validate channel bounds
-    if ch > config.NUM_CHANNELS:
-        raise HTTPException(status_code=400, detail=f"Invalid channel. Max is {config.NUM_CHANNELS}")
+    # Validate channel bounds
+    if ch not in config.get_active_channels():
+        raise HTTPException(status_code=400, detail=f"Invalid or skipped channel.")
     
     # Validate date format
     if not re.match(r'^\d{4}-\d{2}-\d{2}$', date):

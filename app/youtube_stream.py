@@ -16,6 +16,7 @@ import threading
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from services.youtube_logger import YouTubeLogger
+from core import config
 
 # ============================================
 # Configuration
@@ -393,7 +394,8 @@ class StreamManager:
         log.info(f"Grid size: {YOUTUBE_GRID}, Total cameras: {NUM_CHANNELS}")
         
         # Map cameras to keys
-        available_cameras = list(range(1, NUM_CHANNELS + 1))
+        # available_cameras = list(range(1, NUM_CHANNELS + 1))
+        available_cameras = config.get_active_channels()
         
         # Create jobs
         for i, key in enumerate(keys):

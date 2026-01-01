@@ -23,7 +23,7 @@ def get_storage_usage():
 
 def get_live_channels():
     channels = {}
-    for ch in range(1, config.NUM_CHANNELS + 1):
+    for ch in config.get_active_channels():
         # Find latest file for this channel (checking both MP4 and MKV)
         candidates = []
         for ext in ["mp4", "mkv"]:
