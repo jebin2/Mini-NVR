@@ -187,6 +187,9 @@ class YouTubeStreamer:
         
         cmd = build_ffmpeg_command(self.cameras, YOUTUBE_RTMP_URL, self.stream_key)
         
+        # Log the full command for debugging
+        logger.debug(f"[START] Command: {' '.join(cmd[:20])}...")
+        
         try:
             # Start FFmpeg with stderr capture for error logging
             self.process = subprocess.Popen(
@@ -196,11 +199,37 @@ class YouTubeStreamer:
                 text=True
             )
             
+            logger.info(f"[START] FFmpeg launched, PID: {self.process.pid}")
+            
+            # Wait briefly to verify FFmpeg survives startup
+            logger.info("[START] Verifying FFmpeg startup (waiting 5s)...")
+            time.sleep(5)
+            
+            # Check if process is still running
+            retcode = self.process.poll()
+            if retcode is not None:
+                # Process already died, capture stderr
+                stderr_output = ""
+                try:
+                    stderr_output = self.process.stderr.read()
+                except:
+                    pass
+                
+                logger.error(f"[START] ❌ FFmpeg crashed immediately with code {retcode}")
+                if stderr_output:
+                    # Log full stderr for debugging
+                    for line in stderr_output.strip().split('\n')[-20:]:
+                        logger.error(f"[START] FFmpeg: {line}")
+                
+                self.process = None
+                self.running = False
+                return False
+            
             self.start_time = time.time()
             self.segment_count += 1
             self.running = True
             
-            logger.info(f"[START] ✅ FFmpeg started, PID: {self.process.pid}")
+            logger.info(f"[START] ✅ FFmpeg running successfully")
             logger.info(f"[START] 📺 Streaming to YouTube (Segment #{self.segment_count})")
             
             return True
