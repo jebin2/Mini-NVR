@@ -120,31 +120,35 @@ if [ "$YOUTUBE_LIVE_ENABLED" = "true" ]; then
                 
             elif [ "$count" -gt 1 ]; then
                 # Grid Composition (2-4 cameras)
-                # We always aim for 4 slots (2x2) if grid_size is 4 to keep layout consistent
-                # 1440p Output (2x2 720p)
+                # Optimized for YouTube Live Streaming with Lower Bitrate
                 
                 cmd="exec:ffmpeg -hide_banner -nostats -re"
                 
-                # Inputs from local go2rtc
-                # We use the RTSP loopback to simplify input handling
+                # Inputs from local go2rtc with TCP transport for stability
                 filter_inputs=""
                 
-                # Add valid cameras as inputs
+                # Add valid cameras as inputs with TCP transport
                 for cam_num in "${valid_cams[@]}"; do
-                    cmd="$cmd -i rtsp://127.0.0.1:${GO2RTC_RTSP_PORT}/cam${cam_num}"
+                    cmd="$cmd -rtsp_transport tcp -i rtsp://127.0.0.1:${GO2RTC_RTSP_PORT}/cam${cam_num}"
                 done
                 
                 # Add black frames for missing slots to fill up to 4
                 missing=$(( 4 - count ))
                 for (( k=0; k<missing; k++ )); do
-                    cmd="$cmd -f lavfi -i color=c=black:s=1280x720:r=30"
+                    cmd="$cmd -f lavfi -i color=c=black:s=960x540:r=25"
                 done
                 
-                # Construct xstack filter
-                # Build video filter inputs
+                # Construct video filter chain - LOWER RESOLUTION for bandwidth
+                # Scale to 960x540 per camera (final output: 1920x1080)
                 filter_complex=""
                 for (( k=0; k<4; k++ )); do
-                    filter_complex="${filter_complex}[${k}:v]"
+                    filter_complex="${filter_complex}[${k}:v]scale=960x540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25[v${k}];"
+                done
+                
+                # Build xstack from normalized inputs
+                filter_complex="${filter_complex}"
+                for (( k=0; k<4; k++ )); do
+                    filter_complex="${filter_complex}[v${k}]"
                 done
                 filter_complex="${filter_complex}xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0[v]"
                 
@@ -166,14 +170,17 @@ if [ "$YOUTUBE_LIVE_ENABLED" = "true" ]; then
                 # Complete filter_complex
                 full_filter="${filter_complex}${audio_filter}"
                 
-                # Encoding settings
+                # Encoding settings optimized for LOW BANDWIDTH YouTube Live
                 cmd="$cmd -filter_complex \\\"${full_filter}\\\" -map \\\"[v]\\\" ${audio_map}"
                 
-                # Audio encoding
-                cmd="$cmd -c:a aac -b:a 128k -ar 44100"
+                # Audio encoding - Lower bitrate
+                cmd="$cmd -c:a aac -b:a 96k -ar 44100"
                 
-                # Video encoding
-                cmd="$cmd -c:v libx264 -preset veryfast -b:v 6M -maxrate 8M -bufsize 16M -r 30 -g 60 -sc_threshold 0"
+                # Video encoding - AGGRESSIVE COMPRESSION for limited upload
+                # Lower resolution (1920x1080), lower framerate (25fps), lower bitrate
+                cmd="$cmd -c:v libx264 -preset faster -tune zerolatency"
+                cmd="$cmd -b:v 2500k -minrate 2500k -maxrate 2500k -bufsize 5000k"
+                cmd="$cmd -r 25 -g 50 -keyint_min 50 -sc_threshold 0 -pix_fmt yuv420p"
                 
                 # Output format (MPEG-TS for go2rtc consumption via stdout)
                 cmd="$cmd -f mpegts -"
