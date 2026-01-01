@@ -4,6 +4,7 @@ YouTube Live Streaming Service
 Manages FFmpeg processes to stream RTSP cameras to YouTube.
 Supports Grid mode (combining cameras) and Multi-Key mode.
 Restarts streams every 11 hours.
+Uses canvas-based approach for maximum stability.
 """
 import os
 import sys
@@ -86,25 +87,32 @@ class YouTubeStreamer:
         self.start_datetime = None
         self.segment = 0
         self.video_id = None
-        # Initialize Logger (assumes credentials in current dir or standard fallback)
+        # Initialize Logger
         self.logger = YouTubeLogger(recordings_dir=RECORD_DIR)
+        # Stream health monitoring
+        self.last_frame_time = None
+        self.error_count = 0
+        self.rtmp_errors = []
     
     def build_cmd(self):
         rtmp = f"{YOUTUBE_RTMP_URL}/{self.job.key}"
         
         cmd = [
             "ffmpeg",
-            "-hide_banner", "-loglevel", "warning"
+            "-hide_banner", "-loglevel", "info",  # Changed to "info" for progress updates
+            "-progress", "pipe:1"  # Output progress to stdout
         ]
         
-        # Inputs - with proper per-input RTSP flags
+        # Inputs - with proper per-input RTSP flags and error handling
         for cam_idx in self.job.cameras:
             rtsp = f"rtsp://127.0.0.1:{GO2RTC_RTSP_PORT}/cam{cam_idx}"
             cmd.extend([
                 "-rtsp_transport", "tcp",
                 "-rtsp_flags", "prefer_tcp",
                 "-timeout", "5000000",  # 5 second timeout (microseconds)
-                "-fflags", "+genpts+igndts",
+                "-fflags", "+genpts+igndts+discardcorrupt",  # Discard corrupt packets
+                "-err_detect", "ignore_err",  # Ignore decoding errors
+                "-max_delay", "500000",  # 0.5 second max delay
                 "-i", rtsp
             ])
             
@@ -115,42 +123,59 @@ class YouTubeStreamer:
         # Filter / Mapping
         if len(self.job.cameras) == 1:
             # Single camera - scale to 2560x1440 with proper aspect ratio handling
-            filter_complex = "[0:v]scale=2560:1440:force_original_aspect_ratio=decrease,pad=2560:1440:(ow-iw)/2:(oh-ih)/2,fps=25[v]"
+            filter_complex = "[0:v]scale=2560:1440:force_original_aspect_ratio=decrease,pad=2560:1440:(ow-iw)/2:(oh-ih)/2,fps=25,setsar=1[v]"
             cmd.extend(["-filter_complex", filter_complex])
             cmd.extend(["-map", "[v]", "-map", f"{audio_input_idx}:a"])
         else:
-            # Grid Layout
+            # Grid Layout - CANVAS APPROACH for stability
             n = len(self.job.cameras)
             cols = math.ceil(math.sqrt(n))
             rows = math.ceil(n / cols)
             
-            log.info(f"📐 Creating {rows}x{cols} grid for {n} cameras")
+            log.info(f"📐 Creating {rows}x{cols} grid for {n} cameras using CANVAS method")
             
-            # Build xstack layout with proper syntax
-            layout_parts = []
+            # Calculate cell dimensions for 2560x1440 output
+            cell_w = 2560 // cols
+            cell_h = 1440 // rows
+            
+            log.info(f"📏 Cell size: {cell_w}x{cell_h}")
+            
+            # Build filter complex with canvas approach
+            filter_parts = []
+            
+            # Step 1: Normalize each camera to cell size with same settings
+            for i in range(n):
+                filter_parts.append(
+                    f"[{i}:v]scale={cell_w}:{cell_h}:force_original_aspect_ratio=decrease,"
+                    f"pad={cell_w}:{cell_h}:(ow-iw)/2:(oh-ih)/2,"
+                    f"fps=25,setsar=1,fifo[v{i}]"  # Added fifo buffer for stability
+                )
+            
+            # Step 2: Create blank canvas at 2560x1440
+            filter_parts.append(
+                f"color=c=black:s=2560x1440:r=25[base]"
+            )
+            
+            # Step 3: Overlay each normalized camera onto canvas
+            current_layer = "base"
             for i in range(n):
                 row = i // cols
                 col = i % cols
+                x = col * cell_w
+                y = row * cell_h
                 
-                if col == 0:
-                    x_pos = "0"
-                else:
-                    # Sum widths of cameras to the left in the same row
-                    x_pos = "+".join([f"w{row*cols + j}" for j in range(col)])
-                
-                if row == 0:
-                    y_pos = "0"
-                else:
-                    # Sum heights of cameras directly above in the same column
-                    y_pos = "+".join([f"h{j*cols + col}" for j in range(row)])
-                
-                layout_parts.append(f"{x_pos}_{y_pos}")
+                next_layer = f"tmp{i}" if i < n - 1 else "v"
+                # eof_action=pass: Keep going if this camera dies
+                # repeatlast=1: Repeat last frame if camera freezes
+                filter_parts.append(
+                    f"[{current_layer}][v{i}]overlay={x}:{y}:eof_action=pass:repeatlast=1[{next_layer}]"
+                )
+                current_layer = next_layer
             
-            layout = "|".join(layout_parts)
-            # Scale to 1440p (2560x1440) with proper aspect ratio and padding
-            filter_complex = f"xstack=inputs={n}:layout={layout}[bg];[bg]scale=2560:1440:force_original_aspect_ratio=decrease,pad=2560:1440:(ow-iw)/2:(oh-ih)/2,fps=25[v]"
+            filter_complex = ";".join(filter_parts)
             
-            log.info(f"🎨 xstack layout: {layout} + scale=2560:1440")
+            log.info(f"🎨 Canvas layout: {rows}x{cols} grid with {cell_w}x{cell_h} cells")
+            log.debug(f"Filter: {filter_complex}")
             
             cmd.extend(["-filter_complex", filter_complex])
             cmd.extend(["-map", "[v]", "-map", f"{audio_input_idx}:a"])
@@ -162,7 +187,7 @@ class YouTubeStreamer:
             "-preset", "veryfast", 
             "-tune", "zerolatency",
             "-profile:v", "main",           # Better compatibility than "high"
-            "-level", "4.2",                # Changed from 4.1 to 4.2 for higher resolution support
+            "-level", "4.2",                # Higher resolution support
             "-pix_fmt", "yuv420p",
             
             # Bitrate settings
@@ -182,8 +207,7 @@ class YouTubeStreamer:
             "-ar", "44100",                 # Force audio sample rate
             "-ac", "2",                     # Force stereo
             
-            # Stream settings
-            "-shortest",
+            # Stream settings (removed -shortest for better stability)
             "-f", "flv",
             "-flvflags", "no_duration_filesize",
             rtmp
@@ -199,7 +223,7 @@ class YouTubeStreamer:
                 if not line:
                     continue
                 
-                # Update last activity time
+                # Update last activity time for ANY output
                 self.last_frame_time = time.time()
                 
                 # Check for RTMP errors indicating YouTube rejected stream
@@ -212,6 +236,7 @@ class YouTubeStreamer:
                     "Broken pipe",
                     "Connection reset",
                     "Unable to write frame",
+                    "Cannot read RTMP handshake",
                     "Connection timed out",
                     "End of file",
                     "Write error",
@@ -227,17 +252,22 @@ class YouTubeStreamer:
                     if self.error_count >= 3:
                         log.error(f"❌ Multiple RTMP errors detected - YouTube likely rejected stream")
                 
-                # Log other messages
-                elif "error" in line.lower():
+                # Log errors (but filter out recoverable ones)
+                elif "error" in line.lower() and not any(x in line.lower() for x in ["deprecated", "recoverable"]):
                     log.error(f"FFmpeg ERROR: {line}")
+                # Log warnings (but reduce noise)
                 elif "warning" in line.lower():
-                    log.warning(f"FFmpeg WARNING: {line}")
-                else:
-                    # Check for frame progress indicators
-                    if "frame=" in line.lower() or "time=" in line.lower():
+                    log.debug(f"FFmpeg WARNING: {line}")
+                # Progress indicators - just update timestamp, don't spam logs
+                elif any(x in line.lower() for x in ["frame=", "fps=", "time=", "bitrate=", "speed="]):
+                    # Only log progress every 30 seconds to reduce spam
+                    if not hasattr(self, '_last_progress_log'):
+                        self._last_progress_log = 0
+                    if time.time() - self._last_progress_log > 30:
                         log.debug(f"FFmpeg progress: {line}")
-                    else:
-                        log.debug(f"FFmpeg: {line}")
+                        self._last_progress_log = time.time()
+                else:
+                    log.debug(f"FFmpeg: {line}")
         except Exception as e:
             log.error(f"Error monitoring FFmpeg output: {e}")
 
@@ -354,8 +384,8 @@ class YouTubeStreamer:
         if not self.is_running():
             return False
         
-        # Don't check health during initial startup (first 2 minutes)
-        if not self.start_time or (time.time() - self.start_time) < 120:
+        # Don't check health during initial startup (first 3 minutes)
+        if not self.start_time or (time.time() - self.start_time) < 180:
             return True  # Assume healthy during initialization
         
         # Method 1: Check for multiple RTMP errors
@@ -363,10 +393,11 @@ class YouTubeStreamer:
             log.error(f"❌ Stream unhealthy: {self.error_count} RTMP errors detected")
             return False
         
-        # Method 2: Check if FFmpeg is stalled (no output for 60 seconds)
+        # Method 2: Check if FFmpeg is stalled (no output for 3 minutes)
+        # Increased from 60s to 180s to reduce false positives
         if self.last_frame_time:
             time_since_activity = time.time() - self.last_frame_time
-            if time_since_activity > 60:
+            if time_since_activity > 180:  # 3 minutes
                 log.error(f"❌ Stream unhealthy: No FFmpeg activity for {int(time_since_activity)}s")
                 return False
         
@@ -393,8 +424,7 @@ class StreamManager:
         log.info(f"Found {len(keys)} stream key(s)")
         log.info(f"Grid size: {YOUTUBE_GRID}, Total cameras: {NUM_CHANNELS}")
         
-        # Map cameras to keys
-        # available_cameras = list(range(1, NUM_CHANNELS + 1))
+        # Map cameras to keys - using active channels from config
         available_cameras = config.get_active_channels()
         
         # Create jobs
@@ -466,7 +496,7 @@ def wait_for_go2rtc():
 
 def main():
     log.info("=" * 50)
-    log.info("🎬 YouTube Streaming Service (Multi/Grid)")
+    log.info("🎬 YouTube Streaming Service (Canvas-Based)")
     log.info("=" * 50)
     
     if not YOUTUBE_LIVE_ENABLED:
