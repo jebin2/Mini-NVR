@@ -3,8 +3,8 @@
     "short_name": "See Me",
     "start_url": "/?source=pwa",
     "display": "standalone",
-    "background_color": "#121212",
-    "theme_color": "#000000",
+    "background_color": "#050508",
+    "theme_color": "#050508",
     "icons": [
         {
             "src": "/icon-192.png",

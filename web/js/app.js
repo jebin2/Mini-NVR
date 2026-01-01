@@ -225,7 +225,7 @@ function toggleView(view) {
         backBtn.classList.add('hidden');
 
         // Show loading state while fetching
-        grid.innerHTML = '<div style="color:#666;text-align:center;padding:50px 0;">Refreshing cameras...</div>';
+        grid.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:50px 0;">Refreshing cameras...</div>';
 
         updateGrid();
     }
@@ -242,7 +242,7 @@ window.onload = () => {
     // Initial Loading State
     const grid = document.getElementById('gridView');
     if (grid) {
-        grid.innerHTML = '<div style="color:#666;text-align:center;padding:50px 0;">Loading cameras...</div>';
+        grid.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:50px 0;">Loading cameras...</div>';
     }
 
     updateStorage();

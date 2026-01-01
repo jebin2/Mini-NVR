@@ -151,7 +151,7 @@ export function renderPlaylist(recordings, onPlayClip, onDeleteClip) {
                 ytBtn.className = 'clip-btn youtube';
                 ytBtn.title = 'Watch on YouTube';
                 ytBtn.innerHTML = '▶'; // Or use an SVG icon
-                ytBtn.style.color = '#ff0000';
+                ytBtn.style.color = 'var(--danger)';
                 ytBtn.onclick = (e) => {
                     e.stopPropagation();
                     if (rec.size === "Cloud Only") {
