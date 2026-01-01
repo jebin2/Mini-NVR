@@ -196,10 +196,10 @@ class YouTubeStreamer:
             "-level", "4.2",                # Higher resolution support
             "-pix_fmt", "yuv420p",
             
-            # Bitrate settings
-            "-b:v", "4000k",   # Reduced from 6000k
-            "-maxrate", "5000k",  # Reduced from 8000k
-            "-bufsize", "8000k",  # Reduced from 12000k
+            # Bitrate settings (YouTube recommends 13.5 Mbps for 1440p)
+            "-b:v", "10000k",   # 10 Mbps target
+            "-maxrate", "12000k",  # Allow bursts up to 12 Mbps
+            "-bufsize", "16000k",  # 2 seconds of buffer at max rate
             
             # Frame rate and keyframe settings (CRITICAL FOR YOUTUBE)
             "-r", "25",                     # 25 fps output
@@ -213,11 +213,9 @@ class YouTubeStreamer:
             "-ar", "44100",                 # Force audio sample rate
             "-ac", "2",                     # Force stereo
             
-            # Stream settings (removed -shortest for better stability)
+            # Stream settings
             "-f", "flv",
             "-flvflags", "no_duration_filesize",
-            "-bufsize:v", "8000k",  # Output buffer
-            "-maxrate:v", "5000k",
             rtmp
         ])
         
