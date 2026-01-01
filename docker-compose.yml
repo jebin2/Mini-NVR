@@ -19,6 +19,8 @@ services:
       # SSH keys for Docker-to-host auth triggering (mounted to root's ssh dir)
       - ${HOME}/.ssh/id_rsa:/root/.ssh/id_rsa:ro
       - ${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts
+      # Docker socket for youtube_restart.py to restart go2rtc
+      - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:

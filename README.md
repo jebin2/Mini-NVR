@@ -135,7 +135,7 @@ Stream cameras to YouTube Live with automatic hourly segmentation.
 | `YOUTUBE_STREAM_KEY_2` | Stream key for cam2 | - |
 | ... | ... | ... |
 | `YOUTUBE_STREAM_KEY_8` | Stream key for cam8 | - |
-| `YOUTUBE_ROTATION_MINUTES` | Segment duration | `60` |
+| `YOUTUBE_ROTATION_HOURS` | Segment duration | `11` |
 | `YOUTUBE_RTMP_URL` | RTMP ingest URL | `rtmp://a.rtmp.youtube.com/live2` |
 
 **How it works:**
