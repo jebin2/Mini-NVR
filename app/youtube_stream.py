@@ -114,8 +114,8 @@ class YouTubeStreamer:
                 "-fflags", "+genpts+igndts+discardcorrupt",  # Discard corrupt packets
                 "-err_detect", "ignore_err",  # Ignore decoding errors
                 "-max_delay", "500000",  # 0.5 second max delay
-                "-probesize", "5000000",  # Increased for better stream detection
-                "-analyzeduration", "5000000",  # Increased for better stream detection
+                "-probesize", "1000000",  # Increased for better stream detection
+                "-analyzeduration", "1000000",  # Increased for better stream detection
                 "-i", rtsp
             ])
             
@@ -390,7 +390,7 @@ class YouTubeStreamer:
             return False
         
         # Don't check health during initial startup (first 3 minutes)
-        if not self.start_time or (time.time() - self.start_time) < 180:
+        if not self.start_time or (time.time() - self.start_time) < 60:
             return True  # Assume healthy during initialization
         
         # Method 1: Check for multiple RTMP errors
@@ -398,11 +398,10 @@ class YouTubeStreamer:
             log.error(f"❌ Stream unhealthy: {self.error_count} RTMP errors detected")
             return False
         
-        # Method 2: Check if FFmpeg is stalled (no output for 3 minutes)
-        # Increased from 60s to 180s to reduce false positives
+        # Method 2: Check if FFmpeg is stalled (no output for 1 minutes)
         if self.last_frame_time:
             time_since_activity = time.time() - self.last_frame_time
-            if time_since_activity > 180:  # 3 minutes
+            if time_since_activity > 60:  # 1 minutes
                 log.error(f"❌ Stream unhealthy: No FFmpeg activity for {int(time_since_activity)}s")
                 return False
         
