@@ -23,7 +23,7 @@ def get_env(name, default=None):
 YOUTUBE_ENABLED = get_env("YOUTUBE_LIVE_ENABLED", "false").lower() == "true"
 YOUTUBE_RTMP_URL = get_env("YOUTUBE_RTMP_URL", "rtmp://a.rtmp.youtube.com/live2")
 YOUTUBE_STREAM_KEY = get_env("YOUTUBE_STREAM_KEY_1")
-YOUTUBE_GRID = int(get_env("YOUTUBE_GRID", "1"))
+YOUTUBE_GRID = int(get_env("YOUTUBE_GRID"))
 ROTATION_HOURS = int(get_env("YOUTUBE_ROTATION_HOURS", "11"))
 ROTATION_SECONDS = ROTATION_HOURS * 3600
 
