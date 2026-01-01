@@ -68,15 +68,15 @@ streams:
 EOF
 
 for i in $(seq 1 "$NUM_CHANNELS"); do
-    echo "  cam${i}: $(generate_url "$i")" >> "$OUTPUT_FILE"
+    echo "  cam${i}:" >> "$OUTPUT_FILE"
+    echo "    - $(generate_url "$i")" >> "$OUTPUT_FILE"
+    echo "    - \"ffmpeg:cam${i}#video=copy#audio=aac\"" >> "$OUTPUT_FILE"
+    echo "" >> "$OUTPUT_FILE"
 done
 
 # Add RTSP server section for relay functionality
 cat >> "$OUTPUT_FILE" << EOF
 
-hls:
-  segment_duration: 2
-  segment_count: 3
 
 rtsp:
   listen: ":${GO2RTC_RTSP_PORT}"
