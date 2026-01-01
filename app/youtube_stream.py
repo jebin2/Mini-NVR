@@ -210,7 +210,11 @@ class YouTubeStreamer:
                     "I/O error",
                     "Broken pipe",
                     "Connection reset",
-                    "Unable to write frame"
+                    "Unable to write frame",
+                    "Connection timed out",
+                    "End of file",
+                    "Write error",
+                    "Input/output error"
                 ]
                 
                 if any(indicator.lower() in line.lower() for indicator in rtmp_error_indicators):
