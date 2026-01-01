@@ -152,20 +152,9 @@ if [ "$YOUTUBE_LIVE_ENABLED" = "true" ]; then
                 done
                 filter_complex="${filter_complex}xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0[v]"
                 
-                # Build audio mixing filter for all available audio streams
+                # NO AUDIO - Disabled for testing bandwidth issues
                 audio_filter=""
-                if [ "$count" -gt 1 ]; then
-                    # Mix audio from all camera inputs
-                    audio_inputs=""
-                    for (( k=0; k<count; k++ )); do
-                        audio_inputs="${audio_inputs}[${k}:a]"
-                    done
-                    audio_filter=";${audio_inputs}amix=inputs=${count}:duration=longest[a]"
-                    audio_map="-map \\\"[a]\\\""
-                else
-                    # Single camera, just use its audio
-                    audio_map="-map 0:a?"
-                fi
+                audio_map=""
                 
                 # Complete filter_complex
                 full_filter="${filter_complex}${audio_filter}"
@@ -173,8 +162,8 @@ if [ "$YOUTUBE_LIVE_ENABLED" = "true" ]; then
                 # Encoding settings optimized for LOW BANDWIDTH YouTube Live
                 cmd="$cmd -filter_complex \\\"${full_filter}\\\" -map \\\"[v]\\\" ${audio_map}"
                 
-                # Audio encoding - Lower bitrate
-                cmd="$cmd -c:a aac -b:a 96k -ar 44100"
+                # NO AUDIO encoding
+                cmd="$cmd -an"
                 
                 # Video encoding - AGGRESSIVE COMPRESSION for limited upload
                 # Lower resolution (1920x1080), lower framerate (25fps), lower bitrate
