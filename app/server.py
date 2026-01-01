@@ -2,6 +2,7 @@ import os
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from api.routes import router as api_router
 from utils.helpers import is_file_live
@@ -19,6 +20,15 @@ from core.security import limiter
 app = FastAPI(title="NVR UI")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS middleware to allow requests from voidall.com domains
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"https://.*\.?voidall\.com",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
 

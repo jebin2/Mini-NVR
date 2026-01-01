@@ -249,6 +249,44 @@ class NVRUploaderService:
             except Exception:
                 pass
 
+    # Stale merged file cleanup threshold (10 minutes)
+    STALE_MERGED_FILE_SECONDS = 600
+    
+    def _cleanup_stale_merged_files(self, force: bool = False):
+        """
+        Clean up orphaned/stale merged_*.mp4 files.
+        
+        These temp files can be left behind if the service crashes or is killed
+        during a merge or upload operation.
+        
+        Args:
+            force: If True, delete all merged files regardless of age (startup cleanup).
+                   If False, only delete files older than STALE_MERGED_FILE_SECONDS.
+        """
+        pattern = os.path.join(self.recordings_dir, "merged_*.mp4")
+        merged_files = glob.glob(pattern)
+        
+        if not merged_files:
+            return
+            
+        cleaned = 0
+        for merged_file in merged_files:
+            try:
+                file_age = time.time() - os.path.getmtime(merged_file)
+                
+                # Delete if forced (startup) or if file is stale (>10 min old)
+                if force or file_age > self.STALE_MERGED_FILE_SECONDS:
+                    file_size_mb = os.path.getsize(merged_file) / (1024 * 1024)
+                    os.remove(merged_file)
+                    age_str = f"{int(file_age // 60)}m" if file_age >= 60 else f"{int(file_age)}s"
+                    self.log(f"[NVR Uploader] 🧹 Cleaned orphaned merged file: {os.path.basename(merged_file)} ({file_size_mb:.1f}MB, age: {age_str})")
+                    cleaned += 1
+            except OSError as e:
+                self.log(f"[NVR Uploader] ⚠ Failed to clean merged file {merged_file}: {e}")
+        
+        if cleaned > 0:
+            self.log(f"[NVR Uploader] 🧹 Cleaned {cleaned} orphaned merged file(s)")
+
     def _check_dependencies(self):
         """Check if FFmpeg is available."""
         try:
@@ -728,6 +766,12 @@ class NVRUploaderService:
             return
         
         # =====================================================================
+        # STARTUP CLEANUP: Remove any orphaned merged files from previous runs
+        # =====================================================================
+        self.log("[NVR Uploader] 🧹 Checking for orphaned merged files...")
+        self._cleanup_stale_merged_files(force=True)  # Force delete all at startup
+        
+        # =====================================================================
         # PHASE 1: AUTHENTICATION (BLOCKING)
         # Must complete before upload service starts
         # =====================================================================
@@ -822,6 +866,10 @@ class NVRUploaderService:
         """Upload loop - only runs after successful authentication."""
         while self._running:
             try:
+                # Periodic cleanup of stale merged files (>10 min old)
+                # This catches files that may have been left behind during operation
+                self._cleanup_stale_merged_files(force=False)
+                
                 batches = self._find_batches()
                 
                 if batches:
