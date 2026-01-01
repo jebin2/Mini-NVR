@@ -191,23 +191,59 @@ class YouTubeStreamer:
         return cmd
 
     def _log_ffmpeg_output(self):
-        """Monitor FFmpeg output in real-time"""
+        """Monitor FFmpeg output in real-time and detect stream health"""
         try:
             for line in self.process.stdout:
                 line = line.strip()
-                if line:
-                    if "error" in line.lower():
-                        log.error(f"FFmpeg ERROR: {line}")
-                    elif "warning" in line.lower():
-                        log.warning(f"FFmpeg WARNING: {line}")
+                if not line:
+                    continue
+                
+                # Update last activity time
+                self.last_frame_time = time.time()
+                
+                # Check for RTMP errors indicating YouTube rejected stream
+                rtmp_error_indicators = [
+                    "Connection refused",
+                    "Server error",
+                    "RTMP error",
+                    "Failed to update header",
+                    "I/O error",
+                    "Broken pipe",
+                    "Connection reset",
+                    "Unable to write frame"
+                ]
+                
+                if any(indicator.lower() in line.lower() for indicator in rtmp_error_indicators):
+                    self.error_count += 1
+                    self.rtmp_errors.append(line)
+                    log.error(f"FFmpeg RTMP ERROR ({self.error_count}): {line}")
+                    
+                    # If we get multiple RTMP errors, stream is likely rejected
+                    if self.error_count >= 3:
+                        log.error(f"❌ Multiple RTMP errors detected - YouTube likely rejected stream")
+                
+                # Log other messages
+                elif "error" in line.lower():
+                    log.error(f"FFmpeg ERROR: {line}")
+                elif "warning" in line.lower():
+                    log.warning(f"FFmpeg WARNING: {line}")
+                else:
+                    # Check for frame progress indicators
+                    if "frame=" in line.lower() or "time=" in line.lower():
+                        log.debug(f"FFmpeg progress: {line}")
                     else:
                         log.debug(f"FFmpeg: {line}")
-        except:
-            pass
+        except Exception as e:
+            log.error(f"Error monitoring FFmpeg output: {e}")
 
     def start(self):
         if self.process and self.process.poll() is None:
             self.stop()
+        
+        # Reset health monitoring counters
+        self.error_count = 0
+        self.rtmp_errors = []
+        self.last_frame_time = time.time()
             
         cmd = self.build_cmd()
         cam_str = ",".join(map(str, self.job.cameras))
@@ -309,7 +345,7 @@ class YouTubeStreamer:
         return (time.time() - self.start_time) >= ROTATION_SECONDS
     
     def check_stream_health(self):
-        """Check if stream is actually live on YouTube"""
+        """Check stream health without YouTube API"""
         if not self.is_running():
             return False
         
@@ -317,34 +353,19 @@ class YouTubeStreamer:
         if not self.start_time or (time.time() - self.start_time) < 120:
             return True  # Assume healthy during initialization
         
-        # Only check every 5 minutes to avoid API rate limits
-        if not hasattr(self, '_last_health_check'):
-            self._last_health_check = 0
+        # Method 1: Check for multiple RTMP errors
+        if self.error_count >= 3:
+            log.error(f"❌ Stream unhealthy: {self.error_count} RTMP errors detected")
+            return False
         
-        if (time.time() - self._last_health_check) < 300:  # 5 minutes
-            return True  # Use cached result
-        
-        self._last_health_check = time.time()
-        
-        # Check if stream is actually live on YouTube
-        try:
-            video_id = self.logger.get_live_video_id()
-            if not video_id:
-                log.warning(f"⚠️ YouTube API reports no live video for {self.job}")
+        # Method 2: Check if FFmpeg is stalled (no output for 60 seconds)
+        if self.last_frame_time:
+            time_since_activity = time.time() - self.last_frame_time
+            if time_since_activity > 60:
+                log.error(f"❌ Stream unhealthy: No FFmpeg activity for {int(time_since_activity)}s")
                 return False
-            
-            # If we have a video_id but it's different from our stored one, something changed
-            if self.video_id and video_id != self.video_id:
-                log.warning(f"⚠️ YouTube video ID changed! Old: {self.video_id}, New: {video_id}")
-                return False
-            
-            log.debug(f"✅ YouTube health check passed for {self.job}")
-            return True
-            
-        except Exception as e:
-            log.error(f"❌ YouTube health check failed: {e}")
-            # Don't kill stream on API errors - might be temporary
-            return True
+        
+        return True
 
 class StreamManager:
     def __init__(self):
