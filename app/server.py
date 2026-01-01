@@ -28,6 +28,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Length", "Content-Range", "Accept-Ranges", "Content-Type", "Date"],
 )
 
 app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
@@ -90,6 +91,7 @@ def serve_video(path: str):
         "Access-Control-Allow-Origin": "https://www.voidall.com",
         "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
         "Access-Control-Allow-Headers": "*",
+        "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Date",
     }
         
     # Fix for LocalProtocolError: Too much data for declared Content-Length

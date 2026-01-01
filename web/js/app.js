@@ -107,7 +107,6 @@ function playClip(index) {
                 iframe.src = embedUrl;
                 iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
                 iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-                iframe.allowFullscreen = true;
                 container.appendChild(iframe);
                 UI.highlightClip(index);
                 return;
@@ -127,7 +126,6 @@ function playClip(index) {
     iframe.src = embedUrl;
     iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
     iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
-    iframe.allowFullscreen = true;
     container.appendChild(iframe);
 
     UI.highlightClip(index);
@@ -144,7 +142,6 @@ function playLive() {
     iframe.src = go2rtcUrl;
     iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
     iframe.allow = 'autoplay; fullscreen';
-    iframe.allowFullscreen = true;
     container.appendChild(iframe);
 
     // Highlight live clip if available
