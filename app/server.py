@@ -98,11 +98,21 @@ def serve_video(path: str):
     # If file is live (growing), FileResponse sets Content-Length to X but might read X+Y bytes.
     # Use StreamingResponse for live files to avoid setting Content-Length (uses Chunked encoding).
     if is_file_live(abs_path):
+        # Allow JellyJump to see Content-Length even for live files
+        file_size = os.path.getsize(abs_path)
+        cors_headers["Content-Length"] = str(file_size)
+
         def iter_file():
+            bytes_remaining = file_size
             with open(abs_path, "rb") as f:
-                while chunk := f.read(64 * 1024):
+                while bytes_remaining > 0:
+                    read_size = min(64 * 1024, bytes_remaining)
+                    chunk = f.read(read_size)
+                    if not chunk:
+                        break
                     yield chunk
-                    
+                    bytes_remaining -= len(chunk)
+
         return StreamingResponse(iter_file(), media_type=media_type, headers=cors_headers)
 
     return FileResponse(abs_path, media_type=media_type, headers=cors_headers)
