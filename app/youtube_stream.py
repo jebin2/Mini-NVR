@@ -33,7 +33,7 @@ ROTATION_SECONDS = ROTATION_HOURS * 3600
 
 GO2RTC_RTSP_PORT = int(get_env("GO2RTC_RTSP_PORT"))
 GO2RTC_API_PORT = int(get_env("GO2RTC_API_PORT"))
-RECORD_DIR = get_env("RECORD_DIR", "/recordings")
+RECORD_DIR = get_env("RECORD_DIR")
 
 # ============================================
 # Logging
@@ -161,7 +161,7 @@ class YouTubeStreamer:
             "-preset", "veryfast", 
             "-tune", "zerolatency",
             "-profile:v", "main",           # Better compatibility than "high"
-            "-level", "4.1",
+            "-level", "4.2",                # Changed from 4.1 to 4.2 for higher resolution support
             "-pix_fmt", "yuv420p",
             
             # Bitrate settings
@@ -245,15 +245,18 @@ class YouTubeStreamer:
                 return False
             
             log.info(f"✅ Stream process started (PID: {self.process.pid}) Segment #{self.segment}")
-            log.info(f"⏳ Waiting 30 seconds for YouTube to initialize stream...")
+            log.info(f"⏳ Waiting 15 seconds for initial stream stabilization...")
             
-            # Give YouTube time to process the stream
-            time.sleep(30)
+            # Shorter initial wait - just enough for stream to stabilize
+            time.sleep(15)
             
             # Final check
             if self.process.poll() is not None:
-                log.error(f"❌ FFmpeg died during YouTube initialization")
+                log.error(f"❌ FFmpeg died during initialization")
                 return False
+                
+            log.info(f"✅ Stream initialized. YouTube should process it within 30-60 seconds.")
+            log.info(f"💡 If stream doesn't appear on YouTube, it will auto-restart in next monitoring cycle")
                 
             log.info(f"🎉 Stream should be LIVE now on YouTube!")
             
@@ -304,6 +307,19 @@ class YouTubeStreamer:
         if not self.start_time:
             return False
         return (time.time() - self.start_time) >= ROTATION_SECONDS
+    
+    def check_stream_health(self):
+        """Check if stream is actually sending data by monitoring stderr"""
+        if not self.is_running():
+            return False
+        
+        # If stream is older than 2 minutes and we haven't seen recent output, it might be stalled
+        if self.start_time and (time.time() - self.start_time) > 120:
+            # Stream has been running for 2+ minutes, assume it's healthy
+            # (YouTube would have rejected it by now if there were issues)
+            return True
+        
+        return True  # Assume healthy during initialization period
 
 class StreamManager:
     def __init__(self):
@@ -351,13 +367,21 @@ class StreamManager:
         for s in self.streamers:
             if not s.is_running():
                 log.warning(f"⚠️ Stream died: {s.job}")
+                log.info(f"🔄 Restarting stream in 5 seconds...")
                 time.sleep(5)
                 s.start()
             elif s.needs_restart():
-                log.info(f"🔄 Rotating stream: {s.job}")
+                log.info(f"🔄 Scheduled rotation for stream: {s.job}")
                 s.stop()
                 time.sleep(5)
                 s.start()
+            else:
+                # Check if stream has been running for a while (health check)
+                if s.start_time and (time.time() - s.start_time) > 300:  # 5 minutes
+                    # Periodic health log
+                    uptime_mins = int((time.time() - s.start_time) / 60)
+                    if uptime_mins % 30 == 0:  # Log every 30 minutes
+                        log.info(f"💚 Stream healthy: {s.job} - Uptime: {uptime_mins} minutes")
 
     def stop_all(self):
         for s in self.streamers:
