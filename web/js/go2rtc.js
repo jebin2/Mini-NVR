@@ -31,14 +31,7 @@ export function getStreamUrl(camId) {
  * @param {number|string} camId - Camera ID
  */
 export function getHlsUrl(camId) {
-    let url = `${getBaseUrl()}/api/stream.m3u8?src=cam${camId}`;
-
-    // Append Auth Token from cookie (for cross-origin players like JellyJump)
-    const tokenMatch = document.cookie.match(/csrf_token=([^;]+)/);
-    if (tokenMatch && tokenMatch[1]) {
-        url += `&token=${tokenMatch[1]}`;
-    }
-    return url;
+    return `${getBaseUrl()}/api/stream.m3u8?src=cam${camId}`;
 }
 
 /**
