@@ -53,7 +53,8 @@ export function renderGrid(channels, onOpenCam) {
         grid.appendChild(card);
     });
 
-    // Refresh snapshots every 2 seconds for live preview effect
+    // Refresh snapshots with dynamic interval (slower on mobile for better performance)
+    const refreshInterval = go2rtc.getSnapshotRefreshInterval();
     gridRefreshInterval = setInterval(() => {
         const images = grid.querySelectorAll('.cam-preview');
         images.forEach(img => {
@@ -62,7 +63,7 @@ export function renderGrid(channels, onOpenCam) {
                 img.src = go2rtc.getSnapshotUrl(camId);
             }
         });
-    }, 2000);
+    }, refreshInterval);
 }
 
 // Stop grid refresh when leaving grid view

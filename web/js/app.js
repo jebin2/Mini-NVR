@@ -275,26 +275,10 @@ window.onload = () => {
 
     updateStorage();
     updateGrid();
-    setInterval(updateGrid, CONFIG.gridRefreshInterval);
-    setInterval(updateStorage, CONFIG.storageRefreshInterval);
+    // Increased intervals for better performance (especially on mobile)
+    setInterval(updateGrid, 10000);  // 10 seconds
+    setInterval(updateStorage, 30000);  // 30 seconds
     document.getElementById('logoutBtn').addEventListener('click', handleLogout);
 
-    // Auto-play next clip
-    const player = document.getElementById('mainPlayer');
-    if (player) {
-        player.addEventListener('ended', () => {
-            if (currentPlayingIndex >= 0 && currentPlayingIndex < recordingsMap.length - 1) {
-                // Play next clip (chronological order is index ascending? 
-                // Wait, renderPlaylist iterates reverse: `index = recordings.length - 1; index >= 0`.
-                // Timeline expects chronological.
-                // let's check `store.py`: `raw_recordings.sort(key=lambda x: x['mtime'])`.
-                // So `recordingsMap` is sorted ASCENDING by time.
-                // Index 0 is earliest. Index N is latest.
-                // If I play Index 0, next is Index 1.
-                // So yes, `playClip(currentPlayingIndex + 1)` is correct for forward playback.
-                console.log("Auto-playing next clip:", currentPlayingIndex + 1);
-                playClip(currentPlayingIndex + 1);
-            }
-        });
-    }
+
 };

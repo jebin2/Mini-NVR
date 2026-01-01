@@ -385,3 +385,174 @@ select {
     display: flex;
     align-items: center;
 }
+
+/* ========== Mobile Optimizations ========== */
+@media screen and (max-width: 768px) {
+    /* Header adjustments */
+    header {
+        height: auto;
+        padding: 10px 15px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .brand {
+        font-size: 1rem;
+    }
+
+    .storage-info {
+        font-size: 0.8rem;
+    }
+
+    /* Main content padding */
+    main {
+        padding: 10px;
+    }
+
+    /* Grid - single column on mobile */
+    .grid-container {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .cam-card {
+        aspect-ratio: 16/9;
+    }
+
+    /* Expanded view optimizations */
+    .player-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .controls-row {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    select {
+        flex: 1;
+        font-size: 16px; /* Prevents iOS zoom on focus */
+    }
+
+    /* Larger touch-friendly buttons */
+    .btn {
+        padding: 12px 20px;
+        font-size: 1rem;
+        min-height: 44px; /* Apple's recommended touch target */
+    }
+
+    .btn-live {
+        padding: 12px 24px;
+    }
+
+    /* Video player */
+    .video-stage {
+        max-height: 40vh;
+        min-height: 200px;
+    }
+
+    /* Timeline adjustments */
+    .timeline-wrapper {
+        height: 60px;
+        padding: 8px 12px;
+    }
+
+    .timeline-track {
+        height: 24px;
+    }
+
+    .time-labels {
+        font-size: 0.65rem;
+    }
+
+    /* Playlist - horizontal scroll with larger touch targets */
+    .playlist {
+        height: 130px;
+        gap: 8px;
+    }
+
+    .clip-card {
+        min-width: 120px;
+        padding: 8px;
+    }
+
+    .clip-time {
+        font-size: 0.85rem;
+    }
+
+    .clip-meta {
+        font-size: 0.7rem;
+    }
+
+    .clip-btn {
+        padding: 8px 12px;
+        min-height: 36px;
+    }
+
+    /* Back button */
+    #backBtn {
+        padding: 10px 16px;
+    }
+}
+
+/* Extra small screens (phones in portrait) */
+@media screen and (max-width: 480px) {
+    header {
+        padding: 8px 10px;
+    }
+
+    .brand span {
+        font-size: 0.9rem;
+    }
+
+    .header-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .video-stage {
+        max-height: 35vh;
+        border-radius: 4px;
+    }
+
+    .timeline-wrapper {
+        height: 55px;
+        border-radius: 4px;
+    }
+
+    .playlist {
+        height: 110px;
+    }
+
+    .clip-card {
+        min-width: 100px;
+    }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+    /* Remove hover effects that don't work on touch */
+    .cam-card:hover {
+        transform: none;
+    }
+
+    /* Add active states for touch feedback */
+    .cam-card:active {
+        border-color: var(--primary);
+        transform: scale(0.98);
+    }
+
+    .btn:active {
+        transform: scale(0.95);
+    }
+
+    .clip-card:active {
+        border-color: var(--primary);
+    }
+
+    .clip-btn:active {
+        background: var(--border);
+    }
+}
