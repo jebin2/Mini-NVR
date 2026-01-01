@@ -18,7 +18,7 @@ class YouTubeLogger:
         self.service = None
         
         # Load additional config from Env or Defaults
-        self.encrypt_path = os.getenv("ENCRYPT_PATH",)
+        self.encrypt_path = os.getenv("ENCRYPT_PATH")
         self.hf_repo_id = os.getenv("HF_REPO_ID")
         self.hf_token = os.getenv("HF_TOKEN")
         self.encryption_key = os.getenv("ENCRYPTION_KEY")
