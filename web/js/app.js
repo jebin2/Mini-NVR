@@ -117,7 +117,10 @@ function playClip(index) {
     }
 
     // Local Playback via JellyJump Embed
-    const recordingUrl = `${window.location.origin}/recordings/${rec.name}`;
+    let recordingUrl = `${window.location.origin}/recordings/${rec.name}`;
+    if (rec.live) {
+        recordingUrl = go2rtc.getHlsUrl(currentCam);
+    }
     const baseUrl = 'https://www.voidall.com/JellyJump/embed.html';
     const controls = 'play,pause,volume,progress,time,fullscreen,speed,screenshot';
     const embedUrl = `${baseUrl}?video_url=${encodeURIComponent(recordingUrl)}&controls=${controls}`;
@@ -135,17 +138,13 @@ function playLive() {
     const container = document.getElementById('playerContainer');
     container.innerHTML = ''; // Clear previous player
 
-    // HLS Live Stream via JellyJump
-    const hlsUrl = go2rtc.getHlsUrl(currentCam);
-    const baseUrl = 'https://www.voidall.com/JellyJump/embed.html';
-    // Remove speed/progress for live if desired, but keeping them lets player decide
-    const controls = 'play,pause,volume,progress,time,fullscreen,screenshot';
-    const embedUrl = `${baseUrl}?video_url=${encodeURIComponent(hlsUrl)}&controls=${controls}`;
+    // go2rtc WebRTC stream URL (Standard for "Go Live" button)
+    const go2rtcUrl = go2rtc.getStreamUrl(currentCam);
 
     const iframe = document.createElement('iframe');
-    iframe.src = embedUrl;
+    iframe.src = go2rtcUrl;
     iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
-    iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+    iframe.allow = 'autoplay; fullscreen';
     container.appendChild(iframe);
 
     // Highlight live clip if available
