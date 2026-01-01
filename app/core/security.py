@@ -70,6 +70,14 @@ def is_session_valid(username, token):
     with _session_lock:
         return username in ACTIVE_SESSIONS and token in ACTIVE_SESSIONS[username]
 
+def get_user_by_token(token):
+    """Find user associated with a given token."""
+    with _session_lock:
+        for user, tokens in ACTIVE_SESSIONS.items():
+            if token in tokens:
+                return user
+    return None
+
 
 # --- Password Hashing ---
 

@@ -1,5 +1,5 @@
 from fastapi import Request, HTTPException, status, Depends
-from core.security import is_session_valid
+from core.security import is_session_valid, get_user_by_token
 
 def check_csrf(request: Request):
     if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
@@ -15,6 +15,15 @@ def check_csrf(request: Request):
 def get_current_user(request: Request, csrf_check: None = Depends(check_csrf)):
     user = request.session.get("user")
     token = request.session.get("token")
+    
+    
+    # Check for query param token (fallback for HLS/iframes)
+    if not user or not token:
+        q_token = request.query_params.get("token")
+        if q_token:
+            user = get_user_by_token(q_token)
+            if user:
+                 return user
     
     if not user or not token:
         raise HTTPException(
