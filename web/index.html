@@ -12,6 +12,11 @@
 
 <body>
 
+    <div id="refresh-indicator"
+        style="position: fixed; top: 0; left: 0; width: 100%; text-align: center; padding: 20px; color: #fff; background: rgba(0,0,0,0.8); transform: translateY(-100%); transition: transform 0.2s; z-index: 10000; pointer-events: none;">
+        Pull to hard refresh...
+    </div>
+
     <header>
         <div class="brand">
             <button id="backBtn" class="btn btn-ghost hidden" onclick="toggleView('grid')">←</button>
@@ -19,8 +24,6 @@
         </div>
         <div class="header-controls">
             <div class="storage-info" id="storageDisplay">Loading storage...</div>
-            <button onclick="hardRefresh()"
-                style="margin-left: 10px; background: none; border: 1px solid #444; color: #888; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 0.8em;">Refresh</button>
             <button id="logoutBtn"
                 style="margin-left: 10px; background: none; border: 1px solid #666; color: #aaa; padding: 5px 10px; cursor: pointer; border-radius: 4px;">Logout</button>
         </div>
@@ -63,12 +66,56 @@
 
     <script type="module" src="js/app.js"></script>
     <script>
-        async function hardRefresh() {
-            const btn = document.querySelector('button[onclick="hardRefresh()"]');
-            if (btn) {
-                btn.textContent = '...';
-                btn.disabled = true;
+        // Pull-to-Refresh Logic
+        let touchStartY = 0;
+        let isPulling = false;
+        const indicator = document.getElementById('refresh-indicator');
+
+        document.addEventListener('touchstart', e => {
+            if (window.scrollY === 0) {
+                touchStartY = e.touches[0].clientY;
+                isPulling = true;
             }
+        }, { passive: true });
+
+        document.addEventListener('touchmove', e => {
+            if (!isPulling) return;
+            const y = e.touches[0].clientY;
+            const diff = y - touchStartY;
+
+            if (diff > 0 && window.scrollY === 0) {
+                // Visualize pull
+                const translate = Math.min(diff / 2, 100); // Resistance
+                indicator.style.transform = `translateY(${translate - 100}%)`;
+
+                if (diff > 250) {
+                    indicator.innerText = "Release for HARD Refresh!";
+                    indicator.style.background = "rgba(255, 0, 0, 0.8)";
+                } else {
+                    indicator.innerText = "Pull long to hard refresh...";
+                    indicator.style.background = "rgba(0, 0, 0, 0.8)";
+                }
+            } else {
+                indicator.style.transform = 'translateY(-100%)';
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchend', async e => {
+            if (!isPulling) return;
+            isPulling = false;
+            const y = e.changedTouches[0].clientY;
+            const diff = y - touchStartY;
+
+            indicator.style.transform = 'translateY(-100%)';
+
+            if (diff > 250 && window.scrollY === 0) {
+                await hardRefresh();
+            }
+        });
+
+        async function hardRefresh() {
+            indicator.innerText = "Updating...";
+            indicator.style.transform = 'translateY(0)';
 
             try {
                 if ('serviceWorker' in navigator) {
