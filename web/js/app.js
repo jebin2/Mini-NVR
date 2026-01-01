@@ -258,5 +258,33 @@ window.onload = () => {
     setInterval(updateStorage, 30000);  // 30 seconds
     document.getElementById('logoutBtn').addEventListener('click', handleLogout);
 
+    // Restart YouTube Stream button (desktop only)
+    const restartYtBtn = document.getElementById('restartYtBtn');
+    if (restartYtBtn) {
+        restartYtBtn.addEventListener('click', async () => {
+            if (restartYtBtn.disabled) return;
+
+            const originalText = restartYtBtn.innerText;
+            restartYtBtn.disabled = true;
+            restartYtBtn.innerText = '⏳...';
+
+            try {
+                const result = await API.restartYouTubeStream();
+                restartYtBtn.innerText = '✅';
+                setTimeout(() => {
+                    restartYtBtn.innerText = originalText;
+                    restartYtBtn.disabled = false;
+                }, 2000);
+            } catch (e) {
+                console.error('Failed to restart YT stream:', e);
+                restartYtBtn.innerText = '❌';
+                setTimeout(() => {
+                    restartYtBtn.innerText = originalText;
+                    restartYtBtn.disabled = false;
+                }, 2000);
+            }
+        });
+    }
+
 
 };

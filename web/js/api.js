@@ -59,3 +59,7 @@ export async function logout() {
 export async function deleteRecording(path) {
     return await fetchAPI(`/recording?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
 }
+
+export async function restartYouTubeStream() {
+    return await fetchAPI('/youtube/restart', { method: 'POST' });
+}

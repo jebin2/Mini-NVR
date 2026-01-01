@@ -583,6 +583,17 @@ input:focus {
     box-shadow: 0 0 10px rgba(255, 0, 85, 0.2);
 }
 
+/* Desktop Only - hide on mobile */
+.desktop-only {
+    display: inline-flex;
+}
+
+@media screen and (max-width: 768px) {
+    .desktop-only {
+        display: none !important;
+    }
+}
+
 .hidden {
     display: none !important;
 }
