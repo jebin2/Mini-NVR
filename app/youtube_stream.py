@@ -13,7 +13,9 @@ import subprocess
 import logging
 import math
 import threading
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
+from services.youtube_logger import YouTubeLogger
 
 # ============================================
 # Configuration
@@ -31,6 +33,7 @@ ROTATION_SECONDS = ROTATION_HOURS * 3600
 
 GO2RTC_RTSP_PORT = int(get_env("GO2RTC_RTSP_PORT"))
 GO2RTC_API_PORT = int(get_env("GO2RTC_API_PORT"))
+RECORD_DIR = get_env("RECORD_DIR", "/recordings")
 
 # ============================================
 # Logging
@@ -79,7 +82,11 @@ class YouTubeStreamer:
         self.job = job
         self.process = None
         self.start_time = None
+        self.start_datetime = None
         self.segment = 0
+        self.video_id = None
+        # Initialize Logger (assumes credentials in current dir or standard fallback)
+        self.logger = YouTubeLogger(recordings_dir=RECORD_DIR)
     
     def build_cmd(self):
         rtmp = f"{YOUTUBE_RTMP_URL}/{self.job.key}"
@@ -220,6 +227,7 @@ class YouTubeStreamer:
                 bufsize=1  # Line buffered
             )
             self.start_time = time.time()
+            self.start_datetime = datetime.now() # Capture valid start time
             self.segment += 1
             
             # Start background thread to monitor FFmpeg output
@@ -248,6 +256,19 @@ class YouTubeStreamer:
                 return False
                 
             log.info(f"🎉 Stream should be LIVE now on YouTube!")
+            
+            # --- LOG LIVE STREAM to CSV ---
+            channel_name = f"Channel {self.job.cameras[0]}"
+            try:
+                self.video_id = self.logger.get_live_video_id()
+                if self.video_id:
+                     self.logger.log_live(channel_name, self.start_datetime, self.video_id)
+                else:
+                     log.warning("⚠️ Could not fetch live video ID (API might say 'incorrect broadcast status')")
+            except Exception as e:
+                log.error(f"⚠️ Failed to log live stream to CSV: {e}")
+            # -----------------------------
+            
             return True
             
         except Exception as e:
@@ -257,6 +278,17 @@ class YouTubeStreamer:
     def stop(self):
         if not self.process:
             return
+            
+        # --- LOG VOD to CSV (before clearing process) ---
+        if self.video_id and self.start_datetime:
+             channel_name = f"Channel {self.job.cameras[0]}"
+             try:
+                 self.logger.log_vod(channel_name, self.start_datetime, datetime.now(), self.video_id)
+                 log.info(f"📝 Logged VOD for {channel_name} (ID: {self.video_id})")
+             except Exception as e:
+                 log.error(f"⚠️ Failed to log VOD to CSV: {e}")
+        # -----------------------------------------------
+
         log.info(f"⏹ Stopping stream for cams {self.job.cameras}...")
         try:
             self.process.terminate()
