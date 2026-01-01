@@ -677,8 +677,8 @@ input:focus {
 
     /* Video player */
     .video-stage {
+        width: 100%;
         height: auto;
-        min-height: 220px;
         aspect-ratio: 16/9;
         flex: none;
     }
