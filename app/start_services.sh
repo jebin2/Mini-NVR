@@ -16,6 +16,28 @@ NAMES=("server" "recorder" "cleanup" "uploader")
 CMDS=("python server.py" "python recorder.py" "python cleanup.py" "python youtube_uploader/main.py")
 PIDS=()
 
+# Wait for go2rtc to be ready before starting services
+GO2RTC_API_PORT="${GO2RTC_API_PORT:-2127}"
+GO2RTC_API_URL="http://127.0.0.1:${GO2RTC_API_PORT}"
+
+log_message "Waiting for go2rtc to be ready..."
+
+wait_count=0
+max_wait=60  # Max 60 seconds
+# Use Python for HTTP check since curl may not be available in container
+while ! python3 -c "import urllib.request; urllib.request.urlopen('${GO2RTC_API_URL}/api', timeout=2)" > /dev/null 2>&1; do
+    wait_count=$((wait_count + 1))
+    if [ $wait_count -ge $max_wait ]; then
+        log_message "ERROR: go2rtc not ready after ${max_wait}s. Starting anyway..."
+        break
+    fi
+    sleep 1
+done
+
+if [ $wait_count -lt $max_wait ]; then
+    log_message "go2rtc is ready after ${wait_count}s"
+fi
+
 log_message "Starting services..."
 
 # Clean up any existing log file from previous run if needed? 

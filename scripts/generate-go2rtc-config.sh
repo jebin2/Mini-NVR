@@ -171,7 +171,8 @@ if [ "$YOUTUBE_LIVE_ENABLED" = "true" ]; then
                 cmd="$cmd -b:v 2500k -minrate 2500k -maxrate 2500k -bufsize 5000k"
                 cmd="$cmd -r 25 -g 50 -keyint_min 50 -sc_threshold 0 -pix_fmt yuv420p"
                 
-                # Output format (MPEG-TS for go2rtc consumption via stdout)
+                # Output: mpegts to stdout for go2rtc consumption
+                # YouTubeStreamer service handles pushing to YouTube RTMP via go2rtc API
                 cmd="$cmd -f mpegts -"
                 
                 # Write to config file
