@@ -309,17 +309,42 @@ class YouTubeStreamer:
         return (time.time() - self.start_time) >= ROTATION_SECONDS
     
     def check_stream_health(self):
-        """Check if stream is actually sending data by monitoring stderr"""
+        """Check if stream is actually live on YouTube"""
         if not self.is_running():
             return False
         
-        # If stream is older than 2 minutes and we haven't seen recent output, it might be stalled
-        if self.start_time and (time.time() - self.start_time) > 120:
-            # Stream has been running for 2+ minutes, assume it's healthy
-            # (YouTube would have rejected it by now if there were issues)
-            return True
+        # Don't check health during initial startup (first 2 minutes)
+        if not self.start_time or (time.time() - self.start_time) < 120:
+            return True  # Assume healthy during initialization
         
-        return True  # Assume healthy during initialization period
+        # Only check every 5 minutes to avoid API rate limits
+        if not hasattr(self, '_last_health_check'):
+            self._last_health_check = 0
+        
+        if (time.time() - self._last_health_check) < 300:  # 5 minutes
+            return True  # Use cached result
+        
+        self._last_health_check = time.time()
+        
+        # Check if stream is actually live on YouTube
+        try:
+            video_id = self.logger.get_live_video_id()
+            if not video_id:
+                log.warning(f"⚠️ YouTube API reports no live video for {self.job}")
+                return False
+            
+            # If we have a video_id but it's different from our stored one, something changed
+            if self.video_id and video_id != self.video_id:
+                log.warning(f"⚠️ YouTube video ID changed! Old: {self.video_id}, New: {video_id}")
+                return False
+            
+            log.debug(f"✅ YouTube health check passed for {self.job}")
+            return True
+            
+        except Exception as e:
+            log.error(f"❌ YouTube health check failed: {e}")
+            # Don't kill stream on API errors - might be temporary
+            return True
 
 class StreamManager:
     def __init__(self):
@@ -372,6 +397,13 @@ class StreamManager:
                 s.start()
             elif s.needs_restart():
                 log.info(f"🔄 Scheduled rotation for stream: {s.job}")
+                s.stop()
+                time.sleep(5)
+                s.start()
+            elif not s.check_stream_health():
+                # YouTube rejected the stream or it's not live anymore
+                log.warning(f"⚠️ YouTube health check failed for {s.job}")
+                log.info(f"🔄 Restarting stream to recover...")
                 s.stop()
                 time.sleep(5)
                 s.start()
