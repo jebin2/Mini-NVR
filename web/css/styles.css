@@ -686,6 +686,11 @@ input:focus {
         justify-content: center;
     }
 
+    /* Ensure desktop-only buttons stay hidden on mobile */
+    .btn.desktop-only {
+        display: none !important;
+    }
+
     /* Video player - taller aspect ratio to fit go2rtc control bar */
     .video-stage {
         width: 100%;

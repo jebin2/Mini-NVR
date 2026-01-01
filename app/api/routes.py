@@ -88,19 +88,22 @@ def delete_recording(path: str = Query(..., description="Relative path to the re
 @router.post("/youtube/restart")
 def restart_youtube_stream():
     """Restart the YouTube streaming service by signaling the process."""
-    import subprocess
     import signal
     
     try:
-        # Find the youtube_stream.py process
-        result = subprocess.run(
-            ["pgrep", "-f", "youtube_stream.py"],
-            capture_output=True,
-            text=True
-        )
-        
-        pids = result.stdout.strip().split('\n')
-        pids = [p for p in pids if p]  # Filter empty strings
+        # Find youtube_stream.py process by scanning /proc
+        pids = []
+        for pid_dir in os.listdir('/proc'):
+            if not pid_dir.isdigit():
+                continue
+            try:
+                cmdline_path = f'/proc/{pid_dir}/cmdline'
+                with open(cmdline_path, 'r') as f:
+                    cmdline = f.read()
+                if 'youtube_stream.py' in cmdline:
+                    pids.append(pid_dir)
+            except (IOError, OSError):
+                continue  # Process may have ended
         
         if not pids:
             raise HTTPException(status_code=404, detail="YouTube stream service not running")
@@ -114,5 +117,5 @@ def restart_youtube_stream():
         
         return {"message": "YouTube stream restart initiated", "pids": pids}
         
-    except subprocess.SubprocessError as e:
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to restart: {e}")
