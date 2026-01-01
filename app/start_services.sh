@@ -12,8 +12,8 @@ log_message() {
 # Note: integer keys are used for iteration in bash < 4 (which might be in some older dockers, but python:3.11-slim uses debian bookworm so newer bash is available)
 # simpler approach: parallel arrays for robustness
 
-NAMES=("server" "recorder" "cleanup" "uploader")
-CMDS=("python server.py" "python recorder.py" "python cleanup.py" "python youtube_uploader/main.py")
+NAMES=("server" "recorder" "cleanup" "uploader" "youtube_streamer")
+CMDS=("python server.py" "python recorder.py" "python cleanup.py" "python youtube_uploader/main.py" "python youtube_streamer.py")
 PIDS=()
 
 # Wait for go2rtc to be ready before starting services

@@ -201,21 +201,6 @@ def main():
     )
     converter.start()
 
-    # --- Start YouTube Streamers (if enabled) ---
-    youtube_streamers = []
-    if config.YOUTUBE_LIVE_ENABLED:
-        from services.youtube_rotator import create_youtube_streamers
-        youtube_streamers = create_youtube_streamers()
-        for streamer in youtube_streamers:
-            streamer.start()
-        if youtube_streamers:
-            logger.info(f"[✓] YouTube Streamers started ({len(youtube_streamers)} channels)")
-        else:
-            logger.warning("[!] YouTube enabled but no stream keys configured")
-
-    # NOTE: YouTube Upload Service now runs on host (not in Docker) via start.sh
-    # This allows it to use Neko browser automation for OAuth re-authentication
-
     while True:
         time.sleep(60)
         ensure_dir(config.RECORD_DIR)
