@@ -148,7 +148,7 @@ class YouTubeStreamer:
                 filter_parts.append(
                     f"[{i}:v]scale={cell_w}:{cell_h}:force_original_aspect_ratio=decrease,"
                     f"pad={cell_w}:{cell_h}:(ow-iw)/2:(oh-ih)/2,"
-                    f"fps=25,setsar=1,fifo[v{i}]"  # Added fifo buffer for stability
+                    f"fps=25,setsar=1[v{i}]"
                 )
             
             # Step 2: Create blank canvas at 2560x1440
