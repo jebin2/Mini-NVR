@@ -59,7 +59,7 @@ export function getSnapshotUrl(camId, bustCache = true) {
 
     // Reduce image size on mobile for faster loading
     if (isMobile()) {
-        url += `&width=480`;  // Lower resolution for mobile
+        url += `&width=720`;  // Increased resolution for better viewing
     }
 
     if (bustCache) {
