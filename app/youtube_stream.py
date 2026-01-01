@@ -111,11 +111,13 @@ class YouTubeStreamer:
                 "-rtsp_transport", "tcp",
                 "-rtsp_flags", "prefer_tcp",
                 "-timeout", "5000000",  # 5 second timeout (microseconds)
-                "-fflags", "+genpts+igndts+discardcorrupt",  # Discard corrupt packets
+                "-fflags", "+genpts+igndts+discardcorrupt+nobuffer",  # Better live handling
+                "-flags", "low_delay",  # Reduce latency
+                "-thread_queue_size", "1024",  # Input buffer for stability
                 "-err_detect", "ignore_err",  # Ignore decoding errors
                 "-max_delay", "500000",  # 0.5 second max delay
-                "-probesize", "1000000",  # Increased for better stream detection
-                "-analyzeduration", "1000000",  # Increased for better stream detection
+                "-probesize", "1000000",  # For stream detection
+                "-analyzeduration", "1000000",
                 "-i", rtsp
             ])
             
@@ -389,19 +391,19 @@ class YouTubeStreamer:
         if not self.is_running():
             return False
         
-        # Don't check health during initial startup (first 3 minutes)
-        if not self.start_time or (time.time() - self.start_time) < 60:
+        # Don't check health during initial startup (first 2 minutes)
+        if not self.start_time or (time.time() - self.start_time) < 120:
             return True  # Assume healthy during initialization
         
         # Method 1: Check for multiple RTMP errors
-        if self.error_count >= 3:
+        if self.error_count >= 5:
             log.error(f"❌ Stream unhealthy: {self.error_count} RTMP errors detected")
             return False
         
-        # Method 2: Check if FFmpeg is stalled (no output for 1 minutes)
+        # Method 2: Check if FFmpeg is stalled (no output for 2 minutes)
         if self.last_frame_time:
             time_since_activity = time.time() - self.last_frame_time
-            if time_since_activity > 60:  # 1 minutes
+            if time_since_activity > 120:  # 2 minutes
                 log.error(f"❌ Stream unhealthy: No FFmpeg activity for {int(time_since_activity)}s")
                 return False
         
