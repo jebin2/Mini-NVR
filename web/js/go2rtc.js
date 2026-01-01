@@ -27,6 +27,14 @@ export function getStreamUrl(camId) {
 }
 
 /**
+ * Get the HLS stream URL for a camera (for usage in JellyJump)
+ * @param {number|string} camId - Camera ID
+ */
+export function getHlsUrl(camId) {
+    return `${getBaseUrl()}/api/stream.m3u8?src=cam${camId}`;
+}
+
+/**
  * Detect if running on a mobile device
  */
 export function isMobile() {

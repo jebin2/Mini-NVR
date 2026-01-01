@@ -135,13 +135,17 @@ function playLive() {
     const container = document.getElementById('playerContainer');
     container.innerHTML = ''; // Clear previous player
 
-    // go2rtc WebRTC stream URL
-    const go2rtcUrl = go2rtc.getStreamUrl(currentCam);
+    // HLS Live Stream via JellyJump
+    const hlsUrl = go2rtc.getHlsUrl(currentCam);
+    const baseUrl = 'https://www.voidall.com/JellyJump/embed.html';
+    // Remove speed/progress for live if desired, but keeping them lets player decide
+    const controls = 'play,pause,volume,progress,time,fullscreen,screenshot';
+    const embedUrl = `${baseUrl}?video_url=${encodeURIComponent(hlsUrl)}&controls=${controls}`;
 
     const iframe = document.createElement('iframe');
-    iframe.src = go2rtcUrl;
+    iframe.src = embedUrl;
     iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
-    iframe.allow = 'autoplay; fullscreen';
+    iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
     container.appendChild(iframe);
 
     // Highlight live clip if available
