@@ -82,11 +82,13 @@ class YouTubeStreamer:
             "-i", rtsp,
             # Silent audio (YouTube requires audio)
             "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-            # Video
+            # Explicit mapping to ensure we use video from RTSP and audio from lavfi
+            "-map", "0:v", "-map", "1:a",
+            # Video settings - increased bitrate for YouTube compliance
             "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency",
-            "-b:v", "2500k", "-maxrate", "3000k", "-bufsize", "6000k",
+            "-b:v", "6000k", "-maxrate", "8000k", "-bufsize", "12000k",
             "-r", "25", "-g", "50", "-pix_fmt", "yuv420p",
-            # Audio
+            # Audio settings
             "-c:a", "aac", "-b:a", "128k",
             "-shortest",
             "-f", "flv", rtmp
