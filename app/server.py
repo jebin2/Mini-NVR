@@ -31,7 +31,12 @@ app.add_middleware(
     expose_headers=["Content-Length", "Content-Range", "Accept-Ranges", "Content-Type", "Date"],
 )
 
-app.add_middleware(SessionMiddleware, secret_key=config.SECRET_KEY)
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=config.SECRET_KEY,
+    same_site="none",
+    https_only=True
+)
 
 # Mount API
 app.include_router(auth_router, prefix="/api")
