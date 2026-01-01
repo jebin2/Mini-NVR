@@ -163,27 +163,17 @@ function playClip(index) {
 }
 
 function playLive() {
-    const video = document.getElementById('mainPlayer');
-    const container = video.parentElement;
-
-    // Remove existing live frame if any
-    const existingFrame = document.getElementById('liveFrame');
-    if (existingFrame) {
-        existingFrame.remove();
-    }
+    const container = document.getElementById('playerContainer');
+    container.innerHTML = ''; // Clear previous player
 
     // go2rtc WebRTC stream URL
     const go2rtcUrl = go2rtc.getStreamUrl(currentCam);
 
-    // Hide video element and show iframe
-    video.pause();
-    video.style.display = 'none';
-
     const iframe = document.createElement('iframe');
     iframe.src = go2rtcUrl;
-    iframe.id = 'liveFrame';
     iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
-    iframe.allow = 'autoplay';
+    iframe.allow = 'autoplay; fullscreen';
+    iframe.allowFullscreen = true;
     container.appendChild(iframe);
 
     // Highlight live clip if available
@@ -249,16 +239,10 @@ function toggleView(view) {
         backBtn.classList.remove('hidden');
     } else {
         // Remove live iframe if present
-        const liveFrame = document.getElementById('liveFrame');
-        if (liveFrame) {
-            liveFrame.remove();
-        }
-
-        const player = document.getElementById('mainPlayer');
-        if (player) {
-            player.pause();
-            player.src = '';
-            player.style.display = '';  // Ensure video is visible
+        // Clear player container
+        const playerContainer = document.getElementById('playerContainer');
+        if (playerContainer) {
+            playerContainer.innerHTML = '';
         }
         document.getElementById('dateSelect').innerHTML = '';
         document.getElementById('timeline').innerHTML = '';
