@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-YouTube Video Segmentation Service
+YouTube Live Streaming Service
 
-Restarts go2rtc every 11 hours to create separate YouTube videos.
-Runs inside mini-nvr container.
+Manages FFmpeg process that streams camera to YouTube.
+Restarts every 11 hours to create separate videos.
 """
 import os
 import sys
 import time
+import signal
 import subprocess
 import logging
 from logging.handlers import RotatingFileHandler
@@ -16,19 +17,28 @@ from logging.handlers import RotatingFileHandler
 # Configuration
 # ============================================
 
-ROTATION_HOURS = int(os.getenv("YOUTUBE_ROTATION_HOURS", "11"))
+def get_env(name, default=None):
+    return os.getenv(name, default)
+
+YOUTUBE_ENABLED = get_env("YOUTUBE_LIVE_ENABLED", "false").lower() == "true"
+YOUTUBE_RTMP_URL = get_env("YOUTUBE_RTMP_URL", "rtmp://a.rtmp.youtube.com/live2")
+YOUTUBE_STREAM_KEY = get_env("YOUTUBE_STREAM_KEY_1")
+YOUTUBE_GRID = int(get_env("YOUTUBE_GRID", "1"))
+ROTATION_HOURS = int(get_env("YOUTUBE_ROTATION_HOURS", "11"))
 ROTATION_SECONDS = ROTATION_HOURS * 3600
-YOUTUBE_ENABLED = os.getenv("YOUTUBE_LIVE_ENABLED", "false").lower() == "true"
+
+GO2RTC_RTSP_PORT = int(get_env("GO2RTC_RTSP_PORT", "8554"))
+GO2RTC_API_PORT = int(get_env("GO2RTC_API_PORT", "2127"))
 
 # ============================================
-# Logging Setup
+# Logging
 # ============================================
 
 def setup_logger():
     log_dir = "/logs"
     os.makedirs(log_dir, exist_ok=True)
     
-    logger = logging.getLogger("yt_restart")
+    logger = logging.getLogger("yt_stream")
     logger.setLevel(logging.DEBUG)
     
     fmt = logging.Formatter(
@@ -36,16 +46,10 @@ def setup_logger():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # File handler with rotation
-    fh = RotatingFileHandler(
-        f"{log_dir}/youtube_restart.log",
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=2
-    )
+    fh = RotatingFileHandler(f"{log_dir}/youtube_stream.log", maxBytes=5*1024*1024, backupCount=2)
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(fmt)
     
-    # Console handler
     ch = logging.StreamHandler(sys.stdout)
     ch.setLevel(logging.INFO)
     ch.setFormatter(fmt)
@@ -56,74 +60,98 @@ def setup_logger():
 
 log = setup_logger()
 
-# go2rtc API
-GO2RTC_API_PORT = int(os.getenv("GO2RTC_API_PORT", "2127"))
-GO2RTC_API_URL = f"http://127.0.0.1:{GO2RTC_API_PORT}"
-
 # ============================================
-# Stream Trigger
+# FFmpeg Process Management
 # ============================================
 
-def trigger_youtube_stream():
-    """Trigger the YouTube stream to start via go2rtc API."""
-    import urllib.request
-    import urllib.error
+class YouTubeStreamer:
+    def __init__(self):
+        self.process = None
+        self.segment = 0
+        self.start_time = None
     
-    # This call triggers go2rtc to start the exec command for cam1_youtube
-    url = f"{GO2RTC_API_URL}/api/streams?src=cam1_youtube"
-    
-    try:
-        req = urllib.request.Request(url, method='GET')
-        with urllib.request.urlopen(req, timeout=10) as response:
-            log.info(f"✅ YouTube stream triggered successfully")
-            return True
-    except urllib.error.URLError as e:
-        log.error(f"❌ Failed to trigger stream: {e}")
-        return False
-    except Exception as e:
-        log.error(f"❌ Error triggering stream: {e}")
-        return False
-
-# ============================================
-# Main Logic
-# ============================================
-
-def restart_go2rtc():
-    """Restart go2rtc container using docker CLI."""
-    log.info("🔄 Restarting go2rtc for new video segment...")
-    
-    try:
-        result = subprocess.run(
-            ["docker", "restart", "go2rtc"],
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
+    def build_cmd(self):
+        """Build FFmpeg command."""
+        rtsp = f"rtsp://127.0.0.1:{GO2RTC_RTSP_PORT}/cam1"
+        rtmp = f"{YOUTUBE_RTMP_URL}/{YOUTUBE_STREAM_KEY}"
         
-        if result.returncode == 0:
-            log.info("✅ go2rtc restarted successfully")
-            log.info("📺 New YouTube video segment started")
-            return True
-        else:
-            log.error(f"❌ Failed to restart go2rtc: {result.stderr.strip()}")
-            return False
+        return [
+            "ffmpeg",
+            "-hide_banner", "-loglevel", "warning",
+            "-rtsp_transport", "tcp",
+            "-i", rtsp,
+            # Silent audio (YouTube requires audio)
+            "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+            # Video
+            "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency",
+            "-b:v", "2500k", "-maxrate", "3000k", "-bufsize", "6000k",
+            "-r", "25", "-g", "50", "-pix_fmt", "yuv420p",
+            # Audio
+            "-c:a", "aac", "-b:a", "128k",
+            "-shortest",
+            "-f", "flv", rtmp
+        ]
+    
+    def start(self):
+        """Start FFmpeg process."""
+        if self.process and self.process.poll() is None:
+            self.stop()
+        
+        cmd = self.build_cmd()
+        log.info("� Starting FFmpeg...")
+        log.debug(f"RTSP: rtsp://127.0.0.1:{GO2RTC_RTSP_PORT}/cam1")
+        log.debug(f"RTMP: {YOUTUBE_RTMP_URL}/****")
+        
+        try:
+            self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.start_time = time.time()
+            self.segment += 1
             
-    except subprocess.TimeoutExpired:
-        log.error("❌ Timeout waiting for go2rtc restart")
-        return False
-    except FileNotFoundError:
-        log.error("❌ Docker CLI not found - is docker.io installed?")
-        return False
-    except Exception as e:
-        log.error(f"❌ Error restarting go2rtc: {e}")
-        return False
+            # Wait briefly to verify startup
+            time.sleep(5)
+            if self.process.poll() is not None:
+                stderr = self.process.stderr.read()
+                log.error(f"❌ FFmpeg crashed on start: {stderr[-500:]}")
+                return False
+            
+            log.info(f"✅ FFmpeg started (PID: {self.process.pid})")
+            log.info(f"📺 Streaming to YouTube - Segment #{self.segment}")
+            return True
+            
+        except Exception as e:
+            log.error(f"❌ Failed to start FFmpeg: {e}")
+            return False
+    
+    def stop(self):
+        """Stop FFmpeg process."""
+        if not self.process:
+            return
+        
+        log.info("⏹ Stopping FFmpeg...")
+        try:
+            self.process.terminate()
+            self.process.wait(timeout=10)
+        except:
+            self.process.kill()
+        
+        self.process = None
+    
+    def is_running(self):
+        return self.process and self.process.poll() is None
+    
+    def needs_restart(self):
+        if not self.start_time:
+            return False
+        return (time.time() - self.start_time) >= ROTATION_SECONDS
 
+# ============================================
+# Main
+# ============================================
 
 def wait_for_go2rtc():
-    """Wait for go2rtc API to be ready."""
     import urllib.request
-    
-    url = f"{GO2RTC_API_URL}/api"
+    url = f"http://127.0.0.1:{GO2RTC_API_PORT}/api"
+    log.info("⏳ Waiting for go2rtc...")
     for i in range(60):
         try:
             urllib.request.urlopen(url, timeout=2)
@@ -131,45 +159,56 @@ def wait_for_go2rtc():
             return True
         except:
             time.sleep(1)
-    
-    log.error("❌ go2rtc not ready after 60s")
+    log.error("❌ go2rtc not ready")
     return False
-
 
 def main():
     log.info("=" * 50)
-    log.info("🎬 YouTube Video Segmentation Service Starting")
+    log.info("🎬 YouTube Streaming Service")
     log.info("=" * 50)
     
     if not YOUTUBE_ENABLED:
-        log.info("YouTube Live disabled (YOUTUBE_LIVE_ENABLED != true)")
-        log.info("Exiting...")
+        log.info("YouTube disabled. Exiting.")
         return
     
-    log.info(f"Restart interval: {ROTATION_HOURS} hours")
+    if not YOUTUBE_STREAM_KEY:
+        log.error("❌ No YOUTUBE_STREAM_KEY_1")
+        return
     
-    # Wait for go2rtc
+    log.info(f"Segment duration: {ROTATION_HOURS} hours")
+    
     if not wait_for_go2rtc():
         return
     
-    # Initial trigger
-    log.info("📺 Starting YouTube stream...")
-    time.sleep(5)  # Give go2rtc a moment
-    trigger_youtube_stream()
+    streamer = YouTubeStreamer()
     
-    segment = 1
+    def shutdown(sig, frame):
+        log.info("Shutting down...")
+        streamer.stop()
+        sys.exit(0)
     
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+    
+    # Start streaming
+    if not streamer.start():
+        return
+    
+    # Main loop
     while True:
-        log.info(f"📡 Segment #{segment} - Next restart in {ROTATION_HOURS} hours...")
+        if not streamer.is_running():
+            log.warning("⚠ FFmpeg died, restarting...")
+            time.sleep(5)
+            streamer.start()
+            continue
         
-        time.sleep(ROTATION_SECONDS)
+        if streamer.needs_restart():
+            log.info("🔄 Time for new segment")
+            streamer.stop()
+            time.sleep(10)
+            streamer.start()
         
-        log.info(f"⏰ Time for segment #{segment + 1}")
-        if restart_go2rtc():
-            time.sleep(10)  # Wait for go2rtc to restart
-            trigger_youtube_stream()
-            segment += 1
-
+        time.sleep(10)
 
 if __name__ == "__main__":
     main()
