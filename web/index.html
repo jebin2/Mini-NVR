@@ -19,6 +19,8 @@
         </div>
         <div class="header-controls">
             <div class="storage-info" id="storageDisplay">Loading storage...</div>
+            <button onclick="hardRefresh()"
+                style="margin-left: 10px; background: none; border: 1px solid #444; color: #888; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 0.8em;">Refresh</button>
             <button id="logoutBtn"
                 style="margin-left: 10px; background: none; border: 1px solid #666; color: #aaa; padding: 5px 10px; cursor: pointer; border-radius: 4px;">Logout</button>
         </div>
@@ -61,6 +63,31 @@
 
     <script type="module" src="js/app.js"></script>
     <script>
+        async function hardRefresh() {
+            const btn = document.querySelector('button[onclick="hardRefresh()"]');
+            if (btn) {
+                btn.textContent = '...';
+                btn.disabled = true;
+            }
+
+            try {
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (const registration of registrations) {
+                        await registration.unregister();
+                    }
+                }
+                if ('caches' in window) {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(key => caches.delete(key)));
+                }
+                window.location.reload(true);
+            } catch (error) {
+                console.error('Hard refresh failed:', error);
+                window.location.reload();
+            }
+        }
+
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js')
                 .then(reg => console.log('SW registered!', reg))
