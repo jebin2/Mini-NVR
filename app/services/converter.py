@@ -34,7 +34,7 @@ class BackgroundConverter(threading.Thread):
         if os.path.exists(mp4_path):
             return
         
-        # Clean up any leftover temp file from failed previous attempt
+        # Clean up any leftover temp file
         if os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)
@@ -43,45 +43,86 @@ class BackgroundConverter(threading.Thread):
 
         logger.info(f"[⚙] Converting: {os.path.basename(mkv_path)}...")
 
-        cmd = [
+        # Base arguments
+        base_args = [
             config.FFMPEG_BIN,
-            "-y", "-v", "error",
+            "-y", 
             "-i", mkv_path,
         ]
-
+        
+        # Encoding arguments
+        encoding_args = []
         if self.video_codec == "copy":
-             cmd.extend(["-c:v", "copy"])       # Copy video stream (NO RE-ENCODING, FAST)
+             encoding_args.extend(["-c:v", "copy"])
         else:
-             # Re-encode with specified parameters
-             cmd.extend([
+             encoding_args.extend([
                  "-c:v", self.video_codec,
                  "-crf", str(self.crf),
                  "-preset", self.preset
              ])
 
-        cmd.extend([
-            "-c:a", "aac",        # Ensure audio is AAC (Browser compatible)
-            "-movflags", "+faststart", # Move metadata to front for streaming
-            "-f", "mp4",          # Explicitly specify format (needed for .tmp extension)
-            tmp_path  # Write to temp file first
+        encoding_args.extend([
+            "-c:a", "aac",
+            "-movflags", "+faststart",
+            "-f", "mp4",
+            tmp_path
         ])
 
-        try:
-            subprocess.run(cmd, check=True, timeout=300)
+        def run_ffmpeg(extra_flags=[]):
+            cmd = base_args + extra_flags + encoding_args
+            return subprocess.run(
+                cmd, 
+                capture_output=True, 
+                text=True, 
+                timeout=300
+            )
+
+        # Attempt 1: Standard conversion
+        result = run_ffmpeg(["-v", "error"])
+
+        if result.returncode != 0:
+            logger.warning(f"[!] Standard conversion failed for {mkv_path}. stderr: {result.stderr[:200]}")
             
-            # Verify success and atomically rename
-            if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
+            # Check for corruption signs
+            corruption_errors = [
+                "Invalid data found when processing input",
+                "EBML header parsing failed",
+                "moov atom not found",
+                "matroska,webm"
+            ]
+            
+            if any(err in result.stderr for err in corruption_errors) or result.returncode != 0:
+                logger.info(f"[params] Check: {mkv_path} appears corrupted. Attempting recovery...")
+                
+                # Attempt 2: Recovery calculation
+                # -err_detect ignore_err: ignore decoding errors
+                result = run_ffmpeg(["-v", "error", "-err_detect", "ignore_err"])
+                
+                if result.returncode != 0:
+                    logger.error(f"[✖] Recovery failed for {mkv_path}. Deleting unrecoverable file.")
+                    try:
+                        os.remove(mkv_path)
+                        logger.info(f"[🗑] Deleted corrupted file: {os.path.basename(mkv_path)}")
+                    except OSError as e:
+                        logger.error(f"[!] Failed to delete corrupted file: {e}")
+                    
+                    # Clean up temp
+                    if os.path.exists(tmp_path):
+                        try:
+                            os.remove(tmp_path)
+                        except OSError:
+                            pass
+                    return
+
+        # Explicit check if file was created successfully
+        if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
+            try:
                 os.rename(tmp_path, mp4_path)  # Atomic rename
                 os.remove(mkv_path)  # Delete original MKV
                 logger.info(f"[✓] Converted: {os.path.basename(mp4_path)}")
-            else:
-                logger.warning(f"[!] Conversion failed (empty output): {mp4_path}")
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                
-        except Exception as e:
-            logger.error(f"[!] Conversion error for {mkv_path}: {e}")
-            # Clean up temp file on error
+            except OSError as e:
+                logger.error(f"[!] Failed to finalize conversion (rename/delete): {e}")
+        else:
             if os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
