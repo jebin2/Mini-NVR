@@ -123,7 +123,7 @@ function playClip(index) {
     }
     const baseUrl = 'https://www.voidall.com/JellyJump/embed.html';
     const controls = 'play,pause,volume,progress,time,fullscreen,speed,screenshot';
-    const embedUrl = `${baseUrl}?video_url=${encodeURIComponent(recordingUrl)}&controls=${controls}`;
+    const embedUrl = `${baseUrl}?video_url=${encodeURIComponent(recordingUrl)}&controls=${controls}&credentials=true`;
 
     const iframe = document.createElement('iframe');
     iframe.src = embedUrl;
