@@ -12,6 +12,7 @@ import signal
 import subprocess
 import logging
 import math
+import threading
 from logging.handlers import RotatingFileHandler
 
 # ============================================
@@ -85,25 +86,32 @@ class YouTubeStreamer:
         
         cmd = [
             "ffmpeg",
-            "-hide_banner", "-loglevel", "warning",
-            "-rtsp_transport", "tcp"
+            "-hide_banner", "-loglevel", "warning"
         ]
         
-        # Inputs
+        # Inputs - with proper per-input RTSP flags
         for cam_idx in self.job.cameras:
             rtsp = f"rtsp://127.0.0.1:{GO2RTC_RTSP_PORT}/cam{cam_idx}"
-            cmd.extend(["-i", rtsp])
+            cmd.extend([
+                "-rtsp_transport", "tcp",
+                "-rtsp_flags", "prefer_tcp",
+                "-timeout", "5000000",  # 5 second timeout (microseconds)
+                "-fflags", "+genpts+igndts",
+                "-i", rtsp
+            ])
             
-        # Audio Source (Silent)
+        # Audio Source (Silent but required by YouTube)
         audio_input_idx = len(self.job.cameras)
         cmd.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
         
         # Filter / Mapping
         if len(self.job.cameras) == 1:
-            # Single camera
-            cmd.extend(["-map", "0:v", "-map", f"{audio_input_idx}:a"])
+            # Single camera - scale to 2560x1440 with proper aspect ratio handling
+            filter_complex = "[0:v]scale=2560:1440:force_original_aspect_ratio=decrease,pad=2560:1440:(ow-iw)/2:(oh-ih)/2,fps=25[v]"
+            cmd.extend(["-filter_complex", filter_complex])
+            cmd.extend(["-map", "[v]", "-map", f"{audio_input_idx}:a"])
         else:
-            # Grid Layout - Fixed calculation
+            # Grid Layout
             n = len(self.job.cameras)
             cols = math.ceil(math.sqrt(n))
             rows = math.ceil(n / cols)
@@ -119,34 +127,76 @@ class YouTubeStreamer:
                 if col == 0:
                     x_pos = "0"
                 else:
-                    x_pos = "+".join([f"w{j}" for j in range(col)])
+                    # Sum widths of cameras to the left in the same row
+                    x_pos = "+".join([f"w{row*cols + j}" for j in range(col)])
                 
                 if row == 0:
                     y_pos = "0"
                 else:
-                    y_pos = "+".join([f"h{j*cols}" for j in range(row)])
+                    # Sum heights of cameras directly above in the same column
+                    y_pos = "+".join([f"h{j*cols + col}" for j in range(row)])
                 
                 layout_parts.append(f"{x_pos}_{y_pos}")
             
             layout = "|".join(layout_parts)
-            filter_complex = f"xstack=inputs={n}:layout={layout}[v]"
+            # Scale to 1440p (2560x1440) with proper aspect ratio and padding
+            filter_complex = f"xstack=inputs={n}:layout={layout}[bg];[bg]scale=2560:1440:force_original_aspect_ratio=decrease,pad=2560:1440:(ow-iw)/2:(oh-ih)/2,fps=25[v]"
             
-            log.info(f"🎨 xstack layout: {layout}")
+            log.info(f"🎨 xstack layout: {layout} + scale=2560:1440")
             
             cmd.extend(["-filter_complex", filter_complex])
             cmd.extend(["-map", "[v]", "-map", f"{audio_input_idx}:a"])
 
-        # Encoding Settings
+        # Encoding Settings - OPTIMIZED FOR YOUTUBE
         cmd.extend([
-            "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency",
-            "-b:v", "6000k", "-maxrate", "8000k", "-bufsize", "12000k",
-            "-r", "25", "-g", "50", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "128k",
+            # Video codec settings
+            "-c:v", "libx264", 
+            "-preset", "veryfast", 
+            "-tune", "zerolatency",
+            "-profile:v", "main",           # Better compatibility than "high"
+            "-level", "4.1",
+            "-pix_fmt", "yuv420p",
+            
+            # Bitrate settings
+            "-b:v", "6000k", 
+            "-maxrate", "8000k", 
+            "-bufsize", "12000k",
+            
+            # Frame rate and keyframe settings (CRITICAL FOR YOUTUBE)
+            "-r", "25",                     # 25 fps output
+            "-g", "50",                     # Keyframe every 2 seconds (25fps * 2)
+            "-keyint_min", "25",            # Minimum keyframe interval
+            "-sc_threshold", "0",           # Disable scene change detection
+            
+            # Audio settings
+            "-c:a", "aac", 
+            "-b:a", "128k",
+            "-ar", "44100",                 # Force audio sample rate
+            "-ac", "2",                     # Force stereo
+            
+            # Stream settings
             "-shortest",
-            "-f", "flv", rtmp
+            "-f", "flv",
+            "-flvflags", "no_duration_filesize",
+            rtmp
         ])
         
         return cmd
+
+    def _log_ffmpeg_output(self):
+        """Monitor FFmpeg output in real-time"""
+        try:
+            for line in self.process.stdout:
+                line = line.strip()
+                if line:
+                    if "error" in line.lower():
+                        log.error(f"FFmpeg ERROR: {line}")
+                    elif "warning" in line.lower():
+                        log.warning(f"FFmpeg WARNING: {line}")
+                    else:
+                        log.debug(f"FFmpeg: {line}")
+        except:
+            pass
 
     def start(self):
         if self.process and self.process.poll() is None:
@@ -159,22 +209,47 @@ class YouTubeStreamer:
         # Print full command for debugging
         full_cmd = ' '.join(cmd)
         log.info(f"📝 Full FFmpeg command:")
-        log.info(full_cmd)
+        log.debug(full_cmd)
         
         try:
-            self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.process = subprocess.Popen(
+                cmd, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.STDOUT,  # Redirect stderr to stdout
+                text=True,
+                bufsize=1  # Line buffered
+            )
             self.start_time = time.time()
             self.segment += 1
+            
+            # Start background thread to monitor FFmpeg output
+            monitor_thread = threading.Thread(
+                target=self._log_ffmpeg_output, 
+                daemon=True,
+                name=f"FFmpeg-Monitor-{self.process.pid}"
+            )
+            monitor_thread.start()
             
             # Brief health check
             time.sleep(5)
             if self.process.poll() is not None:
-                stderr = self.process.stderr.read()
-                log.error(f"❌ FFmpeg crashed for cams [{cam_str}]: {stderr[-500:]}")
+                log.error(f"❌ FFmpeg crashed immediately for cams [{cam_str}]")
+                return False
+            
+            log.info(f"✅ Stream process started (PID: {self.process.pid}) Segment #{self.segment}")
+            log.info(f"⏳ Waiting 30 seconds for YouTube to initialize stream...")
+            
+            # Give YouTube time to process the stream
+            time.sleep(30)
+            
+            # Final check
+            if self.process.poll() is not None:
+                log.error(f"❌ FFmpeg died during YouTube initialization")
                 return False
                 
-            log.info(f"✅ Stream active (PID: {self.process.pid}) Segment #{self.segment}")
+            log.info(f"🎉 Stream should be LIVE now on YouTube!")
             return True
+            
         except Exception as e:
             log.error(f"❌ Failed to start stream: {e}")
             return False
