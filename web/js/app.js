@@ -87,73 +87,44 @@ function playClip(index) {
     const rec = recordingsMap[index];
     if (!rec) return;
 
+    const container = document.getElementById('playerContainer');
+    container.innerHTML = '';
+
     // Handle Cloud Only
     if (rec.size === "Cloud Only") {
         if (rec.youtube_url) {
-            // Extract Video ID
             let videoId = "";
             try {
                 const urlObj = new URL(rec.youtube_url);
                 videoId = urlObj.searchParams.get("v");
             } catch (e) {
-                // Fallback for flat links if any
                 console.error("Invalid YouTube URL", rec.youtube_url);
             }
 
             if (videoId) {
                 const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-                const video = document.getElementById('mainPlayer');
-                const container = video.parentElement;
-
-                // Remove existing live/youtube frame
-                const existingFrame = document.getElementById('liveFrame');
-                if (existingFrame) existingFrame.remove();
-
-                // Hide video, show iframe
-                video.style.display = 'none';
-                video.pause();
-
                 const iframe = document.createElement('iframe');
                 iframe.src = embedUrl;
-                iframe.id = 'liveFrame'; // Reuse ID for easier cleanup
                 iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
                 iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
                 iframe.allowFullscreen = true;
                 container.appendChild(iframe);
-
                 UI.highlightClip(index);
                 return;
             }
         }
-
         alert('This recording is deleted locally and has no YouTube link.');
         return;
     }
 
-    const video = document.getElementById('mainPlayer');
-    const container = video.parentElement;
-    const existingFrame = document.getElementById('liveFrame');
-
-    // Cleanup existing iframe
-    if (existingFrame) existingFrame.remove();
-    video.style.display = 'none';
-    video.pause();
-
-    // Build JellyJump URL
-    // Use window.location.origin to get the full URL of the recording on the NVR server
+    // Local Playback via JellyJump Embed
     const recordingUrl = `${window.location.origin}/recordings/${rec.name}`;
     const baseUrl = 'https://www.voidall.com/JellyJump/embed.html';
-
-    // Configure controls (minimal set + volume + screenshot)
     const controls = 'play,pause,volume,progress,time,fullscreen,speed,screenshot';
-
-    // Construct full embed URL
     const embedUrl = `${baseUrl}?video_url=${encodeURIComponent(recordingUrl)}&controls=${controls}`;
 
-    // Create and inject iframe
     const iframe = document.createElement('iframe');
     iframe.src = embedUrl;
-    iframe.id = 'liveFrame'; // Reuse ID for easier cleanup logic
     iframe.style.cssText = 'width:100%; height:100%; border:none; background:#000;';
     iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
     iframe.allowFullscreen = true;
