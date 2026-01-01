@@ -99,8 +99,9 @@ class YouTubeStreamer:
         
         cmd = [
             "ffmpeg",
-            "-hide_banner", "-loglevel", "info",  # Changed to "info" for progress updates
-            "-progress", "pipe:1"  # Output progress to stdout
+            "-hide_banner", "-loglevel", "info",
+            "-progress", "pipe:1",
+            "-threads", "0"  # Use all CPU cores
         ]
         
         # Inputs - with proper per-input RTSP flags and error handling
@@ -113,6 +114,8 @@ class YouTubeStreamer:
                 "-fflags", "+genpts+igndts+discardcorrupt",  # Discard corrupt packets
                 "-err_detect", "ignore_err",  # Ignore decoding errors
                 "-max_delay", "500000",  # 0.5 second max delay
+                "-probesize", "32",  # Reduce probe size for faster startup
+                "-analyzeduration", "0",  # Skip analysis
                 "-i", rtsp
             ])
             
@@ -184,16 +187,16 @@ class YouTubeStreamer:
         cmd.extend([
             # Video codec settings
             "-c:v", "libx264", 
-            "-preset", "veryfast", 
+            "-preset", "ultrafast",  # Changed from "veryfast" for less CPU
             "-tune", "zerolatency",
             "-profile:v", "main",           # Better compatibility than "high"
             "-level", "4.2",                # Higher resolution support
             "-pix_fmt", "yuv420p",
             
             # Bitrate settings
-            "-b:v", "6000k", 
-            "-maxrate", "8000k", 
-            "-bufsize", "12000k",
+            "-b:v", "4000k",   # Reduced from 6000k
+            "-maxrate", "5000k",  # Reduced from 8000k
+            "-bufsize", "8000k",  # Reduced from 12000k
             
             # Frame rate and keyframe settings (CRITICAL FOR YOUTUBE)
             "-r", "25",                     # 25 fps output
@@ -210,6 +213,8 @@ class YouTubeStreamer:
             # Stream settings (removed -shortest for better stability)
             "-f", "flv",
             "-flvflags", "no_duration_filesize",
+            "-bufsize:v", "8000k",  # Output buffer
+            "-maxrate:v", "5000k",
             rtmp
         ])
         
