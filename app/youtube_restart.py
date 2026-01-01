@@ -56,6 +56,34 @@ def setup_logger():
 
 log = setup_logger()
 
+# go2rtc API
+GO2RTC_API_PORT = int(os.getenv("GO2RTC_API_PORT", "2127"))
+GO2RTC_API_URL = f"http://127.0.0.1:{GO2RTC_API_PORT}"
+
+# ============================================
+# Stream Trigger
+# ============================================
+
+def trigger_youtube_stream():
+    """Trigger the YouTube stream to start via go2rtc API."""
+    import urllib.request
+    import urllib.error
+    
+    # This call triggers go2rtc to start the exec command for cam1_youtube
+    url = f"{GO2RTC_API_URL}/api/streams?src=cam1_youtube"
+    
+    try:
+        req = urllib.request.Request(url, method='GET')
+        with urllib.request.urlopen(req, timeout=10) as response:
+            log.info(f"✅ YouTube stream triggered successfully")
+            return True
+    except urllib.error.URLError as e:
+        log.error(f"❌ Failed to trigger stream: {e}")
+        return False
+    except Exception as e:
+        log.error(f"❌ Error triggering stream: {e}")
+        return False
+
 # ============================================
 # Main Logic
 # ============================================
@@ -91,6 +119,23 @@ def restart_go2rtc():
         return False
 
 
+def wait_for_go2rtc():
+    """Wait for go2rtc API to be ready."""
+    import urllib.request
+    
+    url = f"{GO2RTC_API_URL}/api"
+    for i in range(60):
+        try:
+            urllib.request.urlopen(url, timeout=2)
+            log.info(f"✅ go2rtc ready ({i}s)")
+            return True
+        except:
+            time.sleep(1)
+    
+    log.error("❌ go2rtc not ready after 60s")
+    return False
+
+
 def main():
     log.info("=" * 50)
     log.info("🎬 YouTube Video Segmentation Service Starting")
@@ -102,18 +147,28 @@ def main():
         return
     
     log.info(f"Restart interval: {ROTATION_HOURS} hours")
-    log.info(f"Restart interval: {ROTATION_SECONDS} seconds")
     
-    segment = 0
+    # Wait for go2rtc
+    if not wait_for_go2rtc():
+        return
+    
+    # Initial trigger
+    log.info("📺 Starting YouTube stream...")
+    time.sleep(5)  # Give go2rtc a moment
+    trigger_youtube_stream()
+    
+    segment = 1
     
     while True:
-        segment += 1
         log.info(f"📡 Segment #{segment} - Next restart in {ROTATION_HOURS} hours...")
         
         time.sleep(ROTATION_SECONDS)
         
         log.info(f"⏰ Time for segment #{segment + 1}")
-        restart_go2rtc()
+        if restart_go2rtc():
+            time.sleep(10)  # Wait for go2rtc to restart
+            trigger_youtube_stream()
+            segment += 1
 
 
 if __name__ == "__main__":

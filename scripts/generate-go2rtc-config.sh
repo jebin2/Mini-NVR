@@ -109,15 +109,15 @@ if [ "$YOUTUBE_LIVE_ENABLED" = "true" ]; then
                 cam_num=${valid_cams[0]}
                 rtmp_url="${YOUTUBE_RTMP_URL:-rtmp://a.rtmp.youtube.com/live2}"
                 
-                # FFmpeg command: cam -> H264 re-encode -> RTMP
-                # Note: -an because camera audio (8kHz) not FLV compatible
-                yt_cmd="exec:ffmpeg -hide_banner -loglevel error -rtsp_transport tcp -i rtsp://127.0.0.1:${GO2RTC_RTSP_PORT}/cam${cam_num} -c:v libx264 -preset faster -tune zerolatency -b:v 2500k -maxrate 3000k -bufsize 6000k -r 25 -g 50 -pix_fmt yuv420p -an -f flv ${rtmp_url}/${key_value}"
+                # FFmpeg command: cam -> H264 + silent AAC audio -> RTMP
+                # YouTube requires audio, so we add silent audio track
+                yt_cmd="exec:ffmpeg -hide_banner -loglevel error -rtsp_transport tcp -i rtsp://127.0.0.1:${GO2RTC_RTSP_PORT}/cam${cam_num} -f lavfi -i anullsrc=r=44100:cl=stereo -c:v libx264 -preset veryfast -tune zerolatency -b:v 2500k -maxrate 3000k -bufsize 6000k -r 25 -g 50 -pix_fmt yuv420p -c:a aac -b:a 128k -shortest -f flv ${rtmp_url}/${key_value}"
                 
                 echo "  cam${i}_youtube:" >> "$OUTPUT_FILE"
                 echo "    - \"$yt_cmd\"" >> "$OUTPUT_FILE"
                 echo "" >> "$OUTPUT_FILE"
                 
-                log_info "Added cam${i}_youtube -> cam${cam_num} -> YouTube RTMP (Direct)"
+                log_info "Added cam${i}_youtube -> cam${cam_num} -> YouTube RTMP (with audio)"
                 youtube_count=$((youtube_count + 1))
                 
             elif [ "$count" -gt 1 ]; then
