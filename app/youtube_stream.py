@@ -14,6 +14,7 @@ import subprocess
 import logging
 import math
 import threading
+import re
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from services.youtube_logger import YouTubeLogger
@@ -91,6 +92,9 @@ class YouTubeStreamer:
         self.last_frame_time = None
         self.error_count = 0
         self.rtmp_errors = []
+        # Frame stall detection - track actual frame count, not just output
+        self.last_frame_count = 0
+        self.last_frame_count_time = None
     
     def build_cmd(self):
         rtmp = f"{YOUTUBE_RTMP_URL}/{self.job.key}"
@@ -262,8 +266,17 @@ class YouTubeStreamer:
                 # Log warnings (but reduce noise)
                 elif "warning" in line.lower():
                     log.debug(f"FFmpeg WARNING: {line}")
-                # Progress indicators - just update timestamp, don't spam logs
+                # Progress indicators - extract frame count for stall detection
                 elif any(x in line.lower() for x in ["frame=", "fps=", "time=", "bitrate=", "speed="]):
+                    # Extract frame count to detect stalls
+                    frame_match = re.search(r'frame=\s*(\d+)', line)
+                    if frame_match:
+                        current_frame = int(frame_match.group(1))
+                        # Only update timestamp if frame count actually increased
+                        if current_frame > self.last_frame_count:
+                            self.last_frame_count = current_frame
+                            self.last_frame_count_time = time.time()
+                    
                     # Only log progress every 30 seconds to reduce spam
                     if not hasattr(self, '_last_progress_log'):
                         self._last_progress_log = 0
@@ -283,6 +296,9 @@ class YouTubeStreamer:
         self.error_count = 0
         self.rtmp_errors = []
         self.last_frame_time = time.time()
+        # Reset frame stall detection
+        self.last_frame_count = 0
+        self.last_frame_count_time = time.time()
             
         cmd = self.build_cmd()
         cam_str = ",".join(map(str, self.job.cameras))
@@ -432,6 +448,14 @@ class YouTubeStreamer:
             time_since_activity = time.time() - self.last_frame_time
             if time_since_activity > 120:  # 2 minutes
                 log.error(f"❌ Stream unhealthy: No FFmpeg activity for {int(time_since_activity)}s")
+                return False
+        
+        # Method 3: Check if frame count stopped increasing (encoding stalled)
+        # This catches cases where FFmpeg is running but not encoding new frames
+        if self.last_frame_count_time:
+            time_since_frame_increase = time.time() - self.last_frame_count_time
+            if time_since_frame_increase > 60:  # 60 seconds with no new frames
+                log.error(f"❌ Stream unhealthy: Frame count stuck at {self.last_frame_count} for {int(time_since_frame_increase)}s (encoding stalled)")
                 return False
         
         return True
