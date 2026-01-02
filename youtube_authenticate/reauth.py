@@ -6,7 +6,7 @@ This script runs on the HOST machine (not in Docker) to perform OAuth
 authentication using the Neko browser. It authenticates each configured
 YouTube account one by one.
 
-Usage: python3 scripts/reauth.py
+Usage: python3 youtube_authenticate/reauth.py
 Logs: logs/reauth.log
 """
 
@@ -158,7 +158,13 @@ def authenticate_account(account: dict) -> bool:
     if encrypt_path and not os.path.isabs(encrypt_path):
         encrypt_path = os.path.join(PROJECT_DIR, encrypt_path.lstrip("./"))
     if not os.path.isabs(client_secret_path):
-        client_secret_path = os.path.join(PROJECT_DIR, client_secret_path.lstrip("./"))
+        # Resolve relative to PROJECT_DIR (Mini-NVR root) if needed
+        # But if it's relative to youtube_authenticate, we might need adjustment.
+        # Assuming secrets are in main project dir or secrets dir.
+        if client_secret_path.startswith("youtube_authenticate/"):
+            client_secret_path = os.path.join(PROJECT_DIR, client_secret_path)
+        else:
+            client_secret_path = os.path.join(PROJECT_DIR, client_secret_path.lstrip("./"))
     
     log(f"[Reauth] Client secret: {client_secret_path}")
     log(f"[Reauth] Token path: {token_path}")

@@ -8,6 +8,13 @@ Uses canvas-based approach for maximum stability.
 """
 import os
 import sys
+
+# Ensure project root is in sys.path for youtube_auto_pub
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_dir = os.path.dirname(current_dir)
+if project_dir not in sys.path:
+    sys.path.insert(0, project_dir)
+
 import time
 import signal
 import subprocess

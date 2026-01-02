@@ -96,8 +96,8 @@ else
 fi
 
 # YouTube Uploader now runs INSIDE Docker container
-# Auth is triggered via SSH when needed (see scripts/reauth.py)
-# For manual auth: python3 scripts/reauth.py
+# Auth is triggered via SSH when needed (see youtube_authenticate/reauth.py)
+# For manual auth: python3 youtube_authenticate/reauth.py
 
 if [ "$DETACHED" = true ]; then
     echo "Starting containers (background)..."

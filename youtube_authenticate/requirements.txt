@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+itsdangerous
+slowapi
+bcrypt
+requests
+psutil
+httpx
+websockets
+
+# Youtube authentication runs on HOST, not in Docker
+# Install with: pip install -r youtube_authenticate/requirements.txt
+git+https://github.com/jebin2/youtube_auto_pub.git
