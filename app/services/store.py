@@ -1,36 +1,36 @@
 import os
 import glob
 import time
-from core import config
+from core.config import settings
 from core.logger import setup_logger
 from utils.helpers import is_file_live, parse_filename, format_size
 from services.media import get_video_duration
 from services.metadata import MetadataCache
 
 logger = setup_logger("store")
-meta_cache = MetadataCache(os.path.join(config.RECORD_DIR, "metadata_cache.json"))
+meta_cache = MetadataCache(os.path.join(settings.record_dir, "metadata_cache.json"))
 
 def get_storage_usage():
     total_size = 0
-    for dirpath, _, filenames in os.walk(config.RECORD_DIR):
+    for dirpath, _, filenames in os.walk(settings.record_dir):
         for f in filenames:
             fp = os.path.join(dirpath, f)
             if not os.path.islink(fp):
                 total_size += os.path.getsize(fp)
     
     used_gb = round(total_size / (1024**3), 1)
-    return {"usedGB": used_gb, "maxGB": config.MAX_STORAGE_GB}
+    return {"usedGB": used_gb, "maxGB": settings.max_storage_gb}
 
 def get_live_channels():
     channels = {}
-    for ch in config.get_active_channels():
+    for ch in settings.get_active_channels():
         # Find latest file for this channel (checking both MP4 and MKV)
         candidates = []
         for ext in ["mp4", "mkv"]:
             # Check Flat
-            candidates.extend(glob.glob(os.path.join(config.RECORD_DIR, f"ch{ch}_*.{ext}")))
+            candidates.extend(glob.glob(os.path.join(settings.record_dir, f"ch{ch}_*.{ext}")))
             # Check Nested
-            candidates.extend(glob.glob(os.path.join(config.RECORD_DIR, f"ch{ch}", "*", f"*.{ext}")))
+            candidates.extend(glob.glob(os.path.join(settings.record_dir, f"ch{ch}", "*", f"*.{ext}")))
         
         status = "OFF"
         file_path = None
@@ -41,7 +41,7 @@ def get_live_channels():
             is_live = is_file_live(latest_file)
             
             # Determine logic status
-            stop_file = os.path.join(config.CONTROL_DIR, f"stop_ch{ch}")
+            stop_file = os.path.join(settings.control_dir, f"stop_ch{ch}")
             if os.path.exists(stop_file):
                 status = "OFF"
             elif is_live:
@@ -50,7 +50,7 @@ def get_live_channels():
                 status = "REC" 
             
             # Relative path for frontend
-            file_path = os.path.relpath(latest_file, config.RECORD_DIR)
+            file_path = os.path.relpath(latest_file, settings.record_dir)
         
         channels[ch] = {
             "status": status,
@@ -66,13 +66,13 @@ def get_available_dates(channel=None):
     target_dirs = []
     
     if channel:
-        ch_path = os.path.join(config.RECORD_DIR, f"ch{channel}")
+        ch_path = os.path.join(settings.record_dir, f"ch{channel}")
         if os.path.exists(ch_path):
             target_dirs.append(ch_path)
     else:
         # Find all channel folders
         try:
-            with os.scandir(config.RECORD_DIR) as it:
+            with os.scandir(settings.record_dir) as it:
                 for entry in it:
                     if entry.is_dir() and entry.name.startswith("ch"):
                         target_dirs.append(entry.path)
@@ -106,7 +106,7 @@ def load_youtube_map():
     mapping = {}
     
     # Scan all youtube_uploads_*.csv files (per-day format)
-    pattern = os.path.join(config.RECORD_DIR, "youtube_uploads_*.csv")
+    pattern = os.path.join(settings.record_dir, "youtube_uploads_*.csv")
     csv_files = glob_module.glob(pattern)
     
     for csv_path in csv_files:
@@ -153,7 +153,7 @@ def get_recordings_for_date(ch, date):
         
         raw_recordings.append({
             "full_path": full_path,
-            "rel_path": os.path.relpath(full_path, config.RECORD_DIR),
+            "rel_path": os.path.relpath(full_path, settings.record_dir),
             "meta": meta,
             "size": size,
             "mtime": mtime
@@ -163,14 +163,14 @@ def get_recordings_for_date(ch, date):
         # 1. Scan Root for Flat files: ch{ch}_{date_compact}_...
         target_date_flat = date.replace("-", "") # 20251226
         
-        with os.scandir(config.RECORD_DIR) as it:
+        with os.scandir(settings.record_dir) as it:
             prefix = f"ch{ch}_{target_date_flat}"
             for entry in it:
                 if entry.is_file() and entry.name.startswith(prefix):
                     process_entry(entry)
 
         # 2. Nested Structure Search (ch1/2025-12-26/...)
-        nested_dir = os.path.join(config.RECORD_DIR, f"ch{ch}", date)
+        nested_dir = os.path.join(settings.record_dir, f"ch{ch}", date)
         if os.path.exists(nested_dir):
             with os.scandir(nested_dir) as it:
                 for entry in it:

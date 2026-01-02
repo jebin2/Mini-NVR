@@ -26,8 +26,8 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 # WebSocket router (auth checked manually since WS can't use Depends easily)
 ws_router = APIRouter()
 
-GO2RTC_HTTP = f"http://127.0.0.1:{config.GO2RTC_API_PORT}"
-GO2RTC_WS = f"ws://127.0.0.1:{config.GO2RTC_API_PORT}"
+GO2RTC_HTTP = f"http://127.0.0.1:{config.settings.go2rtc_api_port}"
+GO2RTC_WS = f"ws://127.0.0.1:{config.settings.go2rtc_api_port}"
 
 # Reusable async HTTP client
 _client = None

@@ -3,7 +3,7 @@ import os
 import time
 import glob
 import subprocess
-from core import config
+from core.config import settings
 from core.logger import setup_logger
 
 logger = setup_logger("converter")
@@ -45,7 +45,7 @@ class BackgroundConverter(threading.Thread):
 
         # Base arguments
         base_args = [
-            config.FFMPEG_BIN,
+            settings.ffmpeg_bin,
             "-y", 
             "-i", mkv_path,
         ]
