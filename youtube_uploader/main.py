@@ -498,13 +498,12 @@ class NVRUploaderService:
             return 0.0
 
     def _find_batches(self) -> List[VideoBatch]:
-        """Group pending files into batches by Channel and Date, splitting if > limit."""
+        """Find pending video files and create individual batches (one file per batch)."""
         # Pattern: recordings_dir/ch*/date/*.mp4
         pattern = os.path.join(self.recordings_dir, "ch*", "*", "*.mp4")
         all_mp4s = glob.glob(pattern)
         
-        # Grouping dictionary: key=(channel, date), value=[files]
-        groups: Dict[tuple, List[str]] = {}
+        pending_files = []
         
         for mp4_path in all_mp4s:
             if self._is_uploaded(mp4_path):
@@ -513,177 +512,70 @@ class NVRUploaderService:
                 continue
             if mp4_path.endswith(".tmp"): # Skip temp files from converter
                 continue
-                
-            info = self._parse_video_path(mp4_path)
-            key = (info['channel'], info['date'])
             
-            if key not in groups:
-                groups[key] = []
-            groups[key].append(mp4_path)
+            pending_files.append(mp4_path)
+        
+        # Sort by path (which sorts by channel/date/time)
+        pending_files = sorted(pending_files)
         
         final_batches = []
         
-        for (channel, date), files in groups.items():
-            if not files:
-                continue
+        for mp4_path in pending_files:
+            info = self._parse_video_path(mp4_path)
+            # Each file is its own batch (no merging)
+            batch_obj = VideoBatch(info['channel'], info['date'], [mp4_path])
+            final_batches.append(batch_obj)
                 
-            sorted_files = sorted(files)
-            
-            # Check total duration and split if necessary
-            current_batch_files = []
-            current_duration = 0.0
-            split_batches = []
-            
-            for file_path in sorted_files:
-                duration = self._get_video_duration(file_path)
-                
-                # If adding this file would exceed limit, finalize current batch
-                if current_duration + duration > self.MAX_DURATION_SECONDS and current_batch_files:
-                    split_batches.append(current_batch_files)
-                    current_batch_files = []
-                    current_duration = 0.0
-                
-                current_batch_files.append(file_path)
-                current_duration += duration
-            
-            # Append last batch
-            if current_batch_files:
-                split_batches.append(current_batch_files)
-            
-            # Create VideoBatch objects
-            total_parts = len(split_batches)
-            for i, batch_files in enumerate(split_batches):
-                part_number = i + 1
-                # Only use "parts" if we actually split
-                if total_parts > 1:
-                     batch_obj = VideoBatch(channel, date, batch_files, part_number, total_parts)
-                else:
-                     batch_obj = VideoBatch(channel, date, batch_files)
-                
-                final_batches.append(batch_obj)
-                
-        return sorted(final_batches, key=lambda b: (b.channel, b.date, b.part_number))
+        return final_batches
 
-    def _merge_videos(self, batch: VideoBatch) -> Optional[str]:
-        """Merge videos in batch into a single file using ffmpeg concat."""
+    def _get_upload_path(self, batch: VideoBatch) -> Optional[str]:
+        """Get the video file path for upload (no merging, single file per batch)."""
         if not batch.files:
             return None
-            
-        # If only one file, no actual merge needed, but we treat it as "merged"
-        if len(batch.files) == 1:
-            return batch.files[0]
-            
-        try:
-            # Create list file
-            list_path = os.path.join(self.recordings_dir, f"concat_list_{os.getpid()}.txt")
-            
-            # Add part suffix to merged filename if needed
-            part_suffix = ""
-            if batch.total_parts > 1:
-                part_suffix = f"_p{batch.part_number}"
-                
-            merged_output = os.path.join(
-                self.recordings_dir, 
-                f"merged_{batch.files[0].split(os.sep)[-2]}_{len(batch.files)}files{part_suffix}.mp4"
-            )
-            
-            with open(list_path, 'w') as f:
-                for file_path in batch.files:
-                    # FFmpeg concat requires absolute paths
-                    f.write(f"file '{file_path}'\n")
-            
-            self.log(f"[NVR Uploader] ⚙ Merging {len(batch.files)} clips for {batch.channel} (Part {batch.part_number}/{batch.total_parts})...")
-            
-            # Run ffmpeg concat
-            cmd = [
-                "ffmpeg", 
-                "-y", "-v", "error",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", list_path,
-                "-c", "copy",
-                merged_output
-            ]
-            
-            subprocess.run(cmd, check=True)
-            
-            # Cleanup list
-            os.remove(list_path)
-            
-            batch.merged_path = merged_output # Mark for deletion later
-            return merged_output
-            
-        except subprocess.CalledProcessError as e:
-            self.log(f"[NVR Uploader] ✗ Merge failed: {e}")
-            if os.path.exists(list_path):
-                os.remove(list_path)
-            return None
-        except Exception as e:
-            self.log(f"[NVR Uploader] ✗ Error during merge prep: {e}")
-            return None
+        # Return the single file directly - no merging
+        return batch.files[0]
 
     def _generate_description(self, batch: VideoBatch) -> str:
-        """Generate description with timestamps."""
+        """Generate description for single video upload."""
+        info = self._parse_video_path(batch.files[0])
+        duration = self._get_video_duration(batch.files[0])
+        
+        # Format duration
+        m, s = divmod(int(duration), 60)
+        h, m = divmod(m, 60)
+        duration_str = f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
+        
         desc_lines = [
             f"Security camera recording for {batch.channel}",
-            f"Date: {batch.date}"
-        ]
-        
-        if batch.total_parts > 1:
-            desc_lines.append(f"Part {batch.part_number} of {batch.total_parts}")
-            
-        desc_lines.extend([
-            f"Merged clips: {len(batch.files)}",
+            f"Date: {batch.date}",
+            f"Time: {info['time']}",
+            f"Duration: {duration_str}",
             "",
-            "Timeline:"
-        ])
-        
-        current_time = 0.0
-        
-        for file_path in batch.files:
-            info = self._parse_video_path(file_path)
-            duration = self._get_video_duration(file_path)
-            
-            # Format elapsed time as HH:MM:SS
-            m, s = divmod(int(current_time), 60)
-            h, m = divmod(m, 60)
-            if h > 0:
-                ts = f"{h:02d}:{m:02d}:{s:02d}"
-            else:
-                ts = f"{m:02d}:{s:02d}"
-                
-            desc_lines.append(f"{ts} - {info['time']}")
-            current_time += duration
-            
-        desc_lines.append("")
-        desc_lines.append("Recorded by Mini-NVR")
+            "Recorded by Mini-NVR"
+        ]
         
         return "\n".join(desc_lines)
 
     def _process_batch(self, batch: VideoBatch) -> bool:
-        """Process a single batch: Merge -> Upload -> Finalize."""
+        """Process a single video file: Upload -> Finalize (no merging)."""
         
         try:
-            # 1. Merge
-            upload_path = self._merge_videos(batch)
+            # 1. Get upload path (single file, no merging)
+            upload_path = self._get_upload_path(batch)
             if not upload_path:
                 return False
                 
             # 2. Metadata
             description = self._generate_description(batch)
             
-            # Construct Title
-            first_info = self._parse_video_path(batch.files[0])
-            last_info = self._parse_video_path(batch.files[-1])
-            
-            title = f"{batch.channel} - {batch.date} ({first_info['time']} to {last_info['time']})"
-            if batch.total_parts > 1:
-                title += f" (Part {batch.part_number}/{batch.total_parts})"
+            # Construct Title: "Channel X - 2026-01-02 (11:14:03)"
+            info = self._parse_video_path(batch.files[0])
+            title = f"{batch.channel} - {batch.date} ({info['time']})"
             
             metadata = VideoMetadata(
                 title=title,
                 description=description,
-                tags=["NVR", "security", "camera", batch.channel.replace(" ", ""), "merged"],
+                tags=["NVR", "security", "camera", batch.channel.replace(" ", "")],
                 privacy_status=self.privacy_status,
                 category_id="22"
             )
@@ -694,7 +586,7 @@ class NVRUploaderService:
                 return False
                 
             try:
-                self.log(f"[NVR Uploader] 📤 Uploading batch: {title}")
+                self.log(f"[NVR Uploader] 📤 Uploading: {title}")
                 video_id = self._uploader.upload_video(
                     service=service,
                     video_path=upload_path,
@@ -728,15 +620,9 @@ class NVRUploaderService:
                 
                 return False
                 
-        finally:
-            # Always clean up temporary merged file if it exists and wasn't cleaned by finalize
-            # (finalize removes it, but if finalize wasn't called, we do it here)
-            if batch.merged_path and os.path.exists(batch.merged_path):
-                try:
-                    os.remove(batch.merged_path)
-                    self.log(f"[NVR Uploader] 🧹 Cleaned up temporary merged file (finally block)")
-                except OSError:
-                    pass
+        except Exception as e:
+            self.log(f"[NVR Uploader] ✗ Process error: {e}")
+            return False
 
     def stop(self):
         """Stop the upload service."""
@@ -866,13 +752,14 @@ class NVRUploaderService:
                 batches = self._find_batches()
                 
                 if batches:
-                    self.log(f"[NVR Uploader] 📋 Found {len(batches)} batches pending upload")
+                    self.log(f"[NVR Uploader] 📋 Found {len(batches)} videos pending upload")
                 
                 for batch in batches:
                     if not self._running:
                         break
                     
-                    self.log(f"[NVR Uploader] > Processing batch {batch.channel} {batch.date}: {len(batch.files)} files")
+                    info = self._parse_video_path(batch.files[0])
+                    self.log(f"[NVR Uploader] > Processing: {batch.channel} {batch.date} ({info['time']})")
                     
                     if self._process_batch(batch):
                         time.sleep(5)
