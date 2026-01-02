@@ -222,13 +222,17 @@ class YouTubeVideoSync:
             total_new = 0
             
             for account in self.accounts:
-                videos = account.fetch_videos()
-                
-                for video in videos:
-                    if video["video_id"] not in existing_ids:
-                        self._write_to_csv(video)
-                        existing_ids.add(video["video_id"])  # Avoid duplicates across accounts
-                        total_new += 1
+                try:
+                    videos = account.fetch_videos()
+                    
+                    for video in videos:
+                        if video["video_id"] not in existing_ids:
+                            self._write_to_csv(video)
+                            existing_ids.add(video["video_id"])  # Avoid duplicates across accounts
+                            total_new += 1
+                except Exception as e:
+                    logger.error(f"❌ Account {account.account_id} failed: {e}")
+                    continue  # Continue with next account
 
             if total_new > 0:
                 logger.info(f"✅ Synced {total_new} new videos to CSV")
