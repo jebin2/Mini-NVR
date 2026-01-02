@@ -28,91 +28,29 @@ if PROJECT_DIR not in sys.path:
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 
-class Tee:
-    """Redirect stdout/stderr to both terminal and log file."""
-    def __init__(self, log_path, stream):
-        self.log_path = log_path
-        self.stream = stream
-        self.log_file = open(log_path, 'a')
-    
-    def write(self, data):
-        if data.strip():  # Only log non-empty lines
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # Write to original stream
-            self.stream.write(data)
-            self.stream.flush()
-            # Write to log file with timestamp (for lines that don't have one)
-            for line in data.splitlines():
-                if line.strip():
-                    self.log_file.write(f"{timestamp} {line}\n")
-            self.log_file.flush()
-        else:
-            self.stream.write(data)
-            self.stream.flush()
-    
-    def flush(self):
-        self.stream.flush()
-        self.log_file.flush()
-    
-    def close(self):
-        self.log_file.close()
-
+from app.core.logger import setup_stdout_capture
 
 # Redirect stdout and stderr to log file
-sys.stdout = Tee(LOG_FILE, sys.__stdout__)
-sys.stderr = Tee(LOG_FILE, sys.__stderr__)
-
+setup_stdout_capture(LOG_FILE)
 
 def log(message: str):
     """Log message to stdout (which now also goes to log file)."""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_line = f"{timestamp} {message}"
-    print(log_line, flush=True)
+    # Tee handles timestamping in file, print handles stdout
+    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {message}", flush=True)
 
 
 
 
+
+from app.core.config import settings
 
 def discover_youtube_accounts():
     """
-    Discover all configured YouTube accounts from environment variables.
-    Looks for YOUTUBE_CLIENT_SECRET_PATH_N and YOUTUBE_TOKEN_PATH_N pairs.
+    Get configured YouTube accounts from settings.
     """
-    accounts = []
-    idx = 1
-    
-    while True:
-        client_secret = os.environ.get(f"YOUTUBE_CLIENT_SECRET_PATH_{idx}")
-        token_path = os.environ.get(f"YOUTUBE_TOKEN_PATH_{idx}")
-        
-        if not client_secret or not token_path:
-            break
-            
-        accounts.append({
-            "id": idx,
-            "client_secret": client_secret,
-            "token_path": token_path
-        })
-        idx += 1
-    
-    if not accounts:
-        # Fallback to legacy single-account env vars
-        client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET_PATH")
-        token_path = os.environ.get("YOUTUBE_TOKEN_PATH")
-        if client_secret and token_path:
-            accounts.append({
-                "id": 1,
-                "client_secret": client_secret,
-                "token_path": token_path
-            })
-    
-    return accounts
+    return settings.youtube_accounts
 
-
-from app.utils.config import load_env
-
-# Load environment
-load_env(PROJECT_DIR)
+# Env loaded automatically by importing settings
 
 # Try to import youtube_auto_pub
 try:
@@ -139,11 +77,11 @@ def authenticate_account(account: dict) -> bool:
     log(f"[Reauth] Account {account_id}")
     log(f"[Reauth] ─────────────────────────────────────────")
     
-    # Get shared config from environment
-    encrypt_path = os.environ.get("YOUTUBE_ENCRYPT_PATH")
-    hf_repo_id = os.environ.get("HF_REPO_ID")
-    hf_token = os.environ.get("HF_TOKEN")
-    encryption_key = os.environ.get("YT_ENCRYP_KEY")
+    # Get shared config from settings
+    encrypt_path = settings.youtube_encrypt_path
+    hf_repo_id = settings.hf_repo_id
+    hf_token = settings.hf_token
+    encryption_key = settings.yt_encrypt_key
     
     # Resolve relative paths
     if encrypt_path and not os.path.isabs(encrypt_path):
@@ -180,8 +118,8 @@ def authenticate_account(account: dict) -> bool:
             has_display=True,
             headless_mode=False,
             docker_name=docker_name,
-            google_email=os.environ.get("GOOGLE_EMAIL"),
-            google_password=os.environ.get("GOOGLE_PASSWORD"),
+            google_email=settings.google_email,
+            google_password=settings.google_password,
             project_path=PROJECT_DIR,
             client_secret_filename=client_filename,
             token_filename=token_filename

@@ -91,6 +91,8 @@ class Settings:
     yt_encrypt_key: str = field(default_factory=lambda: get_env("YT_ENCRYP_KEY"))
     project_dir: str = field(default_factory=lambda: get_env("PROJECT_DIR"))
     ssh_host_user: str = field(default_factory=lambda: get_env("SSH_HOST_USER", "jebin"))
+    google_email: str = field(default_factory=lambda: get_env("GOOGLE_EMAIL"))
+    google_password: str = field(default_factory=lambda: get_env("GOOGLE_PASSWORD"))
 
     # Keys
     youtube_stream_keys: Dict[int, str] = field(init=False)
