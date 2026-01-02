@@ -12,8 +12,7 @@ Logs:  logs/reauth.log
 import os
 import sys
 import shutil
-import logging
-from typing import List, Dict, Optional
+from typing import Dict
 
 # Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,32 +25,10 @@ if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
 
 from app.core.config import settings
+from app.core.logger import setup_logger
 from youtube_auto_pub import YouTubeConfig, YouTubeUploader
 
-def setup_logger() -> logging.Logger:
-    """Configure logging to file and console."""
-    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-    
-    logger = logging.getLogger("reauth")
-    logger.setLevel(logging.INFO)
-    logger.handlers = []
-    
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    
-    # Console handler
-    console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(formatter)
-    logger.addHandler(console)
-    
-    # File handler
-    file_handler = logging.FileHandler(LOG_FILE, mode="a")
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    
-    return logger
-
-
-logger = setup_logger()
+logger = setup_logger("reauth", LOG_FILE)
 
 
 def authenticate_account(account: Dict) -> bool:

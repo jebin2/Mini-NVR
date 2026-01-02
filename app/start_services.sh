@@ -47,14 +47,6 @@ fi
 
 log_message "Starting services..."
 
-# Clean up any existing log file from previous run
-if [ -n "$LOG_FILE" ]; then
-    if [ -f "$LOG_FILE" ]; then
-        log_message "Removing existing LOG_FILE: $LOG_FILE"
-        rm -f "$LOG_FILE"
-    fi
-fi
-
 # Function to stop a service (kills process group)
 stop_service() {
     local index=$1
