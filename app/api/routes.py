@@ -10,9 +10,9 @@ router = APIRouter(dependencies=[Depends(get_current_user)])
 @router.get("/config")
 def get_config():
     return {
-        "numChannels": config.NUM_CHANNELS,
-        "activeChannels": config.get_active_channels(),
-        "storageLimit": config.MAX_STORAGE_GB
+        "numChannels": config.settings.num_channels,
+        "activeChannels": config.settings.get_active_channels(),
+        "storageLimit": config.settings.max_storage_gb
     }
 
 @router.get("/storage")
@@ -29,7 +29,7 @@ def get_dates(channel: int = Query(None, ge=1, description="Channel number (1-ba
     Get dates using directory listing.
     Assumes nested structure: recordings/chX/YYYY-MM-DD
     """
-    if channel is not None and channel not in config.get_active_channels():
+    if channel is not None and channel not in config.settings.get_active_channels():
         raise HTTPException(status_code=400, detail=f"Invalid or skipped channel.")
     return {"dates": store.get_available_dates(channel)}
 
@@ -40,7 +40,7 @@ def get_recordings(
 ):
     # Validate channel bounds
     # Validate channel bounds
-    if ch not in config.get_active_channels():
+    if ch not in config.settings.get_active_channels():
         raise HTTPException(status_code=400, detail=f"Invalid or skipped channel.")
     
     # Validate date format
@@ -57,10 +57,10 @@ def delete_recording(path: str = Query(..., description="Relative path to the re
         raise HTTPException(status_code=400, detail="Invalid path")
     
     # Build absolute path
-    abs_path = os.path.abspath(os.path.join(config.RECORD_DIR, path))
+    abs_path = os.path.abspath(os.path.join(config.settings.record_dir, path))
     
     # Security: Ensure path is within RECORD_DIR
-    if not abs_path.startswith(os.path.abspath(config.RECORD_DIR)):
+    if not abs_path.startswith(os.path.abspath(config.settings.record_dir)):
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Check file exists
@@ -78,7 +78,7 @@ def delete_recording(path: str = Query(..., description="Relative path to the re
         
         # Clean up empty parent directories
         parent = os.path.dirname(abs_path)
-        if parent != os.path.abspath(config.RECORD_DIR) and os.path.isdir(parent) and not os.listdir(parent):
+        if parent != os.path.abspath(config.settings.record_dir) and os.path.isdir(parent) and not os.listdir(parent):
             os.rmdir(parent)
             
         return {"message": "Deleted", "path": path}

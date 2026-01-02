@@ -12,7 +12,7 @@ logger = setup_logger("recorder")
 
 def is_stopped(channel):
     """Check if channel recording is stopped."""
-    return os.path.exists(os.path.join(config.CONTROL_DIR, f"stop_ch{channel}"))
+    return os.path.exists(os.path.join(config.settings.control_dir, f"stop_ch{channel}"))
 
 
 def build_rtsp_url(template, user, password, ip, port, channel):
@@ -28,7 +28,7 @@ def build_rtsp_url(template, user, password, ip, port, channel):
 
 def build_go2rtc_url(channel):
     """Build RTSP URL from go2rtc relay (unified hub architecture)."""
-    return f"rtsp://localhost:{config.GO2RTC_RTSP_PORT}/cam{channel}"
+    return f"rtsp://localhost:{config.settings.go2rtc_rtsp_port}/cam{channel}"
 
 
 def ensure_dir(path):
@@ -103,7 +103,7 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
             logger.info(f"[▶] CH{channel} starting -> {out_dir}")
 
             cmd = [
-                config.FFMPEG_BIN,
+                config.settings.ffmpeg_bin,
                 "-loglevel", "error",
                 "-rtsp_transport", "tcp",
                 "-fflags", "+genpts+igndts+discardcorrupt",
@@ -157,34 +157,30 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
 def main():
     try:
         # Use config module if env vars are missing, or strict check
-        dvr_ip = config.DVR_IP or os.getenv("DVR_IP")
-        if not dvr_ip: raise EnvironmentError("DVR_IP not set")
-        
-        # We rely on config module which reads env vars
-        # If config doesn't enforce required (it returns None), we check here.
-        if not config.DVR_USER: raise EnvironmentError("DVR_USER not set")
+        if not config.settings.dvr_ip: raise EnvironmentError("DVR_IP not set")
+        if not config.settings.dvr_user: raise EnvironmentError("DVR_USER not set")
     except EnvironmentError as e:
         logger.error(f"[❌] {e}")
         return
 
-    ensure_dir(config.RECORD_DIR)
+    ensure_dir(config.settings.record_dir)
     
 
-    logger.info(f"[✓] DVR: {config.DVR_IP}:{config.DVR_PORT}")
-    logger.info(f"[✓] Channels: {config.NUM_CHANNELS}")
-    logger.info(f"[✓] Segment: {config.SEGMENT_DURATION}s")
-    logger.info(f"[✓] Output: {config.RECORD_DIR}/ch{{N}}/{{date}}/")
-    logger.info(f"[✓] Source: go2rtc relay (localhost:{config.GO2RTC_RTSP_PORT})")
+    logger.info(f"[✓] DVR: {config.settings.dvr_ip}:{config.settings.dvr_port}")
+    logger.info(f"[✓] Channels: {config.settings.num_channels}")
+    logger.info(f"[✓] Segment: {config.settings.segment_duration}s")
+    logger.info(f"[✓] Output: {config.settings.record_dir}/ch{{N}}/{{date}}/")
+    logger.info(f"[✓] Source: go2rtc relay (localhost:{config.settings.go2rtc_rtsp_port})")
 
     # --- Start Recording Threads ---
     # Using go2rtc relay as unified RTSP source (single DVR connection)
     threads = []
-    for ch in config.get_active_channels():
+    for ch in config.settings.get_active_channels():
         # Use go2rtc as RTSP source for unified architecture
         rtsp_url = build_go2rtc_url(ch)
         t = threading.Thread(
             target=start_camera, 
-            args=(ch, rtsp_url, config.RECORD_DIR, config.SEGMENT_DURATION),
+            args=(ch, rtsp_url, config.settings.record_dir, config.settings.segment_duration),
             daemon=True
         )
         t.start()
@@ -194,16 +190,16 @@ def main():
     # --- Start Converter Thread ---
 
     converter = BackgroundConverter(
-        config.RECORD_DIR, 
-        video_codec=config.VIDEO_CODEC,
-        crf=config.VIDEO_CRF,
-        preset=config.VIDEO_PRESET
+        config.settings.record_dir, 
+        video_codec=config.settings.video_codec,
+        crf=config.settings.video_crf,
+        preset=config.settings.video_preset
     )
     converter.start()
 
     while True:
         time.sleep(60)
-        ensure_dir(config.RECORD_DIR)
+        ensure_dir(config.settings.record_dir)
 
 
 if __name__ == "__main__":

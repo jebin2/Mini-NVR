@@ -20,6 +20,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 LOG_FILE = os.path.join(PROJECT_DIR, "logs", "reauth.log")
 
+# Add Project Dir to path to import app.utils
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
+
 # Ensure logs directory exists
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
@@ -66,18 +70,7 @@ def log(message: str):
     print(log_line, flush=True)
 
 
-# Load .env file
-def load_env_file(path: str) -> dict:
-    """Load environment variables from a file."""
-    env = {}
-    if os.path.exists(path):
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    env[key.strip()] = value.strip().strip('"\'')
-    return env
+
 
 
 def discover_youtube_accounts():
@@ -116,12 +109,10 @@ def discover_youtube_accounts():
     return accounts
 
 
+from app.utils.config import load_env
+
 # Load environment
-env_path = os.path.join(PROJECT_DIR, ".env")
-if os.path.exists(env_path):
-    env = load_env_file(env_path)
-    for key, value in env.items():
-        os.environ.setdefault(key, value)
+load_env(PROJECT_DIR)
 
 # Try to import youtube_auto_pub
 try:

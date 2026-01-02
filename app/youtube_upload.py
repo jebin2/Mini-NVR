@@ -26,44 +26,23 @@ if SCRIPT_DIR not in sys.path:
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
 
-def load_env_file(path: str) -> dict:
-    """Load environment variables from a file."""
-    env = {}
-    if os.path.exists(path):
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    env[key.strip()] = value.strip().strip('"\'')
-    return env
+from core.config import settings
 
 def main():
-    # Load .env file
-    env_path = os.path.join(PROJECT_DIR, ".env")
-    if os.path.exists(env_path):
-        env = load_env_file(env_path)
-        for key, value in env.items():
-            os.environ.setdefault(key, value)
+    # Env loaded by settings
+
     
     # Check if upload is enabled
-    if os.environ.get("YOUTUBE_UPLOAD_ENABLED", "false").lower() != "true":
+    if not settings.youtube_upload_enabled:
         print("[NVR Uploader] YouTube upload is disabled (YOUTUBE_UPLOAD_ENABLED != true)")
         return
 
-    # Config
-    # RECORD_DIR is /recordings in Docker, fallback to project_dir/recordings on host
-    recordings_dir = os.environ.get("RECORD_DIR", os.path.join(PROJECT_DIR, "recordings"))
-    privacy_status = os.environ.get("YOUTUBE_VIDEO_PRIVACY", "unlisted")
-    delete_after = os.environ.get("YOUTUBE_DELETE_AFTER_UPLOAD", "false").lower() == "true"
-    scan_interval = int(os.environ.get("YOUTUBE_UPLOAD_INTERVAL", "60"))
-    
     # Create service
     service = YouTubeUploaderService(
-        recordings_dir=recordings_dir,
-        privacy_status=privacy_status,
-        delete_after_upload=delete_after,
-        scan_interval=scan_interval
+        recordings_dir=settings.record_dir,
+        privacy_status=settings.youtube_video_privacy,
+        delete_after_upload=settings.youtube_delete_after_upload,
+        scan_interval=settings.youtube_upload_interval
     )
     
     # Handle graceful shutdown

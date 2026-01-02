@@ -10,7 +10,9 @@ def setup_logger(name, log_file=None):
     If neither is provided, file logging is disabled (stdout only).
     """
     if log_file is None:
-        log_file = os.getenv("LOG_FILE")
+        # Import inside function to avoid circular import risks if config imports logger in future
+        from core import config
+        log_file = config.settings.log_file
 
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)

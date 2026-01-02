@@ -27,25 +27,9 @@ from logging.handlers import RotatingFileHandler
 from services.youtube_video_sync import YouTubeVideoSync
 from core import config
 
-# ============================================
-# Configuration
-# ============================================
+# Env loaded automatically by importing config
 
-def get_env(name, default=None):
-    return os.getenv(name, default)
 
-YOUTUBE_LIVE_ENABLED = get_env("YOUTUBE_LIVE_ENABLED", "false").lower() == "true"
-YOUTUBE_RTMP_URL = get_env("YOUTUBE_RTMP_URL")
-YOUTUBE_GRID = int(get_env("YOUTUBE_GRID"))
-NUM_CHANNELS = int(get_env("NUM_CHANNELS"))
-
-GO2RTC_RTSP_PORT = int(get_env("GO2RTC_RTSP_PORT"))
-GO2RTC_API_PORT = int(get_env("GO2RTC_API_PORT"))
-RECORD_DIR = get_env("RECORD_DIR")
-
-# ============================================
-# Logging
-# ============================================
 
 def setup_logger():
     log_dir = "/logs"
@@ -101,7 +85,7 @@ class YouTubeStreamer:
         self.last_frame_count_time = None
     
     def build_cmd(self):
-        rtmp = f"{YOUTUBE_RTMP_URL}/{self.job.key}"
+        rtmp = f"{config.settings.youtube_rtmp_url}/{self.job.key}"
         
         cmd = [
             "ffmpeg",
@@ -113,7 +97,7 @@ class YouTubeStreamer:
         
         # Inputs - with proper per-input RTSP flags and error handling
         for cam_idx in self.job.cameras:
-            rtsp = f"rtsp://127.0.0.1:{GO2RTC_RTSP_PORT}/cam{cam_idx}"
+            rtsp = f"rtsp://127.0.0.1:{config.settings.go2rtc_rtsp_port}/cam{cam_idx}"
             cmd.extend([
                 "-rtsp_transport", "tcp",
                 "-rtsp_flags", "prefer_tcp",
@@ -446,7 +430,7 @@ class YouTubeStreamer:
 class StreamManager:
     def __init__(self):
         self.streamers = []
-        self.video_sync = YouTubeVideoSync(recordings_dir=RECORD_DIR)
+        self.video_sync = YouTubeVideoSync(recordings_dir=config.settings.record_dir)
         
     def discover_config(self):
         keys = []
@@ -463,10 +447,10 @@ class StreamManager:
             return False
             
         log.info(f"Found {len(keys)} stream key(s)")
-        log.info(f"Grid size: {YOUTUBE_GRID}, Total cameras: {NUM_CHANNELS}")
+        log.info(f"Grid size: {config.settings.youtube_grid}, Total cameras: {config.settings.num_channels}")
         
         # Map cameras to keys - using active channels from config
-        available_cameras = config.get_active_channels()
+        available_cameras = config.settings.get_active_channels()
         
         # Create jobs
         for i, key in enumerate(keys):
@@ -474,8 +458,8 @@ class StreamManager:
                 break
             
             # Take up to YOUTUBE_GRID cameras for this key
-            chunk = available_cameras[:YOUTUBE_GRID]
-            available_cameras = available_cameras[YOUTUBE_GRID:]
+            chunk = available_cameras[:config.settings.youtube_grid]
+            available_cameras = available_cameras[config.settings.youtube_grid:]
             
             job = StreamJob(key, chunk)
             self.streamers.append(YouTubeStreamer(job))
@@ -517,7 +501,7 @@ class StreamManager:
 
 def wait_for_go2rtc():
     import urllib.request
-    url = f"http://127.0.0.1:{GO2RTC_API_PORT}/api"
+    url = f"http://127.0.0.1:{config.settings.go2rtc_api_port}/api"
     log.info("⏳ Waiting for go2rtc...")
     for i in range(60):
         try:
@@ -534,7 +518,7 @@ def main():
     log.info("🎬 YouTube Streaming Service (Canvas-Based)")
     log.info("=" * 50)
     
-    if not YOUTUBE_LIVE_ENABLED:
+    if not config.settings.youtube_live_enabled:
         log.info("ℹ️ YouTube disabled (YOUTUBE_LIVE_ENABLED=false). Exiting.")
         return
 

@@ -12,8 +12,8 @@ class LoginRequest(BaseModel):
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(creds: LoginRequest, request: Request, response: Response):
-    if creds.username in config.USERS:
-        stored_pass = config.USERS[creds.username]
+    if creds.username in config.settings.users:
+        stored_pass = config.settings.users[creds.username]
         
         # Support both hashed (bcrypt starts with $2b$) and plaintext passwords
         # This allows gradual migration to hashed passwords

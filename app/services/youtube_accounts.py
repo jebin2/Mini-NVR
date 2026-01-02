@@ -11,32 +11,13 @@ from youtube_auto_pub import YouTubeConfig, YouTubeUploader
 logger = logging.getLogger("yt_accounts")
 
 
+from core.config import settings
+
 def discover_accounts() -> List[Dict]:
     """
-    Discover all configured YouTube accounts from environment variables.
-    Looks for YOUTUBE_CLIENT_SECRET_PATH_N and YOUTUBE_TOKEN_PATH_N pairs.
-    
-    Returns:
-        List of account configs with id, client_secret, token_path
+    Discover all configured YouTube accounts from settings.
     """
-    accounts = []
-    idx = 1
-    
-    while True:
-        client_secret = os.environ.get(f"YOUTUBE_CLIENT_SECRET_PATH_{idx}")
-        token_path = os.environ.get(f"YOUTUBE_TOKEN_PATH_{idx}")
-        
-        if not client_secret or not token_path:
-            break
-            
-        accounts.append({
-            "id": idx,
-            "client_secret": client_secret,
-            "token_path": token_path
-        })
-        idx += 1
-    
-    return accounts
+    return settings.youtube_accounts
 
 
 class YouTubeAccount:
@@ -51,11 +32,12 @@ class YouTubeAccount:
         self.channel_name = None
         
         # Shared config from env
-        self.encrypt_path = os.getenv("YOUTUBE_ENCRYPT_PATH")
-        self.hf_repo_id = os.getenv("HF_REPO_ID")
-        self.hf_token = os.getenv("HF_TOKEN")
-        self.encryption_key = os.getenv("YT_ENCRYP_KEY")
-        self.project_path = os.getenv("PROJECT_DIR")
+        # Shared config from settings
+        self.encrypt_path = settings.youtube_encrypt_path
+        self.hf_repo_id = settings.hf_repo_id
+        self.hf_token = settings.hf_token
+        self.encryption_key = settings.yt_encrypt_key
+        self.project_path = settings.project_dir
         
         self._init_uploader()
     

@@ -9,16 +9,23 @@ import sys
 import subprocess
 import logging
 
+# Ensure app root is in path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+from core.config import settings
+
 # Setup basic logging
 logging.basicConfig(level=logging.INFO, format='[TriggerAuth] %(message)s')
 logger = logging.getLogger("trigger_auth")
 
 def main():
-    ssh_user = os.environ.get('SSH_HOST_USER', 'jebin')
+    ssh_user = settings.ssh_host_user
     # PROJECT_DIR in Docker might not match Host, but we usually mount it same location or 
     # pass PROJECT_DIR env var to Docker. 
     # Use PROJECT_DIR env var if set, else default.
-    project_dir = os.environ.get('PROJECT_DIR')
+    project_dir = settings.project_dir
     
     if not project_dir:
         logger.error("PROJECT_DIR environment variable not set!")

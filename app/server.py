@@ -33,7 +33,7 @@ app.add_middleware(
 
 app.add_middleware(
     SessionMiddleware, 
-    secret_key=config.SECRET_KEY,
+    secret_key=config.settings.secret_key,
     same_site="none",
     https_only=True
 )
@@ -49,7 +49,7 @@ app.include_router(go2rtc_router, prefix="/api/go2rtc")
 
 @app.get("/")
 def serve_ui():
-    index_path = os.path.join(config.STATIC_DIR, "index.html")
+    index_path = os.path.join(config.settings.static_dir, "index.html")
     if os.path.exists(index_path):
         with open(index_path, 'r') as f:
             return HTMLResponse(f.read())
@@ -57,7 +57,7 @@ def serve_ui():
 
 @app.get("/login.html")
 def serve_login():
-    return serve_static(config.STATIC_DIR, "login.html", "text/html")
+    return serve_static(config.settings.static_dir, "login.html", "text/html")
 
 @app.get("/{filename}")
 def serve_root_files(filename: str):
@@ -71,15 +71,15 @@ def serve_root_files(filename: str):
     }
     
     if filename in allowed:
-        return serve_static(config.STATIC_DIR, filename, allowed[filename])
+        return serve_static(config.settings.static_dir, filename, allowed[filename])
         
     raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/recordings/{path:path}")
 def serve_video(path: str):
     # Security check to prevent directory traversal
-    abs_path = os.path.abspath(os.path.join(config.RECORD_DIR, path))
-    if not abs_path.startswith(os.path.abspath(config.RECORD_DIR)):
+    abs_path = os.path.abspath(os.path.join(config.settings.record_dir, path))
+    if not abs_path.startswith(os.path.abspath(config.settings.record_dir)):
         raise HTTPException(status_code=403, detail="Access denied")
     
     if not os.path.exists(abs_path):
@@ -124,11 +124,11 @@ def serve_video(path: str):
 
 @app.get("/css/{path:path}")
 def serve_css(path: str):
-    return serve_static(os.path.join(config.STATIC_DIR, "css"), path, "text/css")
+    return serve_static(os.path.join(config.settings.static_dir, "css"), path, "text/css")
 
 @app.get("/js/{path:path}")
 def serve_js(path: str):
-    return serve_static(os.path.join(config.STATIC_DIR, "js"), path, "application/javascript")
+    return serve_static(os.path.join(config.settings.static_dir, "js"), path, "application/javascript")
 
 def serve_static(base_dir, path, media_type):
     # Security check
@@ -144,7 +144,7 @@ def serve_static(base_dir, path, media_type):
     return FileResponse(abs_path, media_type=media_type)
 
 if __name__ == "__main__":
-    logger.info(f"Starting NVR on port {config.WEB_PORT}...")
-    logger.info(f"Recordings: {os.path.abspath(config.RECORD_DIR)}")
-    logger.info(f"Static: {config.STATIC_DIR}")
-    uvicorn.run(app, host="0.0.0.0", port=config.WEB_PORT)
+    logger.info(f"Starting NVR on port {config.settings.web_port}...")
+    logger.info(f"Recordings: {os.path.abspath(config.settings.record_dir)}")
+    logger.info(f"Static: {config.settings.static_dir}")
+    uvicorn.run(app, host="0.0.0.0", port=config.settings.web_port)

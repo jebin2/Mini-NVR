@@ -6,7 +6,7 @@ from core.logger import setup_logger
 
 logger = setup_logger("cleanup")
 
-CHECK_INTERVAL = int(os.getenv("CLEANUP_INTERVAL"))
+CHECK_INTERVAL = config.settings.cleanup_interval
 
 def get_size_gb(path):
     """Calculate total size of directory in GB."""
@@ -29,33 +29,33 @@ def get_all_recordings(path):
 
 def main():
     logger.info(f"[🧹] Cleanup service started")
-    logger.info(f"[📁] Watching: {config.RECORD_DIR}")
-    logger.info(f"[📊] Max storage: {config.MAX_STORAGE_GB} GB")
-    logger.info(f"[🛡️] Max exceed allowed: {config.MAX_STORAGE_EXCEED_ALLOWED_GB} GB")
+    logger.info(f"[📁] Watching: {config.settings.record_dir}")
+    logger.info(f"[📊] Max storage: {config.settings.max_storage_gb} GB")
+    logger.info(f"[🛡️] Max exceed allowed: {config.settings.max_storage_exceed_allowed_gb} GB")
     
-    if config.YOUTUBE_UPLOAD_ENABLED:
+    if config.settings.youtube_upload_enabled:
          logger.info(f"[🔄] Cleanup strategy: YouTube Upload Aware")
-         logger.info(f"    1. Stage 1 (> {config.MAX_STORAGE_GB} GB): Delete ONLY uploaded files")
-         logger.info(f"    2. Stage 2 (> {config.MAX_STORAGE_GB + config.MAX_STORAGE_EXCEED_ALLOWED_GB} GB): Delete ANY oldest files (CRITICAL)")
+         logger.info(f"    1. Stage 1 (> {config.settings.max_storage_gb} GB): Delete ONLY uploaded files")
+         logger.info(f"    2. Stage 2 (> {config.settings.max_storage_gb + config.settings.max_storage_exceed_allowed_gb} GB): Delete ANY oldest files (CRITICAL)")
     else:
          logger.info(f"[🗑️] Cleanup strategy: Standard (Delete oldest when limit exceeded)")
 
     while True:
-        size = get_size_gb(config.RECORD_DIR)
-        limit_stage1 = config.MAX_STORAGE_GB
-        limit_stage2 = config.MAX_STORAGE_GB + config.MAX_STORAGE_EXCEED_ALLOWED_GB
+        size = get_size_gb(config.settings.record_dir)
+        limit_stage1 = config.settings.max_storage_gb
+        limit_stage2 = config.settings.max_storage_gb + config.settings.max_storage_exceed_allowed_gb
         
         logger.info(f"[📊] Current: {size:.2f} GB / {limit_stage1} GB (Crit: {limit_stage2} GB)")
 
         # Stage 1: Standard / Safe Cleanup
         if size > limit_stage1:
-            files = get_all_recordings(config.RECORD_DIR)
+            files = get_all_recordings(config.settings.record_dir)
             
             if files:
                 # Identify candidates for deletion
                 files_to_delete = []
                 
-                if config.YOUTUBE_UPLOAD_ENABLED:
+                if config.settings.youtube_upload_enabled:
                     # Filter: Only delete files that are uploaded
                     for f in files:
                         if "_uploaded" in os.path.basename(f):
@@ -73,7 +73,7 @@ def main():
                     # If specific candidates found (upload aware), delete them one by one until safe
                     # But for now let's just delete a chunk of oldest safe files
                     count_to_delete = len(files_to_delete)
-                    if config.YOUTUBE_UPLOAD_ENABLED:
+                    if config.settings.youtube_upload_enabled:
                          # Delete oldest 20% of safe files or at least 1, to be gentle? 
                          # Or just delete enough to get under limit?
                          # Let's delete oldest 10 safe files at a time to be responsive
@@ -85,19 +85,19 @@ def main():
                             os.remove(f)
                             logger.info(f"[🗑️] Deleted: {os.path.basename(f)}")
                             parent = os.path.dirname(f)
-                            if parent != config.RECORD_DIR and os.path.isdir(parent) and not os.listdir(parent):
+                            if parent != config.settings.record_dir and os.path.isdir(parent) and not os.listdir(parent):
                                 os.rmdir(parent)
                         except OSError as e:
                             logger.error(f"[⚠] Could not delete {f}: {e}")
                             
         # Stage 2: Critical Cleanup (Fallback)
         # Check size again after Stage 1
-        size = get_size_gb(config.RECORD_DIR)
-        if config.YOUTUBE_UPLOAD_ENABLED and size > limit_stage2:
+        size = get_size_gb(config.settings.record_dir)
+        if config.settings.youtube_upload_enabled and size > limit_stage2:
             logger.warning(f"[🚨] CRITICAL STORAGE LIMIT EXCEEDED ({size:.2f} GB > {limit_stage2} GB)")
             logger.warning("[🚨] Deleting oldest files indiscriminately to preserve system function!")
             
-            files = get_all_recordings(config.RECORD_DIR)
+            files = get_all_recordings(config.settings.record_dir)
             if files:
                 # Delete oldest 5 files at a time until safe
                 for f in files[:5]:
@@ -105,7 +105,7 @@ def main():
                         os.remove(f)
                         logger.info(f"[🚨] CRITICAL DELETE: {os.path.basename(f)}")
                         parent = os.path.dirname(f)
-                        if parent != config.RECORD_DIR and os.path.isdir(parent) and not os.listdir(parent):
+                        if parent != config.settings.record_dir and os.path.isdir(parent) and not os.listdir(parent):
                             os.rmdir(parent)
                      except OSError as e:
                         logger.error(f"[⚠] Critical delete failed {f}: {e}")
