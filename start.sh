@@ -45,15 +45,15 @@ docker compose down 2>/dev/null || true
 # Clean logs and encrypt if requested
 if [ "$CLEAN" = true ]; then
     echo "Cleaning logs and encrypt..."
-    rm -rf ./logs/* 2>/dev/null || true
-    rm -rf ./encrypt/* 2>/dev/null || true
+    sudo rm -rf ./logs/* 2>/dev/null || true
+    sudo rm -rf ./encrypt/* 2>/dev/null || true
     echo "Cleaned: logs/, encrypt/"
 fi
 
 # Clean recordings only if requested
 if [ "$CLEAN_RECORDINGS" = true ]; then
     echo "Cleaning recordings..."
-    rm -rf ./recordings/* 2>/dev/null || true
+    sudo rm -rf ./recordings/* 2>/dev/null || true
     echo "Cleaned: recordings/"
 fi
 
