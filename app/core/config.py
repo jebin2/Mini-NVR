@@ -92,13 +92,10 @@ class Settings:
     project_dir: str = field(default_factory=lambda: get_env("PROJECT_DIR"))
     ssh_host_user: str = field(default_factory=lambda: get_env("SSH_HOST_USER", "jebin"))
 
-    # Keys 1-8
+    # Keys
     youtube_stream_keys: Dict[int, str] = field(init=False)
     youtube_accounts: List[Dict] = field(init=False)
-    
-    # Keys 1-8
-    youtube_stream_keys: Dict[int, str] = field(init=False)
-    
+
     # --- Auth ---
     secret_key: str = field(init=False)
     users: Dict[str, str] = field(init=False)
