@@ -13,8 +13,8 @@ services:
     volumes:
       - ./recordings:/recordings
       - ./logs:/logs
-      # Mount client secret for auto-detection of changes
-      - ./ytktclient_secret.json:/app/ytktclient_secret.json:ro
+      # Mount client secrets folder for multiple YouTube accounts
+      - ./client:/app/client:ro
       # SSH keys for Docker-to-host auth triggering (mounted to root's ssh dir)
       - ${HOME}/.ssh/id_rsa:/root/.ssh/id_rsa:ro
       - ${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts

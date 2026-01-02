@@ -4,6 +4,7 @@ Shared account discovery and YouTube API service management.
 """
 
 import os
+import shutil
 import logging
 from typing import List, Dict, Optional, Any
 from youtube_auto_pub import YouTubeConfig, YouTubeUploader
@@ -25,13 +26,12 @@ class YouTubeAccount:
     
     def __init__(self, account_id: int, client_secret: str, token_path: str):
         self.account_id = account_id
-        self.client_secret = client_secret
+        self.client_secret = client_secret  # Path like "client/secret_1.json"
         self.token_path = token_path
         self.service = None
         self.uploader = None
         self.channel_name = None
         
-        # Shared config from env
         # Shared config from settings
         self.encrypt_path = settings.youtube_encrypt_path
         self.hf_repo_id = settings.hf_repo_id
@@ -44,8 +44,25 @@ class YouTubeAccount:
     def _init_uploader(self):
         """Initialize YouTube uploader for this account."""
         try:
+            # Ensure encrypt directory exists
+            os.makedirs(self.encrypt_path, exist_ok=True)
+            
+            # Copy client secret to encrypt folder if needed
+            client_filename = os.path.basename(self.client_secret)
+            dest_path = os.path.join(self.encrypt_path, client_filename)
+            
+            # Resolve source path (could be relative like "client/secret.json")
+            if os.path.isabs(self.client_secret):
+                source_path = self.client_secret
+            else:
+                source_path = os.path.join("/app", self.client_secret)
+            
+            if os.path.exists(source_path) and not os.path.exists(dest_path):
+                shutil.copy2(source_path, dest_path)
+                logger.info(f"Account {self.account_id}: Copied {client_filename} to encrypt folder")
+            
             config = YouTubeConfig(
-                client_secret_filename=self.client_secret,
+                client_secret_filename=client_filename,
                 token_filename=self.token_path,
                 headless_mode=True,
                 encrypt_path=self.encrypt_path,
