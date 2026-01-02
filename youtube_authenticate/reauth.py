@@ -28,15 +28,16 @@ if PROJECT_DIR not in sys.path:
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 
-from app.core.logger import setup_stdout_capture
+from app.core.logger import setup_logger
 
-# Redirect stdout and stderr to log file
-setup_stdout_capture(LOG_FILE)
+# Setup standard logger
+logger = setup_logger("reauth", LOG_FILE)
 
 def log(message: str):
-    """Log message to stdout (which now also goes to log file)."""
-    # Tee handles timestamping in file, print handles stdout
-    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {message}", flush=True)
+    """Log message using standard logger."""
+    # Remove timestamp if logger adds it, but logger adds it to file/stream anyway.
+    # To match previous behavior of "clean stdout", we might just log info.
+    logger.info(message)
 
 
 
