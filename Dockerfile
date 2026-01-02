@@ -21,9 +21,6 @@ COPY app/ .
 # Copy web UI
 COPY web/ /app/web/
 
-# Copy youtube uploader
-COPY youtube_uploader/ /app/youtube_uploader/
-
 # Ensure Python output is not buffered (for real-time logs)
 ENV PYTHONUNBUFFERED=1
 

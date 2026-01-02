@@ -54,7 +54,7 @@ else
     log_warn "requirements.txt not found."
 fi
 
-log_info "Installing youtube_uploader requirements..."
+log_info "Installing youtube_authenticate requirements..."
 pip install --force-reinstall -r youtube_authenticate/requirements.txt
 
 # 3. System Dependencies
