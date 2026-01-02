@@ -30,8 +30,6 @@ YOUTUBE_LIVE_ENABLED = get_env("YOUTUBE_LIVE_ENABLED", "false").lower() == "true
 YOUTUBE_RTMP_URL = get_env("YOUTUBE_RTMP_URL")
 YOUTUBE_GRID = int(get_env("YOUTUBE_GRID"))
 NUM_CHANNELS = int(get_env("NUM_CHANNELS"))
-ROTATION_HOURS = int(get_env("YOUTUBE_ROTATION_HOURS"))
-ROTATION_SECONDS = ROTATION_HOURS * 3600
 
 GO2RTC_RTSP_PORT = int(get_env("GO2RTC_RTSP_PORT"))
 GO2RTC_API_PORT = int(get_env("GO2RTC_API_PORT"))
@@ -88,7 +86,7 @@ class YouTubeStreamer:
         self.segment = 0
         self.video_id = None
         # Initialize Logger
-        self.logger = YouTubeLogger(recordings_dir=RECORD_DIR)
+        # self.logger = YouTubeLogger(recordings_dir=RECORD_DIR)
         # Stream health monitoring
         self.last_frame_time = None
         self.error_count = 0
@@ -301,7 +299,8 @@ class YouTubeStreamer:
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.STDOUT,  # Redirect stderr to stdout
                 text=True,
-                bufsize=1  # Line buffered
+                bufsize=1,  # Line buffered
+                start_new_session=True  # Create new process group so we can kill all children
             )
             self.start_time = time.time()
             self.start_datetime = datetime.now() # Capture valid start time
@@ -357,7 +356,11 @@ class YouTubeStreamer:
 
     def stop(self):
         if not self.process:
+            log.debug("stop() called but no process exists")
             return
+            
+        pid = self.process.pid
+        log.info(f"⏹ Stopping stream for cams {self.job.cameras} (PID: {pid})...")
             
         # --- LOG VOD to CSV (before clearing process) ---
         if self.video_id and self.start_datetime:
@@ -369,22 +372,47 @@ class YouTubeStreamer:
                  log.error(f"⚠️ Failed to log VOD to CSV: {e}")
         # -----------------------------------------------
 
-        log.info(f"⏹ Stopping stream for cams {self.job.cameras}...")
         try:
-            self.process.terminate()
+            # Step 1: Get process group ID
+            pgid = os.getpgid(pid)
+            log.info(f"📌 Process group ID: {pgid}")
+            
+            # Step 2: Send SIGTERM to entire process group
+            log.info(f"🔪 Sending SIGTERM to process group {pgid}...")
+            os.killpg(pgid, signal.SIGTERM)
+            
+            # Step 3: Wait for graceful shutdown
+            log.info(f"⏳ Waiting up to 10s for process to exit...")
             self.process.wait(timeout=10)
-        except:
-            self.process.kill()
+            log.info(f"✅ Process {pid} stopped gracefully")
+            
+        except subprocess.TimeoutExpired:
+            log.warning(f"⚠️ Process {pid} didn't exit in 10s, force killing...")
+            try:
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, signal.SIGKILL)
+                log.info(f"💀 Sent SIGKILL to process group {pgid}")
+            except Exception as e:
+                log.warning(f"killpg failed: {e}, killing process directly")
+                self.process.kill()
+                
+        except Exception as e:
+            log.warning(f"⚠️ Graceful stop failed: {e}, force killing...")
+            try:
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, signal.SIGKILL)
+                log.info(f"💀 Sent SIGKILL to process group {pgid}")
+            except Exception as e2:
+                log.warning(f"killpg failed: {e2}, killing process directly")
+                self.process.kill()
+                
         self.process = None
+        log.info(f"✅ Stream stopped for cams {self.job.cameras}")
 
     def is_running(self):
         return self.process and self.process.poll() is None
 
-    def needs_restart(self):
-        if not self.start_time:
-            return False
-        return (time.time() - self.start_time) >= ROTATION_SECONDS
-    
+
     def check_stream_health(self):
         """Check stream health without YouTube API"""
         if not self.is_running():
@@ -454,25 +482,19 @@ class StreamManager:
         for s in self.streamers:
             if not s.is_running():
                 log.warning(f"⚠️ Stream died: {s.job}")
-                log.info(f"🔄 Restarting stream in 5 seconds...")
-                time.sleep(5)
-                s.start()
-            elif s.needs_restart():
-                log.info(f"🔄 Scheduled rotation for stream: {s.job}")
-                s.stop()
-                time.sleep(5)
+                log.info(f"🔄 Restarting stream in 10 seconds...")
+                time.sleep(10)
                 s.start()
             elif not s.check_stream_health():
                 # YouTube rejected the stream or it's not live anymore
                 log.warning(f"⚠️ YouTube health check failed for {s.job}")
                 log.info(f"🔄 Restarting stream to recover...")
                 s.stop()
-                time.sleep(5)
+                time.sleep(10)
                 s.start()
             else:
-                # Check if stream has been running for a while (health check)
+                # Periodic health log
                 if s.start_time and (time.time() - s.start_time) > 300:  # 5 minutes
-                    # Periodic health log
                     uptime_mins = int((time.time() - s.start_time) / 60)
                     if uptime_mins % 30 == 0:  # Log every 30 minutes
                         log.info(f"💚 Stream healthy: {s.job} - Uptime: {uptime_mins} minutes")

@@ -87,7 +87,7 @@ def delete_recording(path: str = Query(..., description="Relative path to the re
 
 @router.post("/youtube/restart")
 def restart_youtube_stream():
-    """Restart the YouTube streaming service by signaling the process."""
+    """Restart the YouTube streaming service by killing its process group."""
     import signal
     
     try:
@@ -101,21 +101,30 @@ def restart_youtube_stream():
                 with open(cmdline_path, 'r') as f:
                     cmdline = f.read()
                 if 'youtube_stream.py' in cmdline:
-                    pids.append(pid_dir)
+                    pids.append(int(pid_dir))
             except (IOError, OSError):
                 continue  # Process may have ended
         
         if not pids:
             raise HTTPException(status_code=404, detail="YouTube stream service not running")
         
-        # Kill the process - it should auto-restart via monitor.sh
+        # Kill the process group (this kills Python + all FFmpeg children)
+        # monitor.sh will auto-restart the service
         for pid in pids:
             try:
-                os.kill(int(pid), signal.SIGTERM)
-            except ProcessLookupError:
-                pass  # Process already gone
+                # Kill entire process group
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, signal.SIGTERM)
+            except (ProcessLookupError, OSError):
+                # Fallback: kill just the process
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
         
-        return {"message": "YouTube stream restart initiated", "pids": pids}
+        return {"message": "YouTube stream restart initiated (process group killed)", "pids": pids}
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to restart: {e}")
