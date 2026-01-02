@@ -8,25 +8,20 @@ import os
 import sys
 import signal
 
-import time
-import subprocess
-
-from services.youtube_uploader import YouTubeUploaderService
-
 # Get directories
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# If script is in app/, Project Dir is parent
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 
-# Add current dir (app) to path so we can import services
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
-
-# Also add project dir for youtube_auto_pub if installed via git submodule/folder
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
 
 from core.config import settings
+from core.logger import setup_logger
+from services.youtube_uploader import YouTubeUploaderService
+
+log = setup_logger("yt_upload", "/logs/youtube_upload.log")
 
 def main():
     # Env loaded by settings

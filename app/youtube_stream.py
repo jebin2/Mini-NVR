@@ -24,7 +24,6 @@ import threading
 import re
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from services.youtube_video_sync import YouTubeVideoSync
 from core.config import settings
 
 # Env loaded automatically by importing config
@@ -430,7 +429,6 @@ class YouTubeStreamer:
 class StreamManager:
     def __init__(self):
         self.streamers = []
-        self.video_sync = YouTubeVideoSync(recordings_dir=settings.record_dir)
         
     def discover_config(self):
         # Get stream keys from settings (dict: {1: "key1", 2: "key2", ...})
@@ -536,10 +534,6 @@ def main():
     for s in manager.streamers:
         s.start()
         time.sleep(2)  # Stagger starts
-    
-    # Sync YouTube videos to CSV (non-blocking)
-    log.info("📺 Syncing YouTube videos to CSV...")
-    threading.Thread(target=manager.video_sync.sync_to_csv, daemon=True).start()
         
     log.info("All streams started. Monitoring...")
         

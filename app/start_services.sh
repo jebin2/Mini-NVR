@@ -20,10 +20,11 @@ declare -A SERVICE_CMD=(
     [cleanup]="python cleanup.py"
     [uploader]="python youtube_upload.py"
     [youtube_stream]="python youtube_stream.py"
+    [youtube_sync]="python youtube_sync.py"
 )
 
 # Order matters for startup
-SERVICES=(server recorder cleanup uploader youtube_stream)
+SERVICES=(server recorder cleanup uploader youtube_stream youtube_sync)
 
 # Per-service "should run?" checks
 is_enabled() {
@@ -31,6 +32,7 @@ is_enabled() {
     case $name in
         uploader)        [ "${YOUTUBE_UPLOAD_ENABLED}" = "true" ] ;;
         youtube_stream)  [ "${YOUTUBE_LIVE_ENABLED}" = "true" ] ;;
+        youtube_sync)    [ "${YOUTUBE_SYNC_ENABLED}" = "true" ] ;;
         *)               true ;;  # Core services always enabled
     esac
 }
@@ -125,12 +127,14 @@ log "Monitoring services..."
 while true; do
     current_time=$(date +%s)
     
-    # --- Auth File Handling ---
+    # --- Auth File Handling (only affects uploader and sync, not youtube_stream) ---
+    # youtube_stream uses stream keys (not OAuth), so it should keep running
     if [ -f "$AUTH_FILE" ]; then
-        if is_enabled uploader || is_enabled youtube_stream; then
-            log "🔐 Auth required. Pausing YouTube services..."
+        # Check if any OAuth-dependent service is enabled
+        if is_enabled uploader || is_enabled youtube_sync; then
+            log "🔐 Auth required. Pausing OAuth services (uploader, sync)..."
             stop_service uploader
-            stop_service youtube_stream
+            stop_service youtube_sync
             
             if python3 trigger_auth.py; then
                 log "✅ Auth success!"
@@ -138,6 +142,10 @@ while true; do
             else
                 log "❌ Auth failed, retrying next loop..."
             fi
+        else
+            # No OAuth services enabled, just remove the auth file
+            log "🔐 Auth file found but no OAuth services enabled. Removing..."
+            rm -f "$AUTH_FILE"
         fi
         sleep 5
         continue

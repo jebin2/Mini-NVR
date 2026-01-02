@@ -13,7 +13,7 @@ from typing import List, Optional
 from youtube_auto_pub import VideoMetadata
 from services.youtube_accounts import YouTubeAccountManager
 
-logger = logging.getLogger("yt_uploader")
+logger = logging.getLogger("yt_upload")
 
 
 class YouTubeUploaderService:

@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import List, Dict, Set
 from services.youtube_accounts import YouTubeAccountManager
 
-logger = logging.getLogger("yt_video_sync")
+logger = logging.getLogger("yt_sync.video_sync")
 
 
 class YouTubeVideoSync:
