@@ -118,6 +118,7 @@ def authenticate_account(account: Dict) -> bool:
             google_email=account.get("google_email"),
             google_password=account.get("google_password"),
             project_path=PROJECT_DIR,
+            local_client_secret_path=client_secret_path,
             client_secret_filename=client_filename,
             token_filename=token_filename
         )
