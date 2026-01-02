@@ -10,6 +10,7 @@ Logs:  logs/reauth.log
 """
 
 import os
+import io
 import sys
 import shutil
 from typing import Dict
@@ -28,7 +29,50 @@ from app.core.config import settings
 from app.core.logger import setup_logger
 from youtube_auto_pub import YouTubeConfig, YouTubeUploader
 
-logger = setup_logger("reauth", LOG_FILE)
+
+class LoggerWriter(io.TextIOBase):
+    """
+    Writer that redirects output to both a stream (stdout/stderr) and a log file.
+    Does NOT add timestamps or log levels to the file output to preserve
+    clean output from tools like youtube_auto_pub that use print().
+    """
+    def __init__(self, stream, log_file_path):
+        super().__init__()
+        self.stream = stream
+        self.log_file_path = log_file_path
+        self._encoding = getattr(stream, 'encoding', 'utf-8')
+
+        # Ensure directory exists
+        if log_file_path:
+            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+
+    @property
+    def encoding(self):
+        return self._encoding
+
+    def write(self, data):
+        # Write to original stream (console)
+        self.stream.write(data)
+        self.stream.flush()
+
+        # Write to log file
+        if self.log_file_path:
+            try:
+                with open(self.log_file_path, 'a', encoding='utf-8') as f:
+                    f.write(data)
+            except Exception:
+                pass  # Ignore logging errors to avoid crashes
+
+    def flush(self):
+        self.stream.flush()
+
+
+# Redirect stdout and stderr
+sys.stdout = LoggerWriter(sys.stdout, LOG_FILE)
+sys.stderr = LoggerWriter(sys.stderr, LOG_FILE)
+
+# Setup logger without file handler (since we capture stdout)
+logger = setup_logger("reauth", log_file="")
 
 
 def authenticate_account(account: Dict) -> bool:
