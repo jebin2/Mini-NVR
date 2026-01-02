@@ -74,7 +74,7 @@ class BackgroundConverter(threading.Thread):
                 cmd, 
                 capture_output=True, 
                 text=True, 
-                timeout=300
+                timeout=1800
             )
 
         # Attempt 1: Standard conversion
