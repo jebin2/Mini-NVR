@@ -94,8 +94,8 @@ def authenticate_account(account: Dict) -> bool:
             has_display=True,
             headless_mode=False,
             docker_name=docker_name,
-            google_email=settings.google_email,
-            google_password=settings.google_password,
+            google_email=account.get("google_email"),
+            google_password=account.get("google_password"),
             project_path=PROJECT_DIR,
             client_secret_filename=client_filename,
             token_filename=token_filename

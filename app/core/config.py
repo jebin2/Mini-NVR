@@ -91,8 +91,6 @@ class Settings:
     yt_encrypt_key: str = field(default_factory=lambda: get_env("YT_ENCRYP_KEY"))
     project_dir: str = field(default_factory=lambda: get_env("PROJECT_DIR"))
     ssh_host_user: str = field(default_factory=lambda: get_env("SSH_HOST_USER", "jebin"))
-    google_email: str = field(default_factory=lambda: get_env("GOOGLE_EMAIL"))
-    google_password: str = field(default_factory=lambda: get_env("GOOGLE_PASSWORD"))
 
     # Keys
     youtube_stream_keys: Dict[int, str] = field(init=False)
@@ -113,7 +111,7 @@ class Settings:
             if key:
                 self.youtube_stream_keys[i] = key
                 
-        # YouTube Accounts
+        # YouTube Accounts (with per-account credentials)
         self.youtube_accounts = []
         i = 1
         while True:
@@ -121,7 +119,13 @@ class Settings:
             t = get_env(f"YOUTUBE_TOKEN_PATH_{i}")
             if not s or not t:
                 break
-            self.youtube_accounts.append({"id": i, "client_secret": s, "token_path": t})
+            self.youtube_accounts.append({
+                "id": i,
+                "client_secret": s,
+                "token_path": t,
+                "google_email": get_env(f"GOOGLE_EMAIL_{i}"),
+                "google_password": get_env(f"GOOGLE_PASSWORD_{i}")
+            })
             i += 1
         
         # Secret Key

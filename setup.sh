@@ -54,12 +54,8 @@ else
     log_warn "requirements.txt not found."
 fi
 
-if [ -f "youtube_uploader/requirements.txt" ]; then
-    log_info "Installing youtube_uploader requirements..."
-    pip install --force-reinstall -r youtube_uploader/requirements.txt
-else
-    log_warn "youtube_uploader/requirements.txt not found."
-fi
+log_info "Installing youtube_uploader requirements..."
+pip install --force-reinstall -r youtube_authenticate/requirements.txt
 
 # 3. System Dependencies
 log_info "Checking system dependencies..."
