@@ -420,18 +420,19 @@ class NVRUploaderService:
             return False
 
     def _log_upload_to_csv(self, batch: VideoBatch, video_id: str):
-        """Log successful upload to CSV file."""
-        csv_path = os.path.join(self.recordings_dir, "youtube_uploads.csv")
+        """Log successful upload to per-day CSV file."""
         youtube_url = f"https://youtube.com/watch?v={video_id}"
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
+            # Get info from the single file
+            info = self._parse_video_path(batch.files[0])
+            
+            # Per-day CSV file: youtube_uploads_YYYY-MM-DD.csv
+            csv_path = os.path.join(self.recordings_dir, f"youtube_uploads_{batch.date}.csv")
+            
             with open(csv_path, 'a') as f:
-                # Get info from the single file
-                info = self._parse_video_path(batch.files[0])
-                
                 # CSV Format: Channel, Date, Time, YouTubeURL, UploadTimestamp
-                # e.g. "Channel 1,2025-05-20,08:00:00,https://youtube.com/watch?v=xxx,2025-05-21 10:00:00"
                 line = f"{batch.channel},{batch.date},{info['time']},{youtube_url},{timestamp}\n"
                 f.write(line)
                     

@@ -17,7 +17,7 @@ import threading
 import re
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from services.youtube_logger import YouTubeLogger
+from services.youtube_video_sync import YouTubeVideoSync
 from core import config
 
 # ============================================
@@ -85,9 +85,6 @@ class YouTubeStreamer:
         self.start_time = None
         self.start_datetime = None
         self.segment = 0
-        self.video_id = None
-        # Initialize Logger
-        # self.logger = YouTubeLogger(recordings_dir=RECORD_DIR)
         # Stream health monitoring
         self.last_frame_time = None
         self.error_count = 0
@@ -352,18 +349,6 @@ class YouTubeStreamer:
                 
             log.info(f"🎉 Stream should be LIVE now on YouTube!")
             
-            # --- LOG LIVE STREAM to CSV ---
-            channel_name = f"Channel {self.job.cameras[0]}"
-            try:
-                self.video_id = self.logger.get_live_video_id()
-                if self.video_id:
-                     self.logger.log_live(channel_name, self.start_datetime, self.video_id)
-                else:
-                     log.warning("⚠️ Could not fetch live video ID (API might say 'incorrect broadcast status')")
-            except Exception as e:
-                log.error(f"⚠️ Failed to log live stream to CSV: {e}")
-            # -----------------------------
-            
             return True
             
         except Exception as e:
@@ -377,15 +362,6 @@ class YouTubeStreamer:
             
         pid = self.process.pid
         log.info(f"⏹ Stopping stream for cams {self.job.cameras} (PID: {pid})...")
-            
-        # --- LOG VOD to CSV (before clearing process) ---
-        if self.video_id and self.start_datetime:
-             channel_name = f"Channel {self.job.cameras[0]}"
-             try:
-                 self.logger.log_vod(channel_name, self.start_datetime, datetime.now(), self.video_id)
-                 log.info(f"📝 Logged VOD for {channel_name} (ID: {self.video_id})")
-             except Exception as e:
-                 log.error(f"⚠️ Failed to log VOD to CSV: {e}")
         # -----------------------------------------------
 
         try:
@@ -463,6 +439,7 @@ class YouTubeStreamer:
 class StreamManager:
     def __init__(self):
         self.streamers = []
+        self.video_sync = YouTubeVideoSync(recordings_dir=RECORD_DIR)
         
     def discover_config(self):
         keys = []
@@ -574,6 +551,10 @@ def main():
     for s in manager.streamers:
         s.start()
         time.sleep(2)  # Stagger starts
+    
+    # Sync YouTube videos to CSV (non-blocking)
+    log.info("📺 Syncing YouTube videos to CSV...")
+    threading.Thread(target=manager.video_sync.sync_to_csv, daemon=True).start()
         
     log.info("All streams started. Monitoring...")
         

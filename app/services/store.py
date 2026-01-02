@@ -101,21 +101,28 @@ def get_available_dates(channel=None):
     return sorted(list(dates), reverse=True)
 
 def load_youtube_map():
-    """Load YouTube uploads CSV into a dictionary: rel_path -> url."""
+    """Load YouTube uploads from all daily CSV files into a dictionary: rel_path -> url."""
+    import glob as glob_module
     mapping = {}
-    csv_path = os.path.join(config.RECORD_DIR, "youtube_uploads.csv")
-    if os.path.exists(csv_path):
+    
+    # Scan all youtube_uploads_*.csv files (per-day format)
+    pattern = os.path.join(config.RECORD_DIR, "youtube_uploads_*.csv")
+    csv_files = glob_module.glob(pattern)
+    
+    for csv_path in csv_files:
         try:
             with open(csv_path, 'r') as f:
                 for line in f:
                     parts = line.strip().split(',')
-                    if len(parts) >= 3:
-                        # Format: path, id, url, timestamp
+                    if len(parts) >= 4:
+                        # Format: Channel,Date,Time,URL,Status
+                        url = parts[3]
+                        # Use channel/date/time as key
                         rel_path = parts[0]
-                        url = parts[2]
                         mapping[rel_path] = url
         except Exception as e:
-            logger.error(f"Failed to load youtube map: {e}")
+            logger.error(f"Failed to load youtube map from {csv_path}: {e}")
+    
     return mapping
 
 def get_recordings_for_date(ch, date):
