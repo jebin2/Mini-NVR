@@ -46,11 +46,11 @@ class YouTubeVideoSync:
             logger.error(f"Account {account.account_id}: No valid service")
             # Create trigger file for main loop
             try:
-                with open("app/need_auth.info", "w") as f:
+                with open("need_auth.info", "w") as f:
                     f.write(f"Account {account.account_id}")
             except Exception as e:
                 logger.error(f"Failed to create need_auth.info: {e}")
-                exit(0)
+            return []
         
         try:
             # Get uploads playlist ID
