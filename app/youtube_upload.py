@@ -7,7 +7,11 @@ Wraps app.services.youtube_uploader.YouTubeUploaderService
 import os
 import sys
 import signal
+
 import time
+import subprocess
+
+from services.youtube_uploader import YouTubeUploaderService
 
 # Get directories
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -46,15 +50,6 @@ def main():
     if os.environ.get("YOUTUBE_UPLOAD_ENABLED", "false").lower() != "true":
         print("[NVR Uploader] YouTube upload is disabled (YOUTUBE_UPLOAD_ENABLED != true)")
         return
-
-    # Import service AFTER path setup
-    try:
-        from services.youtube_uploader import YouTubeUploaderService
-    except ImportError as e:
-        print(f"[NVR Uploader] ❌ Failed to import service: {e}")
-        # Debug: print sys.path
-        print(f"sys.path: {sys.path}")
-        sys.exit(1)
 
     # Config
     # RECORD_DIR is /recordings in Docker, fallback to project_dir/recordings on host

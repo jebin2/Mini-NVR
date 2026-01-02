@@ -124,7 +124,13 @@ class YouTubeUploaderService:
         service = account.get_service()
         if not service:
             logger.error(f"Account {account.account_id}: No valid service")
-            return None
+            # Create trigger file for main loop
+            try:
+                with open("app/need_auth.info", "w") as f:
+                    f.write(f"Account {account.account_id}")
+            except Exception as e:
+                logger.error(f"Failed to create need_auth.info: {e}")
+                exit(0)
         
         info = self._parse_video_path(video_path)
         duration = self._get_video_duration(video_path)

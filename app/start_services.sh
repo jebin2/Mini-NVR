@@ -10,7 +10,7 @@ log_message() {
 
 # Define services
 NAMES=("server" "recorder" "cleanup" "uploader" "youtube_stream")
-CMDS=("python server.py" "python recorder.py" "python cleanup.py" "python youtube_uploader/main.py" "python youtube_stream.py")
+CMDS=("python server.py" "python recorder.py" "python cleanup.py" "python youtube_upload.py" "python youtube_stream.py")
 PIDS=()
 START_TIMES=()
 
@@ -142,11 +142,18 @@ while true; do
         
         # Check if service died
         if ! kill -0 "$pid" 2>/dev/null; then
-            log_message "WARNING: Service $name (PID $pid) died. Restarting in 10s..."
-            sleep 10
-            start_service $i
-            new_pid=${PIDS[$i]}
-            log_message "Restarted $name with new PID $new_pid"
+            # If auth file exists, do not restart YouTube services
+            if [ -f "need_auth.info" ] && { [ "$name" = "uploader" ] || [ "$name" = "youtube_stream" ]; }; then
+                # Log only once per loop/state? To avoid spam, maybe nothing or debug
+                # We already log "Pausing..." in the auth block below
+                :
+            else
+                log_message "WARNING: Service $name (PID $pid) died. Restarting in 10s..."
+                sleep 10
+                start_service $i
+                new_pid=${PIDS[$i]}
+                log_message "Restarted $name with new PID $new_pid"
+            fi
         fi
         
         # Special handling for youtube_stream: scheduled restart
@@ -168,5 +175,35 @@ while true; do
         fi
     done
     
+    # Auth Handling
+    # Check if auth is required (file created by uploader on failure)
+    # The file is expected at app/need_auth.info (relative to project root?), but we are in /app so it is check ./need_auth.info
+    AUTH_FILE="need_auth.info"
+    
+    if [ -f "$AUTH_FILE" ]; then
+        log_message "🔐 Auth flag found ($AUTH_FILE). Pausing YouTube services..."
+        
+        # Stop YouTube services if running
+        for i in "${!NAMES[@]}"; do
+            name=${NAMES[$i]}
+            if [ "$name" = "uploader" ] || [ "$name" = "youtube_stream" ]; then
+                stop_service $i
+            fi
+        done
+        
+        log_message "Triggering SSH reauth..."
+        if python3 trigger_auth.py; then
+            log_message "✅ Auth trigger success! Removing flag and resuming..."
+            rm -f "$AUTH_FILE"
+        else
+            log_message "❌ Auth trigger failed. Will retry next loop."
+        fi
+        
+    else
+        # Normal Operation: Ensure services are running
+        # (The loop below restarts them if they are stopped and file doesn't exist)
+        : # Do nothing here, let the restart logic handle it
+    fi
+
     sleep 5
 done
