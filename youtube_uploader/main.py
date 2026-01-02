@@ -426,23 +426,13 @@ class NVRUploaderService:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # Check if file exists to write header (optional, but good practice)
-            file_exists = os.path.exists(csv_path)
-            
             with open(csv_path, 'a') as f:
-                # Format: channel,date,start_time,end_time,video_id,video_url,timestamp
-                # We log ONE row per merged video
+                # Get info from the single file
+                info = self._parse_video_path(batch.files[0])
                 
-                # Get start time from first file and end time from last file
-                first_info = self._parse_video_path(batch.files[0])
-                last_info = self._parse_video_path(batch.files[-1])
-                
-                start_time = first_info['time']
-                end_time = last_info['time']
-                
-                # CSV Format: Channel, Date, TimeRange, YouTubeURL, Timestamp
-                # e.g. "Channel 1,2025-05-20,08:00:00-09:00:00,https://youtu.be/...,2025-05-21 10:00:00"
-                line = f"{batch.channel},{batch.date},{start_time}-{end_time},{youtube_url},{timestamp}\n"
+                # CSV Format: Channel, Date, Time, YouTubeURL, UploadTimestamp
+                # e.g. "Channel 1,2025-05-20,08:00:00,https://youtube.com/watch?v=xxx,2025-05-21 10:00:00"
+                line = f"{batch.channel},{batch.date},{info['time']},{youtube_url},{timestamp}\n"
                 f.write(line)
                     
             self.log(f"[NVR Uploader] 📝 Logged to CSV: {video_id}")
