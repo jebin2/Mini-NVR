@@ -204,16 +204,51 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
         if (!isDragging || scrubberTime === null) return
         setIsDragging(false)
 
-        // Simply send the clicked time to server - server handles all gap logic
-        // Server will return gap.ts filler for empty spaces, or actual segments if available
-        const h = Math.floor(scrubberTime / 3600)
-        const m = Math.floor((scrubberTime % 3600) / 60)
-        const s = Math.floor(scrubberTime % 60)
-        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+        // Helper to format seconds as HH:MM:SS
+        const formatTime = (sec: number) => {
+            const h = Math.floor(sec / 3600)
+            const m = Math.floor((sec % 3600) / 60)
+            const s = Math.floor(sec % 60)
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+        }
 
-        const url = getPlaylistUrl(camId, date, timeStr)
-        onPlayHls(getJellyJumpUrl(window.location.origin + url))
-    }, [isDragging, scrubberTime, camId, date, onPlayHls])
+        // Find segment at this time
+        let found: Segment | null = null
+        for (const seg of segments) {
+            const start = parseTime(seg.time)
+            const end = start + seg.duration
+            if (scrubberTime >= start && scrubberTime < end) {
+                found = seg
+                break
+            }
+        }
+
+        if (found) {
+            // Play from this segment
+            const url = getPlaylistUrl(camId, date, found.time)
+            onPlayHls(getJellyJumpUrl(window.location.origin + url))
+        } else {
+            // No segment at this time - check if there's a next segment
+            const nextSeg = segments.find(s => parseTime(s.time) > scrubberTime)
+
+            if (nextSeg) {
+                // Gap before a future segment
+                const nextTime = formatTime(parseTime(nextSeg.time))
+                const ok = window.confirm(`No video available at this time.\n\nNext recording available at ${nextTime}.\n\nClick OK to jump to next recording.`)
+                if (ok) {
+                    const url = getPlaylistUrl(camId, date, nextSeg.time)
+                    onPlayHls(getJellyJumpUrl(window.location.origin + url))
+                    setScrubberTime(parseTime(nextSeg.time))
+                }
+            } else {
+                // No future segments - go to live
+                const ok = window.confirm(`No video available at this time.\n\nClick OK to switch to live view.`)
+                if (ok) {
+                    onPlayLive()
+                }
+            }
+        }
+    }, [isDragging, scrubberTime, segments, camId, date, onPlayHls, onPlayLive])
 
     // Build visible coverage blocks
     const coverageBlocks = (() => {

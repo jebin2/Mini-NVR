@@ -123,26 +123,10 @@ def generate_m3u8_playlist(segments: list[dict], base_url: str, start_dt: dateti
     Returns:
         M3U8 playlist content as string
     """
-    # Pre-calculated gap segment info
-    gap_url = "/assets/gap.ts"
-    gap_duration = 1.0
-    
     if not segments:
-        # No segments - return a short "No Video" playlist using gap.ts
-        # This prevents the player from being stuck on empty
-        lines = [
-            "#EXTM3U",
-            "#EXT-X-VERSION:3",
-            f"#EXT-X-TARGETDURATION:{int(gap_duration) + 1}",
-            "#EXT-X-MEDIA-SEQUENCE:0",
-            "#EXT-X-PLAYLIST-TYPE:VOD",
-        ]
-        # Add gap segments with unique index to avoid HLS.js deduplication
-        for i in range(5):  # 5 seconds of "No Video"
-            lines.append(f"#EXTINF:{gap_duration},")
-            lines.append(f"{gap_url}?i={i}")  # Unique URL for each segment
-        lines.append("#EXT-X-ENDLIST")
-        return "\n".join(lines)
+        # No segments - return empty playlist
+        # Client-side handles informing user about no recordings
+        return "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:0\n#EXT-X-ENDLIST\n"
     
     # Calculate max duration for TARGETDURATION header
     max_duration = max(s["duration"] for s in segments)
@@ -156,44 +140,16 @@ def generate_m3u8_playlist(segments: list[dict], base_url: str, start_dt: dateti
     ]
     
     last_end_time = None
-    GAP_THRESHOLD = 1.5 # Seconds
+    GAP_THRESHOLD = 1.5  # Seconds
 
     for seg in segments:
         current_start = seg["datetime"]
         
-        # Check for initial gap (between requested start and first segment)
-        if start_dt and not last_end_time:
-            if start_dt < current_start:
-                gap_seconds = (current_start - start_dt).total_seconds()
-                
-                # We always fill the initial gap if it exists, to match requested start time
-                num_fillers = int(gap_seconds // gap_duration)
-                
-                if num_fillers > 0:
-                    lines.append(f"#EXT-X-PROGRAM-DATE-TIME:{start_dt.isoformat()}")
-                    for _ in range(num_fillers):
-                        lines.append(f"#EXTINF:{gap_duration},")
-                        lines.append(gap_url)
-                    lines.append("#EXT-X-DISCONTINUITY")
-        
-        # Check for gap between segments
+        # Check for gap between segments - just mark discontinuity, no filler
         if last_end_time:
             gap_seconds = (current_start - last_end_time).total_seconds()
             
             if gap_seconds > GAP_THRESHOLD:
-                # Insert Discontinuity
-                lines.append("#EXT-X-DISCONTINUITY")
-                
-                # Fill gap with repeated gap.ts segments
-                # We fill slightly less than full gap to avoid overlapping next segment
-                num_fillers = int(gap_seconds // gap_duration)
-                
-                if num_fillers > 0:
-                    for _ in range(num_fillers):
-                        lines.append(f"#EXTINF:{gap_duration},")
-                        lines.append(gap_url)
-                
-                # Insert Discontinuity before resuming real video
                 lines.append("#EXT-X-DISCONTINUITY")
 
         # Add real segment
