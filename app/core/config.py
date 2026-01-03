@@ -85,7 +85,6 @@ class Settings:
     # --- YouTube Upload ---
     youtube_video_privacy: str = field(default_factory=lambda: get_env("YOUTUBE_VIDEO_PRIVACY", "unlisted"))
     youtube_delete_after_upload: bool = field(default_factory=lambda: get_env("YOUTUBE_DELETE_AFTER_UPLOAD", "false").lower() == "true")
-    youtube_upload_interval: int = field(default_factory=lambda: int(get_env("YOUTUBE_UPLOAD_INTERVAL", "60")))
     youtube_upload_batch_size_mb: int = field(default_factory=lambda: int(get_env("YOUTUBE_UPLOAD_BATCH_SIZE_MB", "50")))
     
     # --- Compressor ---

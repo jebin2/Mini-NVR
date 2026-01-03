@@ -2,6 +2,7 @@
 YouTube Uploader Service
 Uploads NVR recordings to YouTube using CSV-based tracking.
 Batches consecutive TS segments by channel and uploads when threshold is reached.
+Processes channels round-robin style - one batch per channel per iteration.
 """
 
 import os
@@ -31,13 +32,11 @@ class YouTubeUploaderService:
         recordings_dir: str = "/recordings",
         privacy_status: str = "unlisted",
         delete_after_upload: bool = False,
-        scan_interval: int = 60,
         batch_size_mb: int = 50
     ):
         self.recordings_dir = recordings_dir
         self.privacy_status = privacy_status
         self.delete_after_upload = delete_after_upload
-        self.scan_interval = scan_interval
         self.batch_size_mb = batch_size_mb
         self.manager = YouTubeAccountManager()
         self._running = False
@@ -253,35 +252,27 @@ class YouTubeUploaderService:
         
         return None
     
-    def _find_upload_batches(self) -> List[List[dict]]:
+    def _get_batch_for_channel(self, rows: List[dict]) -> Optional[List[dict]]:
         """
-        Find batches of consecutive segments ready for upload.
-        Returns list of batches, each batch is a list of row dicts.
+        Get a batch ready for upload from a channel's pending rows.
+        Returns batch if cumulative size >= threshold, None otherwise.
         """
-        batches = []
-        pending_by_channel = get_pending_by_channel()
+        batch = []
+        total_size = 0.0
         
-        for channel, rows in pending_by_channel.items():
-            current_batch = []
-            current_size = 0.0
+        for row in rows:
+            size = float(row.get("size_mb", 0))
+            batch.append(row)
+            total_size += size
             
-            for row in rows:
-                size = float(row.get("size_mb", 0))
-                current_batch.append(row)
-                current_size += size
-                
-                if current_size >= self.batch_size_mb:
-                    batches.append(current_batch)
-                    current_batch = []
-                    current_size = 0.0
-            
-            # Don't add incomplete batches - wait for more segments
-            # (optional: could add if batch is old enough)
+            if total_size >= self.batch_size_mb:
+                return batch
         
-        return batches
+        # Not enough for a batch yet
+        return None
     
     def run(self):
-        """Main upload loop."""
+        """Main upload loop - runs continuously, round-robin through channels."""
         self._running = True
         logger.info("=" * 50)
         logger.info("YouTube Uploader Service Started")
@@ -292,32 +283,34 @@ class YouTubeUploaderService:
         
         while self._running:
             try:
-                batches = self._find_upload_batches()
+                pending_by_channel = get_pending_by_channel()
+                uploaded_any = False
                 
-                if batches:
-                    logger.info(f"Found {len(batches)} batches ready for upload")
-                
-                for batch in batches:
+                # Round-robin through channels
+                for channel in sorted(pending_by_channel.keys()):
                     if not self._running:
                         break
                     
-                    self._upload_batch(batch)
+                    rows = pending_by_channel[channel]
+                    batch = self._get_batch_for_channel(rows)
                     
-                    # Small delay between uploads
-                    time.sleep(5)
+                    if batch:
+                        logger.info(f"Processing {channel}: {len(batch)} segments")
+                        self._upload_batch(batch)
+                        uploaded_any = True
+                        # Move to next channel after one batch
                 
                 # Delete uploaded files if configured
                 if self.delete_after_upload:
                     delete_uploaded_files(self.recordings_dir)
+                
+                # If nothing was uploaded, short sleep before next scan
+                if not uploaded_any:
+                    time.sleep(5)
                     
             except Exception as e:
                 logger.error(f"Scan error: {e}")
-            
-            # Sleep with early exit check
-            for _ in range(self.scan_interval):
-                if not self._running:
-                    break
-                time.sleep(1)
+                time.sleep(5)
         
         logger.info("YouTube Uploader Service Stopped")
     

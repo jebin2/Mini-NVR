@@ -37,7 +37,6 @@ def main():
         recordings_dir=settings.record_dir,
         privacy_status=settings.youtube_video_privacy,
         delete_after_upload=settings.youtube_delete_after_upload,
-        scan_interval=settings.youtube_upload_interval,
         batch_size_mb=settings.youtube_upload_batch_size_mb
     )
     
