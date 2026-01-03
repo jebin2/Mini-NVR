@@ -204,38 +204,16 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
         if (!isDragging || scrubberTime === null) return
         setIsDragging(false)
 
-        // Find segment at this time
-        let found: Segment | null = null
-        for (const seg of segments) {
-            const start = parseTime(seg.time)
-            const end = start + seg.duration
-            if (scrubberTime >= start && scrubberTime < end) {
-                found = seg
-                break
-            }
-        }
+        // Simply send the clicked time to server - server handles all gap logic
+        // Server will return gap.ts filler for empty spaces, or actual segments if available
+        const h = Math.floor(scrubberTime / 3600)
+        const m = Math.floor((scrubberTime % 3600) / 60)
+        const s = Math.floor(scrubberTime % 60)
+        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
 
-        if (found) {
-            const url = getPlaylistUrl(camId, date, found.time)
-            onPlayHls(getJellyJumpUrl(window.location.origin + url))
-        } else {
-            // Check if there is a future segment
-            // We need to verify if we are in a gap BEFORE a segment
-            const nextSeg = segments.find(s => parseTime(s.time) > scrubberTime)
-
-            if (nextSeg) {
-                // We are in a gap before a segment. Play from this exact time.
-                // Format time as HH:MM:SS for api
-                const h = Math.floor(scrubberTime / 3600)
-                const m = Math.floor((scrubberTime % 3600) / 60)
-                const s = Math.floor(scrubberTime % 60)
-                const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-
-                const url = getPlaylistUrl(camId, date, timeStr)
-                onPlayHls(getJellyJumpUrl(window.location.origin + url))
-            }
-        }
-    }, [isDragging, scrubberTime, segments, camId, date, onPlayHls])
+        const url = getPlaylistUrl(camId, date, timeStr)
+        onPlayHls(getJellyJumpUrl(window.location.origin + url))
+    }, [isDragging, scrubberTime, camId, date, onPlayHls])
 
     // Build visible coverage blocks
     const coverageBlocks = (() => {
