@@ -179,7 +179,9 @@ def serve_assets(path: str):
         return FileResponse(vite_assets_path, media_type=media_type)
 
     # Check if file exists in App Assets (e.g. gap.ts)
-    app_assets_path = os.path.join("app/assets", path)
+    # Use path relative to this script file to ensure compatibility in Docker and Local
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    app_assets_path = os.path.join(current_dir, "assets", path)
     if os.path.exists(app_assets_path):
         media_type = "application/octet-stream"
         if path.endswith(".ts"):
