@@ -20,16 +20,16 @@ function App() {
   // Show login if not authenticated
   if (!user) {
     return (
-      <div className="login-container" style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        gap: '20px'
-      }}>
-        <h1>Mini-NVR Login</h1>
-        <GoogleSignInButton width={300} />
+      <div className="login-wrapper">
+        <div className="login-card">
+          <div className="login-header">
+            <h2>📺 See Me</h2>
+            <p>NVR System Authentication</p>
+          </div>
+          <div className="login-content">
+            <GoogleSignInButton width={300} />
+          </div>
+        </div>
       </div>
     )
   }

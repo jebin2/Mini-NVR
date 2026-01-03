@@ -1,68 +1,272 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;700&display=swap');
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* Deep Void Theme Palette */
+  --bg-dark: #050508;
+  --bg-gradient: radial-gradient(circle at top center, #1a1b26 0%, #050508 100%);
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* Glassmorphism */
+  --glass-bg: rgba(22, 23, 30, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+  --glass-blur: blur(12px);
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  /* Accents - Electric Cyan & Rose */
+  --primary: #00f2ff;
+  --primary-dim: rgba(0, 242, 255, 0.15);
+  --primary-glow: 0 0 20px rgba(0, 242, 255, 0.4);
+
+  --secondary: #7000ff;
+
+  --success: #00ffa3;
+  --danger: #ff0055;
+
+  /* Text */
+  --text-main: #ffffff;
+  --text-muted: #94a3b8;
+
+  /* Spacing */
+  --header-height: 70px;
+  --border-radius: 16px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  background: var(--bg-dark);
+  background-image: var(--bg-gradient);
+  color: var(--text-main);
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 242, 255, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(0, 242, 255, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 242, 255, 0);
+  }
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+}
+
+/* Buttons */
+.btn {
+  padding: 10px 20px;
+  border-radius: 12px;
+  border: none;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'Outfit', sans-serif;
 }
 
-@media (prefers-color-scheme: light) {
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  border: 1px solid var(--glass-border);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-live {
+  background: linear-gradient(135deg, #ff0055 0%, #cc0044 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 15px rgba(255, 0, 85, 0.3);
+}
+
+.btn-live:hover {
+  box-shadow: 0 6px 20px rgba(255, 0, 85, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Form Elements */
+select,
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text-main);
+  border: 1px solid var(--glass-border);
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  cursor: text;
+  transition: 0.2s;
+  width: 100%;
+}
+
+select:hover,
+input:hover {
+  border-color: var(--text-muted);
+}
+
+select:focus,
+input:focus {
+  border-color: var(--primary);
+  background: rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 2px rgba(0, 242, 255, 0.1);
+}
+
+/* Login Page Styles */
+.login-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.login-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 40px;
+  border-radius: 24px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: center;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.login-header h2 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 2rem;
+  background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 8px;
+}
+
+.login-header p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.login-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.error-msg {
+  color: var(--danger);
+  font-size: 0.85rem;
+  min-height: 20px;
+  margin-top: 10px;
+}
+
+/* Loading Screen */
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 20px;
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Utility Classes */
+.hidden {
+  display: none !important;
+}
+
+.desktop-only {
+  display: inline-flex;
+}
+
+@media screen and (max-width: 768px) {
   :root {
-    color: #213547;
-    background-color: #ffffff;
+    --header-height: 64px;
+    --border-radius: 12px;
   }
-  a:hover {
-    color: #747bff;
+
+  .desktop-only {
+    display: none !important;
   }
-  button {
-    background-color: #f9f9f9;
+
+  .login-card {
+    padding: 30px 24px;
   }
 }

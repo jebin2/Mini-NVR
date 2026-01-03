@@ -638,7 +638,7 @@ input:focus {
     }
 
     .cam-card {
-        aspect-ratio: 16/9;
+        aspect-ratio: 16/12;
     }
 
     /* Expanded view optimizations */

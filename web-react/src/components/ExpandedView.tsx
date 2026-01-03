@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Channel, fetchDates, fetchRecordings, Recording } from '../services/api'
-import { getWebRTCUrl } from '../services/go2rtc'
+import { getWebRTCUrl, getHlsApiUrl, getJellyJumpUrl, isMobile } from '../services/go2rtc'
 import Timeline from './Timeline'
 import Playlist from './Playlist'
 import './ExpandedView.css'
@@ -16,8 +16,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const [recordings, setRecordings] = useState<Recording[]>([])
     const [currentIndex, setCurrentIndex] = useState(-1)
     const [isLive, setIsLive] = useState(true)
-
-
 
     useEffect(() => {
         loadDates()
@@ -56,15 +54,59 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     }
 
     function playClip(index: number) {
+        const rec = recordings[index]
+        if (!rec) return
+
+        // For LIVE segment on MOBILE: auto-play via WebRTC directly
+        if (rec.live && isMobile()) {
+            playLive()
+            return
+        }
+
         setIsLive(false)
         setCurrentIndex(index)
     }
 
-    const videoSrc = isLive
-        ? getWebRTCUrl(camId)
-        : recordings[currentIndex]?.name
-            ? `/recordings/${recordings[currentIndex].name}`
-            : ''
+    /**
+     * Get the iframe source URL for the current video
+     */
+    function getVideoSrc(): string {
+        if (isLive) {
+            // go2rtc WebRTC stream for LIVE
+            return getWebRTCUrl(camId)
+        }
+
+        const rec = recordings[currentIndex]
+        if (!rec) return ''
+
+        // Handle Cloud Only recordings
+        if (rec.size === 'Cloud Only') {
+            if (rec.youtube_url) {
+                try {
+                    const urlObj = new URL(rec.youtube_url)
+                    const videoId = urlObj.searchParams.get('v')
+                    if (videoId) {
+                        return `https://www.youtube.com/embed/${videoId}?autoplay=1`
+                    }
+                } catch (e) {
+                    console.error('Invalid YouTube URL', rec.youtube_url)
+                }
+            }
+            return ''
+        }
+
+        // For LIVE recording segment, use HLS via JellyJump
+        if (rec.live) {
+            const hlsUrl = getHlsApiUrl(camId)
+            return getJellyJumpUrl(hlsUrl)
+        }
+
+        // For local recordings, use JellyJump embed
+        const recordingUrl = `${window.location.origin}/recordings/${rec.name}`
+        return getJellyJumpUrl(recordingUrl)
+    }
+
+    const videoSrc = getVideoSrc()
 
     return (
         <div className="expanded-view">
@@ -80,23 +122,16 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                         ))}
                     </select>
                     <button className="btn btn-live" onClick={playLive}>
-                        🔴 Live (WebRTC)
+                        Live
                     </button>
                 </div>
             </div>
 
             <div className="video-stage">
-                {isLive ? (
+                {videoSrc ? (
                     <iframe
                         src={videoSrc}
-                        allow="autoplay; fullscreen"
-                        className="video-player"
-                    />
-                ) : videoSrc ? (
-                    <video
-                        src={videoSrc}
-                        controls
-                        autoPlay
+                        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
                         className="video-player"
                     />
                 ) : (
