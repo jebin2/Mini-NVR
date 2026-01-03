@@ -16,7 +16,7 @@ interface TimeScrollerProps {
 
 // Zoom levels in minutes
 const ZOOM_LEVELS = [30, 60, 120, 240, 720, 1440] // 30min, 1hr, 2hr, 4hr, 12hr, 24hr
-const DEFAULT_ZOOM_INDEX = 2 // 2 hours
+const DEFAULT_ZOOM_INDEX = 0 // 30 minutes
 const SECONDS_IN_DAY = 86400
 
 function parseTime(timeStr: string): number {
