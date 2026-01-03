@@ -60,7 +60,7 @@
     font-size: 18px;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
     .expanded-view {
         padding: 10px;
     }
@@ -68,5 +68,24 @@
     .player-header {
         flex-direction: column;
         align-items: flex-start;
+        gap: 12px;
+    }
+
+    .controls-row {
+        width: 100%;
+    }
+
+    .controls-row select {
+        flex: 1;
+        width: 100%;
+    }
+
+    /* Hide Live button on mobile - clicking live segment auto-plays via WebRTC */
+    .controls-row .btn-live {
+        display: none;
+    }
+
+    .video-stage {
+        aspect-ratio: 16/12;
     }
 }

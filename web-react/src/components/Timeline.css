@@ -41,3 +41,10 @@
     font-size: 11px;
     color: rgba(255, 255, 255, 0.4);
 }
+
+/* Hide timeline on mobile - matches web-vanilla */
+@media (max-width: 768px) {
+    .timeline-wrapper {
+        display: none;
+    }
+}

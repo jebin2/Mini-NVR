@@ -694,7 +694,7 @@ input:focus {
     /* Video player - taller aspect ratio to fit go2rtc control bar */
     .video-stage {
         width: 100%;
-        aspect-ratio: 16/13;
+        aspect-ratio: 16/12;
         flex: none;
         background: #000;
         border-radius: var(--border-radius);
