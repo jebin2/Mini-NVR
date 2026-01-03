@@ -110,7 +110,25 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                 "-rtsp_transport", "tcp",
                 "-fflags", "+genpts+igndts+discardcorrupt",
                 "-i", rtsp_url,
-                "-c:v", "copy",
+            ]
+
+            # Inline Transcoding Logic
+            if config.settings.inline_transcoding:
+                # Use configured codec or default to libx264 if 'copy' is set
+                v_codec = config.settings.video_codec if config.settings.video_codec != "copy" else "libx264"
+                
+                logger.info(f"[🎥] CH{channel} Inline Transcoding ENABLED: {v_codec} (CRF {config.settings.video_crf}, {config.settings.video_preset})")
+                cmd.extend([
+                    "-c:v", v_codec,
+                    "-crf", str(config.settings.video_crf),
+                    "-preset", config.settings.video_preset,
+                    # Force keyframes at segment boundaries for cleaner HLS cutting
+                    "-force_key_frames", f"expr:gte(t,n_forced*{segment_duration})",
+                ])
+            else:
+                cmd.extend(["-c:v", "copy"])
+
+            cmd.extend([
                 "-c:a", "aac",  # HLS requires AAC audio
                 "-f", "hls",
                 "-hls_time", str(segment_duration),
@@ -119,7 +137,7 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                 "-strftime", "1",
                 "-hls_segment_filename", f"{out_dir}/%H%M%S.ts",
                 f"{out_dir}/playlist.m3u8"
-            ]
+            ])
 
             try:
                 proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)

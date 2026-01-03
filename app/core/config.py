@@ -64,6 +64,7 @@ class Settings:
     video_codec: str = field(default_factory=lambda: get_env("VIDEO_CODEC", "copy"))
     video_crf: str = field(default_factory=lambda: get_env("VIDEO_CRF", "23"))
     video_preset: str = field(default_factory=lambda: get_env("VIDEO_PRESET", "veryfast"))
+    inline_transcoding: bool = field(default_factory=lambda: get_env("INLINE_TRANSCODING", "false").lower() == "true")
     
     # --- go2rtc ---
     go2rtc_api_port: int = field(default_factory=lambda: int(get_env("GO2RTC_API_PORT")))
