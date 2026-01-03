@@ -76,7 +76,6 @@ class Settings:
     
     # --- YouTube Streaming ---
     youtube_live_enabled: bool = field(default_factory=lambda: get_env("YOUTUBE_LIVE_ENABLED", "false").lower() == "true")
-    youtube_sync_enabled: bool = field(default_factory=lambda: get_env("YOUTUBE_SYNC_ENABLED", "true").lower() == "true")
     youtube_rtmp_url: str = field(default_factory=lambda: get_env("YOUTUBE_RTMP_URL", "rtmp://a.rtmp.youtube.com/live2"))
     youtube_rotation_hours: float = field(default_factory=lambda: float(get_env("YOUTUBE_ROTATION_HOURS", "11")))
     youtube_live_restart_interval_hours: float = field(default_factory=lambda: float(get_env("YOUTUBE_LIVE_RESTART_INTERVAL_HOURS", "2")))

@@ -21,11 +21,10 @@ declare -A SERVICE_CMD=(
     [compressor]="python compressor.py"
     [uploader]="python youtube_upload.py"
     [youtube_stream]="python youtube_stream.py"
-    [youtube_sync]="python youtube_sync.py"
 )
 
 # Order matters for startup
-SERVICES=(server recorder cleanup compressor uploader youtube_stream youtube_sync)
+SERVICES=(server recorder cleanup compressor uploader youtube_stream)
 
 # Per-service "should run?" checks
 is_enabled() {
@@ -34,7 +33,6 @@ is_enabled() {
         compressor)      [ "${INLINE_TRANSCODING}" != "true" ] && [ "${COMPRESSOR_ENABLED}" = "true" ] ;;
         uploader)        [ "${YOUTUBE_UPLOAD_ENABLED}" = "true" ] ;;
         youtube_stream)  [ "${YOUTUBE_LIVE_ENABLED}" = "true" ] ;;
-        youtube_sync)    [ "${YOUTUBE_SYNC_ENABLED}" = "true" ] ;;
         *)               true ;;  # Core services always enabled
     esac
 }
@@ -129,14 +127,13 @@ log "Monitoring services..."
 while true; do
     current_time=$(date +%s)
     
-    # --- Auth File Handling (only affects uploader and sync, not youtube_stream) ---
+    # --- Auth File Handling (only affects uploader, not youtube_stream) ---
     # youtube_stream uses stream keys (not OAuth), so it should keep running
     if [ -f "$AUTH_FILE" ]; then
         # Check if any OAuth-dependent service is enabled
-        if is_enabled uploader || is_enabled youtube_sync; then
-            log "🔐 Auth required. Pausing OAuth services (uploader, sync)..."
+        if is_enabled uploader; then
+            log "🔐 Auth required. Pausing OAuth services (uploader)..."
             stop_service uploader
-            stop_service youtube_sync
             
             if python3 trigger_auth.py; then
                 log "✅ Auth success!"
