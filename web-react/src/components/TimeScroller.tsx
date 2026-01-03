@@ -96,16 +96,21 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
         return () => clearInterval(interval)
     }, [isLive, zoomMinutes]) // Only re-run if live state or zoom changes
 
-    // Load segments
+    // Load segments (Initial + Polling)
     useEffect(() => {
+        let isMounted = true
+        let intervalId: number | null = null
+
         async function load() {
-            setLoading(true)
+            setLoading(prev => prev || true) // Only set loading true on initial
             try {
                 const data = await fetchSegments(camId, date)
+                if (!isMounted) return
+
                 setSegments(data.segments)
 
-                // If NOT live, center on latest recording
-                if (!isLive && data.segments.length > 0) {
+                // If NOT live, center on latest recording (only on first load)
+                if (!isLive && data.segments.length > 0 && loading) {
                     const lastSeg = data.segments[data.segments.length - 1]
                     const lastTime = parseTime(lastSeg.time)
                     const zoomSec = zoomMinutes * 60
@@ -113,11 +118,23 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
                 }
             } catch (err) {
                 console.error('Failed to load segments:', err)
-                setSegments([])
+                if (isMounted) setSegments([])
             }
-            setLoading(false)
+            if (isMounted) setLoading(false)
         }
+
         load()
+
+        // Poll every 15 seconds if viewing today (simple check: if date matches local date)
+        const today = new Date().toISOString().split('T')[0]
+        if (date === today) {
+            intervalId = window.setInterval(load, 15000)
+        }
+
+        return () => {
+            isMounted = false
+            if (intervalId) clearInterval(intervalId)
+        }
     }, [camId, date])
 
     // Clamp viewport when zoom changes

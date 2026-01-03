@@ -134,11 +134,42 @@ def generate_m3u8_playlist(segments: list[dict], base_url: str) -> str:
         "#EXT-X-PLAYLIST-TYPE:VOD",  # Video on Demand (complete recording)
     ]
     
+    last_end_time = None
+    GAP_THRESHOLD = 1.5 # Seconds
+    
+    # Pre-calculated gap segment info
+    gap_url = "/assets/gap.ts" # Server endpoint for gap segment
+    gap_duration = 1.0 # Duration of gap.ts asset
+
     for seg in segments:
-        # Add program date time for better seeking
+        current_start = seg["datetime"]
+        
+        # Check for gap
+        if last_end_time:
+            gap_seconds = (current_start - last_end_time).total_seconds()
+            
+            if gap_seconds > GAP_THRESHOLD:
+                # Insert Discontinuity
+                lines.append("#EXT-X-DISCONTINUITY")
+                
+                # Fill gap with repeated gap.ts segments
+                # We fill slightly less than full gap to avoid overlapping next segment
+                num_fillers = int(gap_seconds // gap_duration)
+                
+                if num_fillers > 0:
+                    for _ in range(num_fillers):
+                        lines.append(f"#EXTINF:{gap_duration},")
+                        lines.append(gap_url)
+                
+                # Insert Discontinuity before resuming real video
+                lines.append("#EXT-X-DISCONTINUITY")
+
+        # Add real segment
         lines.append(f"#EXT-X-PROGRAM-DATE-TIME:{seg['datetime'].isoformat()}")
         lines.append(f"#EXTINF:{seg['duration']:.3f},")
         lines.append(f"{base_url}{seg['filename']}")
+        
+        last_end_time = current_start + timedelta(seconds=seg["duration"])
     
     lines.append("#EXT-X-ENDLIST")
     

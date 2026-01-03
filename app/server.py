@@ -164,17 +164,29 @@ def serve_video(path: str, user = Depends(auth.current_user)): # Protected
 
 @app.get("/assets/{path:path}")
 def serve_assets(path: str):
-    """Serve Vite static assets (JS/CSS)"""
-    # Determine MIME type based on extension
-    media_type = "application/octet-stream"
-    if path.endswith(".css"):
-        media_type = "text/css"
-    elif path.endswith(".js"):
-        media_type = "application/javascript"
-    elif path.endswith(".svg"):
-        media_type = "image/svg+xml"
+    """Serve Vite static assets (JS/CSS) OR App Assets (gap.ts)"""
     
-    return serve_static(os.path.join(config.settings.static_dir, "assets"), path, media_type)
+    # Check if file exists in web-react assets (Vite build)
+    vite_assets_path = os.path.join(config.settings.static_dir, "assets", path)
+    if os.path.exists(vite_assets_path):
+        media_type = "application/octet-stream"
+        if path.endswith(".css"):
+            media_type = "text/css"
+        elif path.endswith(".js"):
+            media_type = "application/javascript"
+        elif path.endswith(".svg"):
+            media_type = "image/svg+xml"
+        return FileResponse(vite_assets_path, media_type=media_type)
+
+    # Check if file exists in App Assets (e.g. gap.ts)
+    app_assets_path = os.path.join("app/assets", path)
+    if os.path.exists(app_assets_path):
+        media_type = "application/octet-stream"
+        if path.endswith(".ts"):
+            media_type = "video/mp2t"
+        return FileResponse(app_assets_path, media_type=media_type)
+
+    raise HTTPException(status_code=404, detail="File not found")
 
 def serve_static(base_dir, path, media_type):
     # Security check
