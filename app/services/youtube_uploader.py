@@ -1,84 +1,47 @@
 """
 YouTube Uploader Service
-Uploads NVR recordings to YouTube.
+Uploads NVR recordings to YouTube using CSV-based tracking.
+Batches consecutive TS segments by channel and uploads when threshold is reached.
 """
 
 import os
-import glob
 import time
+import tempfile
 import subprocess
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
 from youtube_auto_pub import VideoMetadata
 from services.youtube_accounts import YouTubeAccountManager
-from utils.naming_conventions import (
-    get_youtube_csv_filename,
-    format_youtube_csv_line
+from utils.processed_videos_csv import (
+    get_pending_by_channel,
+    mark_uploaded,
+    delete_uploaded_files
 )
+from core.config import settings
 
 logger = logging.getLogger("yt_upload")
 
 
 class YouTubeUploaderService:
-    """Uploads NVR recordings to YouTube."""
+    """Uploads NVR recordings to YouTube with batch support."""
     
     def __init__(
         self,
         recordings_dir: str = "/recordings",
         privacy_status: str = "unlisted",
         delete_after_upload: bool = False,
-        scan_interval: int = 60
+        scan_interval: int = 60,
+        batch_size_mb: int = 50
     ):
         self.recordings_dir = recordings_dir
         self.privacy_status = privacy_status
         self.delete_after_upload = delete_after_upload
         self.scan_interval = scan_interval
+        self.batch_size_mb = batch_size_mb
         self.manager = YouTubeAccountManager()
         self._running = False
         self.upload_count = 0
-    
-    def _is_file_stable(self, filepath: str, stable_seconds: int = 15) -> bool:
-        """Check if file has stopped being written to."""
-        try:
-            return (time.time() - os.path.getmtime(filepath)) > stable_seconds
-        except OSError:
-            return False
-    
-    def _is_uploaded(self, mp4_path: str) -> bool:
-        """Check if file has already been uploaded."""
-        if mp4_path.endswith("_uploaded.mp4"):
-            return True
-        renamed_path = mp4_path.replace(".mp4", "_uploaded.mp4")
-        return os.path.exists(renamed_path)
-    
-    def _parse_video_path(self, mp4_path: str) -> dict:
-        """Parse video path to extract metadata."""
-        try:
-            parts = mp4_path.split(os.sep)
-            filename = os.path.splitext(parts[-1])[0].replace("_uploaded", "")
-            date_str = parts[-2]
-            channel_dir = parts[-3]
-            channel = channel_dir.replace("ch", "Channel ")
-            
-            if len(filename) == 6 and filename.isdigit():
-                time_str = f"{filename[:2]}:{filename[2:4]}:{filename[4:6]}"
-            else:
-                time_str = filename
-            
-            return {
-                "channel": channel,
-                "date": date_str,
-                "time": time_str,
-                "filename": filename
-            }
-        except Exception:
-            return {
-                "channel": "Unknown",
-                "date": datetime.now().strftime("%Y-%m-%d"),
-                "time": "00:00:00",
-                "filename": os.path.basename(mp4_path)
-            }
     
     def _get_video_duration(self, filepath: str) -> float:
         """Get video duration in seconds using ffprobe."""
@@ -94,29 +57,114 @@ class YouTubeUploaderService:
         except Exception:
             return 0.0
     
-    def find_pending_files(self) -> List[str]:
-        """Find video files pending upload."""
-        pattern = os.path.join(self.recordings_dir, "ch*", "*", "*.mp4")
-        all_files = glob.glob(pattern)
-        
-        pending = []
-        for f in all_files:
-            if self._is_uploaded(f):
-                continue
-            if not self._is_file_stable(f):
-                continue
-            if f.endswith(".tmp"):
-                continue
-            pending.append(f)
-        
-        return sorted(pending)
+    def _format_duration(self, seconds: float) -> str:
+        """Format duration as HH:MM:SS or MM:SS."""
+        m, s = divmod(int(seconds), 60)
+        h, m = divmod(m, 60)
+        return f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
     
-    def upload_video(self, video_path: str, account_id: int = 1) -> Optional[str]:
-        """Upload a single video to YouTube.
-        
-        Returns:
-            Video ID if successful, None otherwise
+    def _concatenate_segments(self, ts_paths: List[str], output_path: str) -> bool:
         """
+        Concatenate multiple TS segments into a single MP4 file.
+        Returns True if successful.
+        """
+        if not ts_paths:
+            return False
+        
+        # Create concat file list
+        concat_file = output_path + ".txt"
+        try:
+            with open(concat_file, "w") as f:
+                for ts_path in ts_paths:
+                    # Escape single quotes in path
+                    escaped_path = ts_path.replace("'", "'\\''")
+                    f.write(f"file '{escaped_path}'\n")
+            
+            # FFmpeg concat demuxer
+            cmd = [
+                settings.ffmpeg_bin,
+                "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", concat_file,
+                "-c", "copy",  # No re-encoding
+                "-movflags", "+faststart",
+                output_path
+            ]
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=3600  # 1 hour timeout
+            )
+            
+            if result.returncode != 0:
+                logger.error(f"Concat failed: {result.stderr[:500]}")
+                return False
+            
+            return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+            
+        except Exception as e:
+            logger.error(f"Concatenation error: {e}")
+            return False
+        finally:
+            # Clean up concat file
+            if os.path.exists(concat_file):
+                try:
+                    os.remove(concat_file)
+                except OSError:
+                    pass
+    
+    def _parse_batch_metadata(self, rows: List[dict]) -> dict:
+        """Parse metadata from a batch of video rows."""
+        if not rows:
+            return {}
+        
+        first_path = rows[0]["video_path"]
+        last_path = rows[-1]["video_path"]
+        
+        # Parse: ch1/2026-01-03/193627.ts
+        parts = first_path.split("/")
+        channel = parts[0].replace("ch", "Channel ") if len(parts) >= 1 else "Unknown"
+        date_str = parts[1] if len(parts) >= 2 else datetime.now().strftime("%Y-%m-%d")
+        
+        # Extract start/end times from filenames
+        first_filename = os.path.splitext(os.path.basename(first_path))[0]
+        last_filename = os.path.splitext(os.path.basename(last_path))[0]
+        
+        start_time = f"{first_filename[:2]}:{first_filename[2:4]}:{first_filename[4:6]}" if len(first_filename) == 6 else first_filename
+        end_time = f"{last_filename[:2]}:{last_filename[2:4]}:{last_filename[4:6]}" if len(last_filename) == 6 else last_filename
+        
+        return {
+            "channel": channel,
+            "date": date_str,
+            "start_time": start_time,
+            "end_time": end_time,
+            "segment_count": len(rows)
+        }
+    
+    def _upload_batch(self, rows: List[dict], account_id: int = 1) -> Optional[str]:
+        """
+        Upload a batch of TS segments to YouTube.
+        Returns video ID if successful.
+        """
+        if not rows:
+            return None
+        
+        # Get full paths
+        ts_paths = [
+            os.path.join(self.recordings_dir, row["video_path"])
+            for row in rows
+        ]
+        
+        # Verify all files exist
+        for path in ts_paths:
+            if not os.path.exists(path):
+                logger.warning(f"Missing file: {path}")
+                return None
+        
+        # Get YouTube account
         account = self.manager.get_account(account_id)
         if not account:
             account = self.manager.accounts[0] if self.manager.accounts else None
@@ -128,7 +176,6 @@ class YouTubeUploaderService:
         service = account.get_service()
         if not service:
             logger.error(f"Account {account.account_id}: No valid service")
-            # Create trigger file for main loop
             try:
                 with open("need_auth.info", "w") as f:
                     f.write(f"Account {account.account_id}")
@@ -136,98 +183,102 @@ class YouTubeUploaderService:
                 logger.error(f"Failed to create need_auth.info: {e}")
             return None
         
-        info = self._parse_video_path(video_path)
-        duration = self._get_video_duration(video_path)
-        
-        # Format duration
-        m, s = divmod(int(duration), 60)
-        h, m = divmod(m, 60)
-        duration_str = f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
-        
-        title = f"{info['channel']} - {info['date']} ({info['time']})"
-        description = f"Security camera recording\nDate: {info['date']}\nTime: {info['time']}\nDuration: {duration_str}"
-        
-        metadata = VideoMetadata(
-            title=title,
-            description=description,
-            tags=["NVR", "security", "camera"],
-            privacy_status=self.privacy_status,
-            category_id="22"
+        # Create temp MP4
+        info = self._parse_batch_metadata(rows)
+        temp_dir = tempfile.gettempdir()
+        temp_mp4 = os.path.join(
+            temp_dir,
+            f"nvr_upload_{info['date']}_{info['start_time'].replace(':', '')}.mp4"
         )
         
+        logger.info(
+            f"Concatenating {len(ts_paths)} segments: "
+            f"{info['start_time']} - {info['end_time']}"
+        )
+        
+        if not self._concatenate_segments(ts_paths, temp_mp4):
+            logger.error("Failed to concatenate segments")
+            return None
+        
         try:
+            # Get duration
+            duration = self._get_video_duration(temp_mp4)
+            duration_str = self._format_duration(duration)
+            
+            # Build metadata
+            title = f"{info['channel']} - {info['date']} ({info['start_time']} - {info['end_time']})"
+            description = (
+                f"Security camera recording\n"
+                f"Date: {info['date']}\n"
+                f"Time: {info['start_time']} - {info['end_time']}\n"
+                f"Duration: {duration_str}\n"
+                f"Segments: {info['segment_count']}"
+            )
+            
+            metadata = VideoMetadata(
+                title=title,
+                description=description,
+                tags=["NVR", "security", "camera"],
+                privacy_status=self.privacy_status,
+                category_id="22"
+            )
+            
             logger.info(f"Uploading: {title}")
+            
             video_id = account.uploader.upload_video(
                 service=service,
-                video_path=video_path,
+                video_path=temp_mp4,
                 metadata=metadata
             )
             
             if video_id:
                 logger.info(f"Uploaded: https://youtube.com/watch?v={video_id}")
-                self._log_to_csv(info, video_id)
-                self._finalize_file(video_path)
+                
+                # Mark all segments as uploaded in CSV
+                video_paths = [row["video_path"] for row in rows]
+                mark_uploaded(video_paths)
+                
                 self.upload_count += 1
                 return video_id
-            
+                
         except Exception as e:
             logger.error(f"Upload failed: {e}")
+        finally:
+            # Clean up temp MP4
+            if os.path.exists(temp_mp4):
+                try:
+                    os.remove(temp_mp4)
+                except OSError:
+                    pass
         
         return None
     
-    def _log_to_csv(self, info: dict, video_id: str):
-        """Log upload to per-day CSV."""
-        csv_path = get_youtube_csv_filename(self.recordings_dir, info['date'])
-        url = f"https://youtube.com/watch?v={video_id}"
+    def _find_upload_batches(self) -> List[List[dict]]:
+        """
+        Find batches of consecutive segments ready for upload.
+        Returns list of batches, each batch is a list of row dicts.
+        """
+        batches = []
+        pending_by_channel = get_pending_by_channel()
         
-        # NOTE: Uploader uses 'timestamp' for time column in original code, but format_youtube_csv_line expects just time string?
-        # Original: timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Original line: f"{info['channel']},{info['date']},{info['time']},{url},{timestamp}\n"
-        # Wait, the 5th column was timestamp?
-        # youtube_video_sync.py uses "synced" as 5th column (status).
-        # youtube_uploader.py uses timestamp as 5th column?
-        # This inconsistency makes commonizing hard if we strict parse.
+        for channel, rows in pending_by_channel.items():
+            current_batch = []
+            current_size = 0.0
+            
+            for row in rows:
+                size = float(row.get("size_mb", 0))
+                current_batch.append(row)
+                current_size += size
+                
+                if current_size >= self.batch_size_mb:
+                    batches.append(current_batch)
+                    current_batch = []
+                    current_size = 0.0
+            
+            # Don't add incomplete batches - wait for more segments
+            # (optional: could add if batch is old enough)
         
-        # Let's check naming_conventions.py:
-        # format_youtube_csv_line(..., time_str, url, status="synced", camera_name="Unknown")
-        # It puts status in 5th column.
-        
-        # If I change uploader to use helper, the 5th column becomes "synced" (or I pass timestamp as status).
-        # And I can pass "Channel X" as camera name?
-        # info['channel'] is "Channel 1" etc.
-        
-        # Let's align them. Uploader adds "Channel X" as first column too.
-        # And uses it as camera column too?
-        
-        line = format_youtube_csv_line(
-            channel_name=info['channel'],
-            date_str=info['date'],
-            time_str=info['time'], # This is video time
-            url=url,
-            status=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # Using timestamp as status?
-            camera_name=info['channel'] # Duplicate channel info to camera column for consistency
-        )
-        
-        try:
-            with open(csv_path, "a") as f:
-                f.write(line)
-        except Exception as e:
-            logger.error(f"Failed to write CSV: {e}")
-    
-    def _finalize_file(self, video_path: str):
-        """Handle file after successful upload."""
-        if self.delete_after_upload:
-            try:
-                os.remove(video_path)
-                logger.info(f"Deleted: {os.path.basename(video_path)}")
-            except OSError as e:
-                logger.error(f"Failed to delete: {e}")
-        else:
-            new_path = video_path.replace(".mp4", "_uploaded.mp4")
-            try:
-                os.rename(video_path, new_path)
-            except OSError as e:
-                logger.error(f"Failed to rename: {e}")
+        return batches
     
     def run(self):
         """Main upload loop."""
@@ -236,24 +287,33 @@ class YouTubeUploaderService:
         logger.info("YouTube Uploader Service Started")
         logger.info(f"Watching: {self.recordings_dir}")
         logger.info(f"Privacy: {self.privacy_status}")
+        logger.info(f"Batch size: {self.batch_size_mb}MB")
         logger.info("=" * 50)
         
         while self._running:
             try:
-                pending = self.find_pending_files()
+                batches = self._find_upload_batches()
                 
-                if pending:
-                    logger.info(f"Found {len(pending)} pending files")
+                if batches:
+                    logger.info(f"Found {len(batches)} batches ready for upload")
                 
-                for video_path in pending:
+                for batch in batches:
                     if not self._running:
                         break
-                    self.upload_video(video_path)
+                    
+                    self._upload_batch(batch)
+                    
+                    # Small delay between uploads
                     time.sleep(5)
+                
+                # Delete uploaded files if configured
+                if self.delete_after_upload:
+                    delete_uploaded_files(self.recordings_dir)
                     
             except Exception as e:
                 logger.error(f"Scan error: {e}")
             
+            # Sleep with early exit check
             for _ in range(self.scan_interval):
                 if not self._running:
                     break

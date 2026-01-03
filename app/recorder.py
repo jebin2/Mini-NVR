@@ -6,7 +6,6 @@ import glob
 from datetime import datetime
 from core import config
 from core.logger import setup_logger
-from services.converter import BackgroundConverter
 
 logger = setup_logger("recorder")
 
@@ -208,16 +207,6 @@ def main():
         t.start()
         threads.append(t)
         logger.info(f"[✓] CH{ch} recording thread started")
-
-    # --- Start Converter Thread ---
-
-    converter = BackgroundConverter(
-        config.settings.record_dir, 
-        video_codec=config.settings.video_codec,
-        crf=config.settings.video_crf,
-        preset=config.settings.video_preset
-    )
-    converter.start()
 
     while True:
         time.sleep(60)
