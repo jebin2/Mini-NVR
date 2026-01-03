@@ -190,24 +190,45 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
     }, [isDragging, scrubberTime, segments, camId, date, onPlayHls])
 
     // Build visible coverage blocks
-    const coverageBlocks = segments
-        .map(seg => {
-            const startSec = parseTime(seg.time)
-            const endSec = startSec + seg.duration
+    const coverageBlocks = (() => {
+        if (segments.length === 0) return []
 
+        // 1. Merge adjacent segments
+        const merged: { start: number; end: number }[] = []
+
+        let currentStart = parseTime(segments[0].time)
+        let currentEnd = currentStart + segments[0].duration
+
+        for (let i = 1; i < segments.length; i++) {
+            const segStart = parseTime(segments[i].time)
+            const segEnd = segStart + segments[i].duration
+
+            // If gap is less than 2 seconds, merge
+            if (segStart - currentEnd < 2) {
+                currentEnd = Math.max(currentEnd, segEnd)
+            } else {
+                merged.push({ start: currentStart, end: currentEnd })
+                currentStart = segStart
+                currentEnd = segEnd
+            }
+        }
+        merged.push({ start: currentStart, end: currentEnd })
+
+        // 2. Map to visual blocks
+        return merged.map(block => {
             // Skip if outside viewport
-            if (endSec < viewportStart || startSec > viewportEnd) return null
+            if (block.end < viewportStart || block.start > viewportEnd) return null
 
             // Clamp to viewport
-            const visStart = Math.max(startSec, viewportStart)
-            const visEnd = Math.min(endSec, viewportEnd)
+            const visStart = Math.max(block.start, viewportStart)
+            const visEnd = Math.min(block.end, viewportEnd)
 
             const leftPct = ((visStart - viewportStart) / viewportSeconds) * 100
             const widthPct = ((visEnd - visStart) / viewportSeconds) * 100
 
             return { leftPct, widthPct }
-        })
-        .filter(Boolean) as { leftPct: number; widthPct: number }[]
+        }).filter(Boolean) as { leftPct: number; widthPct: number }[]
+    })()
 
     // Generate time markers
     const generateMarkers = () => {
