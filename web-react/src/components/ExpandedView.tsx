@@ -76,6 +76,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             if (!allowedOrigins.includes(event.origin)) return;
 
             if (event.data && event.data.type === 'timeupdate') {
+                console.log("[ExpandedView] Received timeupdate:", event.data.currentTime, "Offset:", startTimeOffset)
                 if (typeof event.data.currentTime === 'number') {
                     // Add offset to relative time
                     setPlaybackTime(startTimeOffset + event.data.currentTime)

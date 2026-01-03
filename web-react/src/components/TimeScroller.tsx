@@ -72,6 +72,7 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
     // Effect: Sync scrubber with external playback time (e.g. from HLS player)
     useEffect(() => {
         if (!isLive && playbackTime !== null && playbackTime !== undefined && !isDragging) {
+            console.log("[TimeScroller] Syncing to:", playbackTime)
             setScrubberTime(playbackTime)
 
             // Auto-scroll if scrubber moves out of view
