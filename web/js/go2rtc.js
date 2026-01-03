@@ -46,7 +46,7 @@ export function isMobile() {
  * Get the snapshot refresh interval (longer on mobile for better performance)
  */
 export function getSnapshotRefreshInterval() {
-    return isMobile() ? 5000 : 2000;  // 5 seconds on mobile, 2 seconds on desktop
+    return isMobile() ? 1000 * 60 : 1000 * 10;  // 1 minute on mobile, 10 seconds on desktop
 }
 
 /**

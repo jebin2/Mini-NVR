@@ -222,9 +222,27 @@ def get_recordings_for_date(ch, date):
                     if entry.is_file():
                         candidates.append(entry)
                         
+        # Find latest candidate based on mtime (to handle edge cases with live check)
+        latest_candidate = None
+        if candidates:
+            try:
+                latest_candidate = max(candidates, key=lambda e: e.stat().st_mtime)
+            except (ValueError, OSError):
+                pass
+
         for entry in candidates:
-             if not entry.name.endswith(".mp4"):
-                continue
+             is_mp4 = entry.name.endswith(".mp4")
+             is_mkv = entry.name.endswith(".mkv")
+             
+             if not (is_mp4 or is_mkv):
+                 continue
+                 
+             # Only show MKV if it is the latest file (likely currently recording)
+             # We rely on "latest" instead of "live" check as it is more robust to IO lags
+             if is_mkv:
+                 is_latest = (entry == latest_candidate)
+                 if not is_latest:
+                     continue
             
              full_path = entry.path
              meta = parse_filename(full_path)

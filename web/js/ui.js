@@ -145,6 +145,21 @@ export function renderPlaylist(recordings, onPlayClip, onDeleteClip) {
 
             // YouTube Button
             if (rec.youtube_url) {
+                // Copy Link Button
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'clip-btn copy-link';
+                copyBtn.title = 'Copy YouTube Link';
+                copyBtn.innerHTML = '📋';
+                copyBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(rec.youtube_url).then(() => {
+                        const originalText = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '✅';
+                        setTimeout(() => copyBtn.innerHTML = originalText, 1000);
+                    });
+                };
+                actions.appendChild(copyBtn);
+
                 const ytBtn = document.createElement('a');
                 ytBtn.href = rec.youtube_url;
                 ytBtn.target = '_blank';
