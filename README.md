@@ -112,7 +112,7 @@ All configuration is done via `.env` file. Configs are auto-generated at startup
 | `DVR_PORT` | RTSP port | `554` |
 | `RTSP_URL_TEMPLATE` | URL template (see below) | Hikvision |
 | `NUM_CHANNELS` | Number of camera channels | `8` |
-| `SEGMENT_DURATION` | Recording segment (seconds) | `600` |
+| `SEGMENT_DURATION` | Recording segment (seconds) | `10` |
 | `MAX_STORAGE_GB` | Max storage before cleanup | `500` |
 | `WEB_PORT` | Web UI port | `web_port` |
 

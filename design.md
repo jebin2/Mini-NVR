@@ -111,7 +111,7 @@ sequenceDiagram
     Note over DVR,Go2RTC: Single RTSP connection
     DVR->>Go2RTC: RTSP Stream (continuous)
     
-    loop Every SEGMENT_DURATION (10 min)
+    loop Every SEGMENT_DURATION (10 sec)
         Go2RTC->>Recorder: RTSP relay (localhost:GO2RTC_RTSP_PORT)
         Recorder->>Disk: Write ch{X}/{DATE}/{TIME}.mkv
         Note over Recorder,Disk: FFmpeg: -c copy -f matroska
