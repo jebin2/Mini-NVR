@@ -24,8 +24,5 @@ COPY web/ /app/web/
 # Ensure Python output is not buffered (for real-time logs)
 ENV PYTHONUNBUFFERED=1
 
-# Expose web port (default matches WEB_PORT in config)
-EXPOSE 2126
-
 # Start all services including YouTube uploader
 CMD ["./start_services.sh"]

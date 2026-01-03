@@ -33,8 +33,8 @@ source "$ENV_FILE"
 set +a
 
 # Defaults for optional variables
-GO2RTC_API_PORT="${GO2RTC_API_PORT:-2127}"
-WEB_PORT="${WEB_PORT:-2126}"
+GO2RTC_API_PORT="${GO2RTC_API_PORT}"
+WEB_PORT="${WEB_PORT}"
 
 log_info "Generating web/js/config.js..."
 

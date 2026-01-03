@@ -77,7 +77,7 @@ is_running() {
 # Wait for go2rtc
 # =============================================================================
 
-GO2RTC_URL="http://127.0.0.1:${GO2RTC_API_PORT:-2127}/api"
+GO2RTC_URL="http://127.0.0.1:${GO2RTC_API_PORT}/api"
 log "Waiting for go2rtc..."
 
 for i in $(seq 1 60); do

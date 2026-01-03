@@ -83,8 +83,8 @@ done
 echo "Generating go2rtc config..."
 ./scripts/generate-go2rtc-config.sh
 
-echo "Generating web config..."
-./scripts/generate-web-config.sh
+# echo "Generating web config..."
+# ./scripts/generate-web-config.sh
 
 # Build Docker image
 if [ "$BUILD_NO_CACHE" = true ]; then

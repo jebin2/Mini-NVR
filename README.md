@@ -80,8 +80,8 @@ This will:
 
 | Service | URL |
 |---------|-----|
-| **Web UI** | `http://localhost:2126` |
-| **go2rtc Admin** | `http://localhost:2127` |
+| **Web UI** | `http://localhost:web_port` |
+| **go2rtc Admin** | `http://localhost:go2rtc_api_port` |
 
 Default login: `admin` / `changeme` (configure in `.env`)
 
@@ -114,15 +114,15 @@ All configuration is done via `.env` file. Configs are auto-generated at startup
 | `NUM_CHANNELS` | Number of camera channels | `8` |
 | `SEGMENT_DURATION` | Recording segment (seconds) | `600` |
 | `MAX_STORAGE_GB` | Max storage before cleanup | `500` |
-| `WEB_PORT` | Web UI port | `2126` |
+| `WEB_PORT` | Web UI port | `web_port` |
 
 ### go2rtc Settings
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GO2RTC_API_PORT` | go2rtc API/admin port | `2127` |
-| `GO2RTC_WEBRTC_PORT` | WebRTC signaling port | `8555` |
-| `GO2RTC_RTSP_PORT` | RTSP relay port | `8554` |
+| `GO2RTC_API_PORT` | go2rtc API/admin port | `go2rtc_api_port` |
+| `GO2RTC_WEBRTC_PORT` | WebRTC signaling port | `go2rtc_webrtc_port` |
+| `GO2RTC_RTSP_PORT` | RTSP relay port | `go2rtc_rtsp_port` |
 
 ### YouTube Live Streaming
 

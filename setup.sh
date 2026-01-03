@@ -46,16 +46,60 @@ if [ $? -ne 0 ]; then
     return 1 2>/dev/null || exit 1
 fi
 
-# 2. Dependencies
-log_info "Installing requirements..."
-if [ -f "requirements.txt" ]; then
-    pip install --force-reinstall -r requirements.txt
+# 2. Frontend Build (New React App)
+log_info "Building React Frontend..."
+
+# Extract GOOGLE_CLIENT_ID from .env
+if [ -f ".env" ]; then
+    G_CLIENT_ID=$(grep "^GOOGLE_CLIENT_ID=" .env | cut -d '=' -f2 | tr -d '"' | tr -d "'")
 else
-    log_warn "requirements.txt not found."
+    G_CLIENT_ID=""
 fi
 
-log_info "Installing youtube_authenticate requirements..."
-pip install --force-reinstall -r youtube_authenticate/requirements.txt
+if [ -z "$G_CLIENT_ID" ]; then
+    log_warn "GOOGLE_CLIENT_ID not found in .env. Frontend google auth may not work."
+fi
+
+# Build web-react
+if [ -d "web-react" ]; then
+    pushd web-react > /dev/null
+    
+    log_info "Clean install: removing node_modules and lockfile..."
+    rm -rf node_modules package-lock.json
+    
+    log_info "Installing frontend dependencies..."
+    npm install
+    
+    log_info "Building frontend..."
+    # VITE_API_BASE_URL defaults to /api for production build
+    VITE_GOOGLE_CLIENT_ID="$G_CLIENT_ID" VITE_API_BASE_URL="/api" npm run build
+    
+    if [ $? -eq 0 ]; then
+        log_info "Frontend build successful."
+        popd > /dev/null
+        
+        # Replace web directory
+        if [ -d "web-react/dist" ]; then
+            log_info "Deploying new frontend to web/..."
+            if [ -d "web" ]; then
+                 rm -rf web
+            fi
+            mv web-react/dist web
+            log_info "Deployment complete."
+        else
+            log_error "web-react/dist not found after build."
+        fi
+    else
+        log_error "Frontend build failed."
+        popd > /dev/null
+    fi
+else
+    log_warn "web-react directory not found. Skipping frontend build."
+fi
+
+# 3. Dependencies
+log_info "Installing requirements..."
+pip install --force-reinstall -r requirements.txt
 
 # 3. System Dependencies
 log_info "Checking system dependencies..."
@@ -129,6 +173,16 @@ if [ -f ".env" ] && [ -f ".env.example" ]; then
         log_info "Configuration check passed (keys exist)."
     else
         log_warn "Found $MISSING_KEYS missing configuration keys in .env."
+    fi
+
+    # Specific check for JWT_SECRET
+    JWT_SECRET=$(grep "^JWT_SECRET=" .env | cut -d '=' -f2)
+    if [ -z "$JWT_SECRET" ]; then
+        log_error "JWT_SECRET is missing or empty in .env!"
+        echo "Please generate one using:"
+        echo "python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+        echo "Then add it to .env: JWT_SECRET=your_secret_here"
+        exit 1
     fi
 fi
 

@@ -49,7 +49,7 @@ class Settings:
     
     youtube_upload_enabled: bool = field(default_factory=lambda: get_env("YOUTUBE_UPLOAD_ENABLED", "false").lower() == "true")
     
-    web_port: int = field(default_factory=lambda: int(get_env("WEB_PORT", "2126")))
+    web_port: int = field(default_factory=lambda: int(get_env("WEB_PORT")))
     control_dir: str = "/tmp/nvr-control"
     static_dir: str = os.path.abspath("./web")
     log_file: str = field(default_factory=lambda: get_env("LOG_FILE"))
@@ -66,8 +66,8 @@ class Settings:
     video_preset: str = field(default_factory=lambda: get_env("VIDEO_PRESET", "veryfast"))
     
     # --- go2rtc ---
-    go2rtc_api_port: int = field(default_factory=lambda: int(get_env("GO2RTC_API_PORT", "2127")))
-    go2rtc_rtsp_port: int = field(default_factory=lambda: int(get_env("GO2RTC_RTSP_PORT", "8554")))
+    go2rtc_api_port: int = field(default_factory=lambda: int(get_env("GO2RTC_API_PORT")))
+    go2rtc_rtsp_port: int = field(default_factory=lambda: int(get_env("GO2RTC_RTSP_PORT")))
     
     @property
     def go2rtc_api_url(self) -> str:

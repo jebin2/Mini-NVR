@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>See Me</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#050508">
+</head>
+
+<body>
+
+    <div id="refresh-indicator"
+        style="position: fixed; top: 0; left: 0; width: 100%; text-align: center; padding: 24px; color: #fff; background: rgba(22, 23, 30, 0.95); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.1); transform: translateY(-100%); transition: transform 0.2s; z-index: 10000; pointer-events: none; font-family: 'Outfit', sans-serif;">
+        Pull to hard refresh...
+    </div>
+
+    <header>
+        <div class="brand">
+            <button id="backBtn" class="btn btn-ghost hidden" onclick="toggleView('grid')">←</button>
+            <span>📺</span>
+        </div>
+        <div class="header-controls">
+            <div class="storage-info" id="storageDisplay">Loading storage...</div>
+            <button id="restartYtBtn" class="btn btn-ghost desktop-only" title="Restart YouTube Stream">🔄 YT</button>
+            <button id="logoutBtn" class="btn btn-ghost">Logout</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- GRID VIEW -->
+        <div id="gridView" class="grid-container">
+            <!-- Cameras injected here -->
+        </div>
+
+        <!-- EXPANDED VIEW -->
+        <div id="expandedView" class="expanded-view">
+            <div class="player-header">
+                <h2 id="activeCamTitle">Camera 1</h2>
+                <div class="controls-row">
+                    <select id="dateSelect" onchange="loadRecordings()"></select>
+                    <button id="liveWebRtcBtn" class="btn btn-live" onclick="playLive()">🔴 Live (WebRTC)</button>
+                </div>
+            </div>
+
+            <div class="video-stage" id="playerContainer">
+                <!-- Iframes injected here -->
+            </div>
+
+            <div class="timeline-wrapper">
+                <div class="timeline-track" id="timeline" onclick="handleTimelineClick(event)">
+                    <!-- Segments injected here -->
+                </div>
+                <div class="time-labels">
+                    <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
+                </div>
+            </div>
+
+            <div class="playlist" id="playlist">
+                <!-- Clips list -->
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="js/app.js"></script>
+    <script>
+        // Pull-to-Refresh Logic
+        let touchStartY = 0;
+        let isPulling = false;
+        const indicator = document.getElementById('refresh-indicator');
+
+        document.addEventListener('touchstart', e => {
+            if (window.scrollY === 0) {
+                touchStartY = e.touches[0].clientY;
+                isPulling = true;
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchmove', e => {
+            if (!isPulling) return;
+            const y = e.touches[0].clientY;
+            const diff = y - touchStartY;
+
+            if (diff > 0 && window.scrollY === 0) {
+                // Visualize pull
+                const translate = Math.min(diff / 2, 100); // Resistance
+                indicator.style.transform = `translateY(${translate - 100}%)`;
+
+                if (diff > 250) {
+                    indicator.innerText = "Release for HARD Refresh!";
+                    indicator.style.background = "rgba(255, 0, 85, 0.8)"; /* Danger color */
+                } else {
+                    indicator.innerText = "Pull long to hard refresh...";
+                    indicator.style.background = "rgba(22, 23, 30, 0.95)";
+                }
+            } else {
+                indicator.style.transform = 'translateY(-100%)';
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchend', async e => {
+            if (!isPulling) return;
+            isPulling = false;
+            const y = e.changedTouches[0].clientY;
+            const diff = y - touchStartY;
+
+            indicator.style.transform = 'translateY(-100%)';
+
+            if (diff > 250 && window.scrollY === 0) {
+                await hardRefresh();
+            }
+        });
+
+        async function hardRefresh() {
+            indicator.innerText = "Updating...";
+            indicator.style.transform = 'translateY(0)';
+
+            try {
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (const registration of registrations) {
+                        await registration.unregister();
+                    }
+                }
+                if ('caches' in window) {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(key => caches.delete(key)));
+                }
+                window.location.reload(true);
+            } catch (error) {
+                console.error('Hard refresh failed:', error);
+                window.location.reload();
+            }
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(reg => console.log('SW registered!', reg))
+                .catch(err => console.log('SW failed!', err));
+        }
+    </script>
+
+</body>
+
+</html>

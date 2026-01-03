@@ -43,7 +43,8 @@ def get_storage_usage():
                 total_size += os.path.getsize(fp)
     
     used_gb = round(total_size / (1024**3), 1)
-    return {"usedGB": used_gb, "maxGB": settings.max_storage_gb}
+    summary = f"{used_gb} GB / {settings.max_storage_gb} GB"
+    return {"summary": summary, "usedGB": used_gb, "maxGB": settings.max_storage_gb}
 
 def get_live_channels():
     channels = {}

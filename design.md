@@ -91,7 +91,7 @@ graph TB
 | Aspect | Description |
 |--------|-------------|
 | **Role** | Secure remote access gateway |
-| **Function** | Exposes localhost:2126 to internet without port forwarding |
+| **Function** | Exposes localhost:web_port to internet without port forwarding |
 | **Security** | Zero Trust architecture, Cloudflare Access policy enforcement |
 
 ---
@@ -112,7 +112,7 @@ sequenceDiagram
     DVR->>Go2RTC: RTSP Stream (continuous)
     
     loop Every SEGMENT_DURATION (10 min)
-        Go2RTC->>Recorder: RTSP relay (localhost:8554)
+        Go2RTC->>Recorder: RTSP relay (localhost:GO2RTC_RTSP_PORT)
         Recorder->>Disk: Write ch{X}/{DATE}/{TIME}.mkv
         Note over Recorder,Disk: FFmpeg: -c copy -f matroska
     end
@@ -126,7 +126,7 @@ sequenceDiagram
 
 **Step-by-Step:**
 1. **DVR → go2rtc**: Single RTSP connection established per camera
-2. **go2rtc → Recorder**: Local RTSP relay on `localhost:8554`
+2. **go2rtc → Recorder**: Local RTSP relay on `localhost:GO2RTC_RTSP_PORT`
 3. **Recorder**: FFmpeg captures stream in 10-minute segments (MKV)
 4. **Converter**: Watches for completed MKV files, converts to MP4
 5. **File Organization**: `recordings/ch{X}/{YYYY-MM-DD}/{HH-MM-SS}.mp4`

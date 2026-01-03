@@ -1,37 +1,18 @@
 from fastapi import Request, HTTPException, status, Depends
-from core.security import is_session_valid
 
-def check_csrf(request: Request):
-    if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
-        csrf_cookie = request.cookies.get("csrf_token")
-        csrf_header = request.headers.get("X-CSRF-Token")
-        
-        if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
-             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="CSRF Token Mismatch"
-            )
+# No longer needed: check_csrf, is_session_valid - handled by GoogleAuthMiddleware
 
-def get_current_user(request: Request, csrf_check: None = Depends(check_csrf)):
-    user = request.session.get("user")
-    token = request.session.get("token")
-    
-    
+def get_current_user(request: Request):
+    """
+    Dependency to get the current authenticated user.
+    New Flow: Rely on GoogleAuthMiddleware to have populated request.state.user
+    """
+    if hasattr(request.state, "user") and request.state.user:
+        return request.state.user
 
-    
-    if not user or not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated"
-        )
-        
-    # Server-side validation
-    if not is_session_valid(user, token):
-        # Invalidated session (e.g. forced logout)
-        request.session.clear()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session expired or invalid"
-        )
-        
-    return user
+    # Middleware should have handled 401 for protected routes?
+    # If not, or if this is used in a route not covered by middleware whitelist logic but still needs user:
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated"
+    )

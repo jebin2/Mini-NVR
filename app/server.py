@@ -1,15 +1,15 @@
 import os
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from api.routes import router as api_router
 from utils.helpers import is_file_live
-from api.auth import router as auth_router
 from api.go2rtc_proxy import router as go2rtc_router, ws_router as go2rtc_ws_router
 from core import config
 from core.logger import setup_logger
+
+from google_auth_service import GoogleAuth, GoogleAuthMiddleware
 
 logger = setup_logger("server")
 
@@ -21,27 +21,54 @@ app = FastAPI(title="NVR UI")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS middleware to allow requests from voidall.com domains
+# 1. Initialize Auth
+auth = GoogleAuth(
+    client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
+    jwt_secret=config.settings.secret_key, # Use existing secret
+    cookie_samesite="lax",
+    cookie_secure=False # Set True if HTTPS
+)
+
+# 2. Add Middleware (Must wrap Auth with CORS)
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https://.*\.?voidall\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_headers=["*"],
     expose_headers=["Content-Length", "Content-Range", "Accept-Ranges", "Content-Type", "Date"],
 )
 
+# Add COOP header for Google Sign-In (Popups)
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    return response
+
 app.add_middleware(
-    SessionMiddleware, 
-    secret_key=config.settings.secret_key,
-    same_site="none",
-    https_only=True
+    GoogleAuthMiddleware,
+    google_auth=auth,
+    public_paths=[
+        "/api/auth/*", # Whitelist auth endpoints
+        "/login.html", 
+        "/", 
+        "/api/go2rtc",
+        "/assets",
+        "/manifest.json",
+        "/sw.js",
+        "/icon-192.png", 
+        "/icon-512.png", 
+        "/favicon.ico"
+    ]
 )
 
 # Mount API
-app.include_router(auth_router, prefix="/api")
+app.include_router(auth.get_router(prefix="/api/auth")) # Routes: /api/auth/google, etc.
 app.include_router(api_router, prefix="/api")
-# go2rtc proxy: WebSocket router first (specific path), then HTTP router (catch-all)
+
+# go2rtc proxy: Restored
 app.include_router(go2rtc_ws_router, prefix="/api/go2rtc")
 app.include_router(go2rtc_router, prefix="/api/go2rtc")
 
@@ -76,7 +103,7 @@ def serve_root_files(filename: str):
     raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/recordings/{path:path}")
-def serve_video(path: str):
+def serve_video(path: str, user = Depends(auth.current_user)): # Protected
     # Security check to prevent directory traversal
     abs_path = os.path.abspath(os.path.join(config.settings.record_dir, path))
     if not abs_path.startswith(os.path.abspath(config.settings.record_dir)):
@@ -91,7 +118,7 @@ def serve_video(path: str):
     else:
         media_type = "video/x-matroska"
     
-    # Explicit CORS headers for video responses (Cloudflare may cache before middleware applies)
+    # Explicit CORS headers for video responses
     cors_headers = {
         "Access-Control-Allow-Origin": "https://www.voidall.com",
         "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
@@ -99,11 +126,7 @@ def serve_video(path: str):
         "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Date",
     }
         
-    # Fix for LocalProtocolError: Too much data for declared Content-Length
-    # If file is live (growing), FileResponse sets Content-Length to X but might read X+Y bytes.
-    # Use StreamingResponse for live files to avoid setting Content-Length (uses Chunked encoding).
     if is_file_live(abs_path):
-        # Allow JellyJump to see Content-Length even for live files
         file_size = os.path.getsize(abs_path)
         cors_headers["Content-Length"] = str(file_size)
 
@@ -122,13 +145,19 @@ def serve_video(path: str):
 
     return FileResponse(abs_path, media_type=media_type, headers=cors_headers)
 
-@app.get("/css/{path:path}")
-def serve_css(path: str):
-    return serve_static(os.path.join(config.settings.static_dir, "css"), path, "text/css")
-
-@app.get("/js/{path:path}")
-def serve_js(path: str):
-    return serve_static(os.path.join(config.settings.static_dir, "js"), path, "application/javascript")
+@app.get("/assets/{path:path}")
+def serve_assets(path: str):
+    """Serve Vite static assets (JS/CSS)"""
+    # Determine MIME type based on extension
+    media_type = "application/octet-stream"
+    if path.endswith(".css"):
+        media_type = "text/css"
+    elif path.endswith(".js"):
+        media_type = "application/javascript"
+    elif path.endswith(".svg"):
+        media_type = "image/svg+xml"
+    
+    return serve_static(os.path.join(config.settings.static_dir, "assets"), path, media_type)
 
 def serve_static(base_dir, path, media_type):
     # Security check
