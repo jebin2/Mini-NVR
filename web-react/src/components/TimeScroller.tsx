@@ -9,6 +9,7 @@ interface TimeScrollerProps {
     availableDates: string[]
     onDateChange: (date: string) => void
     isLive: boolean
+    playbackTime?: number | null // Current playback time in seconds (for sync)
     onPlayHls: (url: string) => void
     onPlayLive: () => void
 }
@@ -44,7 +45,7 @@ function formatZoomLabel(minutes: number): string {
  * - Seek: Tap/drag to select time
  * - Live: Scrubber syncs with current time in live mode
  */
-export default function TimeScroller({ camId, date, availableDates, onDateChange, isLive, onPlayHls, onPlayLive }: TimeScrollerProps) {
+export default function TimeScroller({ camId, date, availableDates, onDateChange, isLive, playbackTime, onPlayHls, onPlayLive }: TimeScrollerProps) {
     const [segments, setSegments] = useState<Segment[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -67,6 +68,20 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
         const now = new Date()
         return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
     }
+
+    // Effect: Sync scrubber with external playback time (e.g. from HLS player)
+    useEffect(() => {
+        if (!isLive && playbackTime !== null && playbackTime !== undefined && !isDragging) {
+            setScrubberTime(playbackTime)
+
+            // Auto-scroll if scrubber moves out of view
+            const viewportEnd = viewportStart + (zoomMinutes * 60)
+            if (playbackTime < viewportStart || playbackTime > viewportEnd) {
+                // Center it
+                setViewportStart(Math.max(0, playbackTime - (zoomMinutes * 60) / 2))
+            }
+        }
+    }, [isLive, playbackTime, isDragging, zoomMinutes, viewportStart])
 
     // Effect: Live Mode Clock
     useEffect(() => {

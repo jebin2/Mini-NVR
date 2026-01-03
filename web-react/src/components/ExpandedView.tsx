@@ -30,8 +30,39 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         }
     }
 
+    const [playbackTime, setPlaybackTime] = useState<number | null>(null)
+
+    useEffect(() => {
+        const handleMessage = (event: MessageEvent) => {
+            // Security check: ensure message comes from expected origin (same origin for now)
+            if (event.origin !== window.location.origin) return;
+
+            if (event.data && event.data.type === 'timeupdate') {
+                // Player sends relative time (seconds from start of video)
+                // Assuming the player plays a single file or a playlist that knows its absolute time?
+                // Actually, for HLS playlist playback, HLS.js usually reports time relative to the start of the playlist/segment.
+                // But our 'playlist.m3u8' is constructed for the WHOLE DAY (or range).
+                // So if the playlist starts at 00:00:00 (which it doesn't, it starts at the first segment), 
+                // we need to know the ABSOLUTE time.
+
+                // However, `Player.js` (JellyJump) wraps HLS.js. 
+                // For now, let's assume the player sends the ABSOLUTE time of day in seconds.
+                // If it sends relative time, we might need to adjust. 
+                // But typically for CCTV playback, we want absolute timestamps.
+
+                if (typeof event.data.currentTime === 'number') {
+                    setPlaybackTime(event.data.currentTime)
+                }
+            }
+        }
+
+        window.addEventListener('message', handleMessage)
+        return () => window.removeEventListener('message', handleMessage)
+    }, [])
+
     function playLive() {
         setHlsUrl(null)
+        setPlaybackTime(null)
         // Switch to today/latest date when going live
         if (dates.length > 0) {
             setSelectedDate(dates[0])
@@ -82,6 +113,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     availableDates={dates}
                     onDateChange={setSelectedDate}
                     isLive={isLive}
+                    playbackTime={playbackTime}
                     onPlayHls={handlePlayHls}
                     onPlayLive={playLive}
                 />
