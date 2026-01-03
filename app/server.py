@@ -32,6 +32,15 @@ auth = GoogleAuth(
 # 2. Add Middleware (Must wrap Auth with CORS)
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=[
+        "https://www.voidall.com",
+        "https://cctv.voidall.com",
+        "https://voidall.com",
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:2126",  # Mini-NVR local
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:2126",
+    ],
     allow_origin_regex=r"https://.*\.?voidall\.com",
     allow_credentials=True,
     allow_methods=["*"],
@@ -118,8 +127,11 @@ def serve_video(path: str, user = Depends(auth.current_user)): # Protected
         media_type = "video/x-matroska"
     
     # Explicit CORS headers for video responses
+    # Allow both voidall.com and localhost for development
+    origin = "https://www.voidall.com"
     cors_headers = {
-        "Access-Control-Allow-Origin": "https://www.voidall.com",
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
         "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
         "Access-Control-Allow-Headers": "*",
         "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Date",
