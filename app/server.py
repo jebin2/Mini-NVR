@@ -164,7 +164,7 @@ def serve_video(path: str, user = Depends(auth.current_user)): # Protected
 
 @app.get("/assets/{path:path}")
 def serve_assets(path: str):
-    """Serve Vite static assets (JS/CSS) OR App Assets (gap.ts)"""
+    """Serve Vite static assets (JS/CSS) or app assets"""
     
     # Check if file exists in web-react assets (Vite build)
     vite_assets_path = os.path.join(config.settings.static_dir, "assets", path)
@@ -178,7 +178,7 @@ def serve_assets(path: str):
             media_type = "image/svg+xml"
         return FileResponse(vite_assets_path, media_type=media_type)
 
-    # Check if file exists in App Assets (e.g. gap.ts)
+    # Check if file exists in App Assets folder
     # Use path relative to this script file to ensure compatibility in Docker and Local
     current_dir = os.path.dirname(os.path.abspath(__file__))
     app_assets_path = os.path.join(current_dir, "assets", path)

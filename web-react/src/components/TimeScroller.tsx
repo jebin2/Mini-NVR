@@ -60,6 +60,9 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
     const [scrubberTime, setScrubberTime] = useState<number | null>(null)
     const [isDragging, setIsDragging] = useState(false)
 
+    // Modal state
+    const [modalInfo, setModalInfo] = useState<{ message: string; onOk: () => void } | null>(null)
+
     const trackRef = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
 
@@ -232,20 +235,26 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
             const nextSeg = segments.find(s => parseTime(s.time) > scrubberTime)
 
             if (nextSeg) {
-                // Gap before a future segment
+                // Gap before a future segment - show modal
                 const nextTime = formatTime(parseTime(nextSeg.time))
-                const ok = window.confirm(`No video available at this time.\n\nNext recording available at ${nextTime}.\n\nClick OK to jump to next recording.`)
-                if (ok) {
-                    const url = getPlaylistUrl(camId, date, nextSeg.time)
-                    onPlayHls(getJellyJumpUrl(window.location.origin + url))
-                    setScrubberTime(parseTime(nextSeg.time))
-                }
+                setModalInfo({
+                    message: `No video available.\nNext recording at ${nextTime}`,
+                    onOk: () => {
+                        const url = getPlaylistUrl(camId, date, nextSeg.time)
+                        onPlayHls(getJellyJumpUrl(window.location.origin + url))
+                        setScrubberTime(parseTime(nextSeg.time))
+                        setModalInfo(null)
+                    }
+                })
             } else {
-                // No future segments - go to live
-                const ok = window.confirm(`No video available at this time.\n\nClick OK to switch to live view.`)
-                if (ok) {
-                    onPlayLive()
-                }
+                // No future segments - show modal to go live
+                setModalInfo({
+                    message: 'No video available.\nSwitching to live view.',
+                    onOk: () => {
+                        onPlayLive()
+                        setModalInfo(null)
+                    }
+                })
             }
         }
     }, [isDragging, scrubberTime, segments, camId, date, onPlayHls, onPlayLive])
@@ -413,6 +422,16 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
                     <span key={i} style={{ left: `${m.pct}%` }}>{m.label}</span>
                 ))}
             </div>
+
+            {/* Modal */}
+            {modalInfo && (
+                <div className="timeline-modal-overlay" onClick={() => setModalInfo(null)}>
+                    <div className="timeline-modal" onClick={e => e.stopPropagation()}>
+                        <p className="timeline-modal-message">{modalInfo.message}</p>
+                        <button className="timeline-modal-btn" onClick={modalInfo.onOk}>OK</button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
