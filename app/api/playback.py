@@ -87,8 +87,11 @@ def get_segments_in_range(channel: int, date: str, start_time: str = None, end_t
             segment_dt = base_date.replace(hour=h, minute=m, second=s)
             
             # Apply time filters
-            if start_dt and segment_dt < start_dt:
-                continue
+            # Include segment if it starts after start_dt, OR if it starts before but ends after start_dt
+            # (i.e., the segment contains the requested start time)
+            segment_end_dt = segment_dt + timedelta(seconds=settings.segment_duration)
+            if start_dt and segment_end_dt < start_dt:
+                continue  # Skip segments that end before the requested start
             if end_dt and segment_dt > end_dt:
                 continue
             
