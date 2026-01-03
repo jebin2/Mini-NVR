@@ -6,6 +6,8 @@ import './TimeScroller.css'
 interface TimeScrollerProps {
     camId: string
     date: string
+    availableDates: string[]
+    onDateChange: (date: string) => void
     isLive: boolean
     onPlayHls: (url: string) => void
     onPlayLive: () => void
@@ -42,7 +44,7 @@ function formatZoomLabel(minutes: number): string {
  * - Seek: Tap/drag to select time
  * - Live: Scrubber syncs with current time in live mode
  */
-export default function TimeScroller({ camId, date, isLive, onPlayHls, onPlayLive }: TimeScrollerProps) {
+export default function TimeScroller({ camId, date, availableDates, onDateChange, isLive, onPlayHls, onPlayLive }: TimeScrollerProps) {
     const [segments, setSegments] = useState<Segment[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -237,16 +239,32 @@ export default function TimeScroller({ camId, date, isLive, onPlayHls, onPlayLiv
 
     return (
         <div className="time-scroller" ref={containerRef}>
-            {/* Header: Time display + Live button */}
+            {/* Header: Date + Time + Live button */}
             <div className="scroller-header">
-                <div className="time-display">
-                    {scrubberTime !== null ? (
-                        <span className="current-time">{formatTimeShort(scrubberTime)}</span>
-                    ) : (
-                        <span className="viewport-range">
-                            {formatTimeShort(viewportStart)} - {formatTimeShort(viewportEnd)}
-                        </span>
-                    )}
+                <div className="header-left">
+                    {/* Date Selector Pill */}
+                    <div className="date-select-wrapper">
+                        <select
+                            className="date-select"
+                            value={date}
+                            onChange={(e) => onDateChange(e.target.value)}
+                        >
+                            {availableDates.map(d => (
+                                <option key={d} value={d}>{d}</option>
+                            ))}
+                        </select>
+                        <span className="date-icon">📅</span>
+                    </div>
+
+                    <div className="time-display">
+                        {scrubberTime !== null ? (
+                            <span className="current-time">{formatTimeShort(scrubberTime)}</span>
+                        ) : (
+                            <span className="viewport-range">
+                                {formatTimeShort(viewportStart)} - {formatTimeShort(viewportEnd)}
+                            </span>
+                        )}
+                    </div>
                 </div>
                 {/* Only show Live button if NOT already in live mode */}
                 {!isLive && (

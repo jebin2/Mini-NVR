@@ -16,8 +16,57 @@
     margin-bottom: 8px;
 }
 
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.date-select-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.date-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 6px 32px 6px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.date-select:hover {
+    background: rgba(0, 0, 0, 0.6);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.date-select:focus {
+    outline: none;
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.date-icon {
+    position: absolute;
+    right: 8px;
+    font-size: 14px;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
 .time-display {
     font-family: 'SF Mono', 'Consolas', monospace;
+    display: flex;
+    /* Ensure alignment if flex children exist */
+    align-items: center;
 }
 
 .current-time {

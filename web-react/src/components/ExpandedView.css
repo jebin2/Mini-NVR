@@ -19,21 +19,7 @@
     font-family: 'Outfit', sans-serif;
 }
 
-.controls-row {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
 
-.controls-row select {
-    padding: 10px 16px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-    color: #fff;
-    font-size: 14px;
-    cursor: pointer;
-}
 
 .video-stage {
     width: 100%;
@@ -71,19 +57,7 @@
         gap: 12px;
     }
 
-    .controls-row {
-        width: 100%;
-    }
 
-    .controls-row select {
-        flex: 1;
-        width: 100%;
-    }
-
-    /* Hide Live button on mobile - clicking live segment auto-plays via WebRTC */
-    .controls-row .btn-live {
-        display: none;
-    }
 
     .video-stage {
         aspect-ratio: 16/12;

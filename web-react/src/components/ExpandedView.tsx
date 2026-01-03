@@ -60,16 +60,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         <div className="expanded-view">
             <div className="player-header">
                 <h2>Camera {camId}</h2>
-                <div className="controls-row">
-                    <select
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                    >
-                        {dates.map(date => (
-                            <option key={date} value={date}>{date}</option>
-                        ))}
-                    </select>
-                </div>
             </div>
 
             <div className="video-stage">
@@ -89,6 +79,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                 <TimeScroller
                     camId={camId}
                     date={selectedDate}
+                    availableDates={dates}
+                    onDateChange={setSelectedDate}
                     isLive={isLive}
                     onPlayHls={handlePlayHls}
                     onPlayLive={playLive}
