@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Channel, fetchDates } from '../services/api'
 import { getWebRTCUrl } from '../services/go2rtc'
 import TimeScroller from './TimeScroller'
@@ -32,33 +32,61 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
     const [playbackTime, setPlaybackTime] = useState<number | null>(null)
 
+    // Helper to parse HH:MM:SS to seconds
+    function parseTime(timeStr: string): number {
+        const parts = timeStr.split(':')
+        return (+parts[0]) * 3600 + (+parts[1]) * 60 + (+parts[2] || 0)
+    }
+
+    // Calculate start time offset from the HLS URL
+    // URL format: .../embed.html?video_url=.../playlist.m3u8?start=HH:MM:SS
+    const startTimeOffset = useMemo(() => {
+        if (!hlsUrl) return 0
+        try {
+            const urlObj = new URL(hlsUrl)
+            const videoUrl = urlObj.searchParams.get('video_url')
+            if (!videoUrl) return 0
+
+            // Handle relative video_url (prepend origin if needed)
+            const fullVideoUrl = videoUrl.startsWith('/')
+                ? window.location.origin + videoUrl
+                : videoUrl
+
+            const vUrlObj = new URL(fullVideoUrl)
+            const start = vUrlObj.searchParams.get('start')
+            if (start) {
+                return parseTime(start)
+            }
+        } catch (e) {
+            console.warn("Failed to parse start time from URL", e)
+        }
+        return 0
+    }, [hlsUrl])
+
+    // Reset playback time when playing new URL
+    useEffect(() => {
+        setPlaybackTime(null)
+    }, [hlsUrl])
+
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
-            // Security check: ensure message comes from expected origin (same origin for now)
-            if (event.origin !== window.location.origin) return;
+            // Security check: ensure message comes from expected player origin
+            // Allow voidall.com and same origin
+            const allowedOrigins = [window.location.origin, "https://www.voidall.com", "https://cctv.voidall.com"]
+            if (!allowedOrigins.includes(event.origin)) return;
 
             if (event.data && event.data.type === 'timeupdate') {
-                // Player sends relative time (seconds from start of video)
-                // Assuming the player plays a single file or a playlist that knows its absolute time?
-                // Actually, for HLS playlist playback, HLS.js usually reports time relative to the start of the playlist/segment.
-                // But our 'playlist.m3u8' is constructed for the WHOLE DAY (or range).
-                // So if the playlist starts at 00:00:00 (which it doesn't, it starts at the first segment), 
-                // we need to know the ABSOLUTE time.
-
-                // However, `Player.js` (JellyJump) wraps HLS.js. 
-                // For now, let's assume the player sends the ABSOLUTE time of day in seconds.
-                // If it sends relative time, we might need to adjust. 
-                // But typically for CCTV playback, we want absolute timestamps.
-
                 if (typeof event.data.currentTime === 'number') {
-                    setPlaybackTime(event.data.currentTime)
+                    // Add offset to relative time
+                    setPlaybackTime(startTimeOffset + event.data.currentTime)
                 }
             }
         }
 
         window.addEventListener('message', handleMessage)
         return () => window.removeEventListener('message', handleMessage)
-    }, [])
+    }, [startTimeOffset])
+
 
     function playLive() {
         setHlsUrl(null)
