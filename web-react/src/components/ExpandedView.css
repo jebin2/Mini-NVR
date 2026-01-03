@@ -37,7 +37,7 @@
 
 .video-stage {
     width: 100%;
-    aspect-ratio: 16/12;
+    aspect-ratio: 16/9;
     background: #000;
     border-radius: 12px;
     overflow: hidden;
