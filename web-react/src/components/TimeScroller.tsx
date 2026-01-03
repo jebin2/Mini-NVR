@@ -9,7 +9,8 @@ interface TimeScrollerProps {
     availableDates: string[]
     onDateChange: (date: string) => void
     isLive: boolean
-    playbackTime?: number | null // Current playback time in seconds (for sync)
+    videoTime?: number | null      // Raw video.currentTime from player
+    playlistStart?: number | null  // Start time of playlist in seconds (wall-clock)
     onPlayHls: (url: string) => void
     onPlayLive: () => void
 }
@@ -45,7 +46,7 @@ function formatZoomLabel(minutes: number): string {
  * - Seek: Tap/drag to select time
  * - Live: Scrubber syncs with current time in live mode
  */
-export default function TimeScroller({ camId, date, availableDates, onDateChange, isLive, playbackTime, onPlayHls, onPlayLive }: TimeScrollerProps) {
+export default function TimeScroller({ camId, date, availableDates, onDateChange, isLive, videoTime, playlistStart, onPlayHls, onPlayLive }: TimeScrollerProps) {
     const [segments, setSegments] = useState<Segment[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -72,19 +73,43 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
         return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
     }
 
-    // Effect: Sync scrubber with external playback time (e.g. from HLS player)
+    // Effect: Sync scrubber with video playback
+    // Maps video.currentTime to actual segment time (handles gaps)
     useEffect(() => {
-        if (!isLive && playbackTime !== null && playbackTime !== undefined && !isDragging) {
-            setScrubberTime(playbackTime)
+        if (isLive || videoTime === null || videoTime === undefined || playlistStart === null || playlistStart === undefined || isDragging) return
+        if (segments.length === 0) return
 
-            // Auto-scroll if scrubber moves out of view
-            const viewportEnd = viewportStart + (zoomMinutes * 60)
-            if (playbackTime < viewportStart || playbackTime > viewportEnd) {
-                // Center it
-                setViewportStart(Math.max(0, playbackTime - (zoomMinutes * 60) / 2))
+        // Build cumulative video time map from segments starting at playlistStart
+        // Find segments that start at or after playlistStart
+        const relevantSegments = segments.filter(s => parseTime(s.time) >= playlistStart)
+        if (relevantSegments.length === 0) return
+
+        // Calculate actual wall-clock time from video.currentTime
+        let cumulativeVideoTime = 0
+        let actualTime = playlistStart
+
+        for (const seg of relevantSegments) {
+            const segStart = parseTime(seg.time)
+            const segDuration = seg.duration
+
+            if (videoTime < cumulativeVideoTime + segDuration) {
+                // Currently in this segment
+                const offsetInSegment = videoTime - cumulativeVideoTime
+                actualTime = segStart + offsetInSegment
+                break
             }
+            cumulativeVideoTime += segDuration
+            actualTime = segStart + segDuration // Move to end of this segment
         }
-    }, [isLive, playbackTime, isDragging, zoomMinutes, viewportStart])
+
+        setScrubberTime(actualTime)
+
+        // Auto-scroll if scrubber moves out of view
+        const viewportEnd = viewportStart + (zoomMinutes * 60)
+        if (actualTime < viewportStart || actualTime > viewportEnd) {
+            setViewportStart(Math.max(0, actualTime - (zoomMinutes * 60) / 2))
+        }
+    }, [isLive, videoTime, playlistStart, segments, isDragging, zoomMinutes, viewportStart])
 
     // Effect: Live Mode Clock
     useEffect(() => {

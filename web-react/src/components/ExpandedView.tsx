@@ -30,7 +30,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         }
     }
 
-    const [playbackTime, setPlaybackTime] = useState<number | null>(null)
+    // Raw video.currentTime from player (not wall-clock adjusted)
+    const [videoTime, setVideoTime] = useState<number | null>(null)
 
     // Helper to parse HH:MM:SS to seconds
     function parseTime(timeStr: string): number {
@@ -38,14 +39,13 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         return (+parts[0]) * 3600 + (+parts[1]) * 60 + (+parts[2] || 0)
     }
 
-    // Calculate start time offset from the HLS URL
-    // URL format: .../embed.html?video_url=.../playlist.m3u8?start=HH:MM:SS
-    const startTimeOffset = useMemo(() => {
-        if (!hlsUrl) return 0
+    // Calculate playlist start time from the HLS URL (wall-clock seconds)
+    const playlistStart = useMemo(() => {
+        if (!hlsUrl) return null
         try {
             const urlObj = new URL(hlsUrl)
             const videoUrl = urlObj.searchParams.get('video_url')
-            if (!videoUrl) return 0
+            if (!videoUrl) return null
 
             // Handle relative video_url (prepend origin if needed)
             const fullVideoUrl = videoUrl.startsWith('/')
@@ -60,36 +60,36 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         } catch (e) {
             console.warn("Failed to parse start time from URL", e)
         }
-        return 0
+        return null
     }, [hlsUrl])
 
-    // Reset playback time when playing new URL
+    // Reset video time when playing new URL
     useEffect(() => {
-        setPlaybackTime(null)
+        setVideoTime(null)
     }, [hlsUrl])
 
+    // Listen for timeupdate messages from JellyJump player
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
             // Security check: ensure message comes from expected player origin
-            // Allow voidall.com and same origin
             const allowedOrigins = [window.location.origin, "https://www.voidall.com", "https://cctv.voidall.com"]
             if (!allowedOrigins.includes(event.origin)) return;
 
             if (event.data && event.data.type === 'timeupdate') {
                 if (typeof event.data.currentTime === 'number') {
-                    // Add offset to relative time
-                    setPlaybackTime(startTimeOffset + event.data.currentTime)
+                    // Store raw video time - TimeScroller will map to actual segment time
+                    setVideoTime(event.data.currentTime)
                 }
             }
         }
 
         window.addEventListener('message', handleMessage)
         return () => window.removeEventListener('message', handleMessage)
-    }, [startTimeOffset])
+    }, [])
 
     function playLive() {
         setHlsUrl(null)
-        setPlaybackTime(null)
+        setVideoTime(null)
         // Switch to today/latest date when going live
         if (dates.length > 0) {
             setSelectedDate(dates[0])
@@ -140,7 +140,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     availableDates={dates}
                     onDateChange={setSelectedDate}
                     isLive={isLive}
-                    playbackTime={playbackTime}
+                    videoTime={videoTime}
+                    playlistStart={playlistStart}
                     onPlayHls={handlePlayHls}
                     onPlayLive={playLive}
                 />
