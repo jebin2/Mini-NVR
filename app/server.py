@@ -36,7 +36,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_headers=["*"],
     expose_headers=["Content-Length", "Content-Range", "Accept-Ranges", "Content-Type", "Date"],
 )
 
