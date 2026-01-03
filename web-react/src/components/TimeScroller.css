@@ -3,29 +3,32 @@
     padding: 12px;
     background: rgba(0, 0, 0, 0.25);
     border-radius: 16px;
-    touch-action: none;
+    touch-action: pan-y;
     user-select: none;
     -webkit-user-select: none;
 }
 
-/* Compact header - single row */
+/* Header: time display + live button */
 .scroller-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
-.scroller-time {
+.time-display {
     font-family: 'SF Mono', 'Consolas', monospace;
-    font-size: 20px;
+}
+
+.current-time {
+    font-size: 22px;
     font-weight: 700;
     color: #10b981;
 }
 
-.scroller-hint {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.4);
+.viewport-range {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
 }
 
 .btn-live-pill {
@@ -37,16 +40,81 @@
     color: #ff0055;
     border-radius: 20px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.15s;
 }
 
-.btn-live-pill:hover,
 .btn-live-pill:active {
     background: rgba(255, 0, 85, 0.3);
-    transform: scale(1.02);
+    transform: scale(0.97);
 }
 
-/* Track - large touch target */
+/* Controls row: navigation + zoom */
+.scroller-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    gap: 8px;
+}
+
+.nav-btn {
+    width: 40px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.nav-btn:active {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(0.95);
+}
+
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 4px 12px;
+    border-radius: 20px;
+}
+
+.zoom-btn {
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.zoom-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.zoom-btn:not(:disabled):active {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(0.9);
+}
+
+.zoom-label {
+    min-width: 36px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Track */
 .scroller-track {
     position: relative;
     height: 56px;
@@ -54,6 +122,7 @@
     border-radius: 12px;
     cursor: pointer;
     overflow: hidden;
+    touch-action: none;
 }
 
 .scroller-track.loading {
@@ -64,18 +133,18 @@
     background: rgba(255, 255, 255, 0.1);
 }
 
-/* Coverage blocks - recorded segments */
+/* Coverage blocks */
 .coverage-block {
     position: absolute;
     top: 4px;
     bottom: 4px;
     background: linear-gradient(180deg,
             rgba(59, 130, 246, 0.6) 0%,
-            rgba(59, 130, 246, 0.8) 100%);
+            rgba(59, 130, 246, 0.85) 100%);
     border-radius: 6px;
 }
 
-/* Scrubber - visible handle */
+/* Scrubber */
 .scrubber {
     position: absolute;
     top: 0;
@@ -84,6 +153,7 @@
     background: #10b981;
     transform: translateX(-50%);
     box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+    z-index: 10;
 }
 
 .scrubber::before {
@@ -96,7 +166,7 @@
     height: 16px;
     background: #10b981;
     border-radius: 50%;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 .scrubber::after {
@@ -109,10 +179,10 @@
     height: 16px;
     background: #10b981;
     border-radius: 50%;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
-/* No recordings message */
+/* No recordings */
 .no-recordings {
     position: absolute;
     inset: 0;
@@ -123,45 +193,55 @@
     color: rgba(255, 255, 255, 0.4);
 }
 
-/* Hour markers - simple numbers */
-.hour-markers {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 6px;
-    padding: 0 4px;
+/* Time markers - positioned below track */
+.time-markers {
+    position: relative;
+    height: 20px;
+    margin-top: 4px;
 }
 
-.hour-markers span {
-    font-size: 11px;
+.time-markers span {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 10px;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.4);
+    white-space: nowrap;
 }
 
 /* Mobile optimizations */
 @media (max-width: 768px) {
     .time-scroller {
-        margin: 8px 0;
         padding: 10px;
     }
 
     .scroller-track {
         height: 64px;
-        /* Larger touch target on mobile */
     }
 
-    .scroller-time {
-        font-size: 24px;
-        /* Bigger time display */
+    .current-time {
+        font-size: 26px;
     }
 
-    .btn-live-pill {
-        padding: 10px 20px;
-        font-size: 14px;
+    .nav-btn {
+        width: 48px;
+        height: 40px;
+        font-size: 16px;
+    }
+
+    .zoom-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 20px;
     }
 
     .scrubber::before,
     .scrubber::after {
         width: 20px;
         height: 20px;
+    }
+
+    .time-markers span {
+        font-size: 11px;
     }
 }
