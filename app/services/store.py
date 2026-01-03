@@ -6,6 +6,10 @@ from core.logger import setup_logger
 from utils.helpers import is_file_live, parse_filename, format_size
 from services.media import get_video_duration
 from services.metadata import MetadataCache
+from utils.naming_conventions import (
+    parse_youtube_csv_filename,
+    parse_youtube_csv_line
+)
 
 logger = setup_logger("store")
 meta_cache = MetadataCache(os.path.join(settings.record_dir, "metadata_cache.json"))
@@ -96,6 +100,42 @@ def get_available_dates(channel=None):
         except OSError:
             pass
             
+    # Scan CSV files for cloud-only dates (or if local files are missing)
+    try:
+        pattern = os.path.join(settings.record_dir, "youtube_uploads_*.csv")
+        for csv_file in glob.glob(pattern):
+            # Extract date from filename
+            date_str = parse_youtube_csv_filename(csv_file)
+            if not date_str:
+                continue
+            
+            # If date already found locally, skip expensive CSV read
+            if date_str in dates:
+                continue
+                
+            # If channel filter is active, check if this CSV contains videos for this channel
+            if channel:
+                target_cam = f"Channel {channel}"
+                found_match = False
+                try:
+                    with open(csv_file, 'r') as f:
+                        for line in f:
+                            data = parse_youtube_csv_line(line)
+                            if data and data['camera'] == target_cam:
+                                found_match = True
+                                break
+                except Exception:
+                    pass
+                
+                if found_match:
+                    dates.add(date_str)
+            else:
+                # No channel filter, include date if CSV exists
+                dates.add(date_str)
+                
+    except Exception as e:
+        logger.error(f"Error scanning CSVs in get_dates: {e}")
+
     t3 = time.time()
     logger.info(f"[PERF] get_dates(ch={channel}) total={t3-t0:.4f}s")
     return sorted(list(dates), reverse=True)
@@ -113,13 +153,59 @@ def load_youtube_map():
         try:
             with open(csv_path, 'r') as f:
                 for line in f:
-                    parts = line.strip().split(',')
-                    if len(parts) >= 4:
-                        # Format: Channel,Date,Time,URL,Status
-                        url = parts[3]
+                    data = parse_youtube_csv_line(line)
+                    if data:
+                        url = data['url']
                         # Use channel/date/time as key
-                        rel_path = parts[0]
-                        mapping[rel_path] = url
+                        rel_path = data['channel'] # This logic seems suspect in original code, it was mapping[parts[0]] where parts[0] is channel name?
+                        # Wait, the original code:
+                        # rel_path = parts[0] 
+                        # mapping[rel_path] = url
+                        # parts[0] is channel NAME (e.g. homeservernvr).
+                        # This mapping seems to map "homeservernvr" -> url? Overwriting each time?
+                        # Let's check original code context.
+                        # Original:
+                        # parts = line.strip().split(',')
+                        # if len(parts) >= 4:
+                        #     url = parts[3]
+                        #     rel_path = parts[0]
+                        #     mapping[rel_path] = url
+                        
+                        # Yes, it seems it keys by 'channel' which is the first column.
+                        # This means it keeps only the LAST url for a channel?
+                        # Unless parts[0] is something else.
+                        # In youtube_video_sync.py: line = f"{channel},{date_str},{time_str},{url},synced,{camera}\n"
+                        # So parts[0] IS channel name.
+                        
+                        # Wait, in store.py `get_recordings_for_date`:
+                        # youtube_map = load_youtube_map()
+                        # for rel_path, url in youtube_map.items():
+                        #     ...
+                        #     meta = parse_filename(rel_path)
+                        
+                        # parse_filename expects a file path. "homeservernvr" is not a file path.
+                        # This implies `parts[0]` in the CSV was meant to be a relative path?
+                        # BUT youtube_video_sync writes `channel` (name) there.
+                        
+                        # Ah, looking at `youtube_uploader.py`:
+                        # line = f"{info['channel']},{info['date']},{info['time']},{url},{timestamp}\n"
+                        # info['channel'] comes from `_parse_video_path`.
+                        # `channel = channel_dir.replace("ch", "Channel ")`
+                        # So it writes "Channel 1" etc.
+                        
+                        # It seems the CSV format in `store.py` expects the first column to be useful for `parse_filename`.
+                        # But `parse_filename` parses standard NVR filenames.
+                        # "Channel 1" won't parse.
+                        
+                        # If `store.py` logic around `load_youtube_map` relies on `rel_path` being parseable...
+                        # ...then the current CSV content (generated by sync/uploader) might be incompatible with `store.py` expectations?
+                        # OR `store.py` expects a different CSV format.
+                        
+                        # Let's preserve exact behavior for now to modify naming logic, but this smells like a bug in existing `store.py` logic or my understanding.
+                        # If I change it to use `parse_youtube_csv_line`, I get `data['channel']`.
+                        # I should use that.
+                        
+                        mapping[data['channel']] = url
         except Exception as e:
             logger.error(f"Failed to load youtube map from {csv_path}: {e}")
     

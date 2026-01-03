@@ -219,3 +219,5 @@ nvr_youtube_auto_pub/
 nvr_youtube_reauth/
 test.mp4
 client/*.json
+nvr_youtube_reauth_1/
+youtube_auto_pub_renamed/

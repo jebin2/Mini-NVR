@@ -9,6 +9,11 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Set
 from services.youtube_accounts import YouTubeAccountManager
+from utils.naming_conventions import (
+    get_youtube_csv_filename,
+    extract_camera_from_title,
+    format_youtube_csv_line
+)
 
 logger = logging.getLogger("yt_sync.video_sync")
 
@@ -115,10 +120,20 @@ class YouTubeVideoSync:
                 date_str = "unknown"
                 time_str = "00:00:00"
             
-            csv_file = os.path.join(self.recordings_dir, f"youtube_uploads_{date_str}.csv")
+            csv_file = get_youtube_csv_filename(self.recordings_dir, date_str)
             channel = video.get("channel", "YouTube")
             url = f"https://youtube.com/watch?v={video['video_id']}"
-            line = f"{channel},{date_str},{time_str},{url},synced\n"
+            
+            # Extract camera name from title
+            camera = extract_camera_from_title(video['title'])
+            
+            line = format_youtube_csv_line(
+                channel_name=channel,
+                date_str=date_str,
+                time_str=time_str,
+                url=url,
+                camera_name=camera
+            )
             
             with open(csv_file, "a") as f:
                 f.write(line)

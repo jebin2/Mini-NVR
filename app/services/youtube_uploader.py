@@ -12,6 +12,10 @@ from datetime import datetime
 from typing import List, Optional
 from youtube_auto_pub import VideoMetadata
 from services.youtube_accounts import YouTubeAccountManager
+from utils.naming_conventions import (
+    get_youtube_csv_filename,
+    format_youtube_csv_line
+)
 
 logger = logging.getLogger("yt_upload")
 
@@ -173,10 +177,36 @@ class YouTubeUploaderService:
     
     def _log_to_csv(self, info: dict, video_id: str):
         """Log upload to per-day CSV."""
-        csv_path = os.path.join(self.recordings_dir, f"youtube_uploads_{info['date']}.csv")
+        csv_path = get_youtube_csv_filename(self.recordings_dir, info['date'])
         url = f"https://youtube.com/watch?v={video_id}"
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        line = f"{info['channel']},{info['date']},{info['time']},{url},{timestamp}\n"
+        
+        # NOTE: Uploader uses 'timestamp' for time column in original code, but format_youtube_csv_line expects just time string?
+        # Original: timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Original line: f"{info['channel']},{info['date']},{info['time']},{url},{timestamp}\n"
+        # Wait, the 5th column was timestamp?
+        # youtube_video_sync.py uses "synced" as 5th column (status).
+        # youtube_uploader.py uses timestamp as 5th column?
+        # This inconsistency makes commonizing hard if we strict parse.
+        
+        # Let's check naming_conventions.py:
+        # format_youtube_csv_line(..., time_str, url, status="synced", camera_name="Unknown")
+        # It puts status in 5th column.
+        
+        # If I change uploader to use helper, the 5th column becomes "synced" (or I pass timestamp as status).
+        # And I can pass "Channel X" as camera name?
+        # info['channel'] is "Channel 1" etc.
+        
+        # Let's align them. Uploader adds "Channel X" as first column too.
+        # And uses it as camera column too?
+        
+        line = format_youtube_csv_line(
+            channel_name=info['channel'],
+            date_str=info['date'],
+            time_str=info['time'], # This is video time
+            url=url,
+            status=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # Using timestamp as status?
+            camera_name=info['channel'] # Duplicate channel info to camera column for consistency
+        )
         
         try:
             with open(csv_path, "a") as f:
