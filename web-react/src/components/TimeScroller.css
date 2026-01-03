@@ -1,191 +1,167 @@
 .time-scroller {
-    margin: 16px 0;
+    margin: 12px 0;
     padding: 12px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 16px;
+    touch-action: none;
     user-select: none;
+    -webkit-user-select: none;
 }
 
+/* Compact header - single row */
 .scroller-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
-    gap: 12px;
-}
-
-.scroller-label {
-    font-size: 13px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.7);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    margin-bottom: 10px;
 }
 
 .scroller-time {
     font-family: 'SF Mono', 'Consolas', monospace;
-    font-size: 16px;
+    font-size: 20px;
     font-weight: 700;
     color: #10b981;
-    background: rgba(16, 185, 129, 0.15);
-    padding: 4px 10px;
-    border-radius: 6px;
-    flex: 1;
-    text-align: center;
 }
 
-.btn-live-small {
-    padding: 6px 12px;
-    font-size: 12px;
-    background: rgba(255, 0, 85, 0.2);
-    border: 1px solid rgba(255, 0, 85, 0.4);
+.scroller-hint {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.btn-live-pill {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    background: rgba(255, 0, 85, 0.15);
+    border: none;
     color: #ff0055;
-    border-radius: 6px;
+    border-radius: 20px;
     cursor: pointer;
     transition: all 0.2s;
 }
 
-.btn-live-small:hover {
-    background: rgba(255, 0, 85, 0.4);
-    color: white;
+.btn-live-pill:hover,
+.btn-live-pill:active {
+    background: rgba(255, 0, 85, 0.3);
+    transform: scale(1.02);
 }
 
+/* Track - large touch target */
 .scroller-track {
     position: relative;
-    height: 48px;
-    background: linear-gradient(to bottom,
-            rgba(255, 255, 255, 0.03),
-            rgba(255, 255, 255, 0.08));
-    border-radius: 8px;
-    cursor: crosshair;
-    touch-action: none;
+    height: 56px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    cursor: pointer;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .scroller-track.loading {
     opacity: 0.5;
-    pointer-events: none;
 }
 
-.scroller-track.loading::after {
-    content: 'Loading...';
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
+.scroller-track.active {
+    background: rgba(255, 255, 255, 0.1);
 }
 
-.scroller-track.dragging {
-    cursor: grabbing;
-}
-
-/* Coverage blocks - show recorded segments */
+/* Coverage blocks - recorded segments */
 .coverage-block {
     position: absolute;
-    height: 100%;
-    background: linear-gradient(to bottom,
-            rgba(59, 130, 246, 0.5),
-            rgba(59, 130, 246, 0.7));
-    transition: background 0.15s;
+    top: 4px;
+    bottom: 4px;
+    background: linear-gradient(180deg,
+            rgba(59, 130, 246, 0.6) 0%,
+            rgba(59, 130, 246, 0.8) 100%);
+    border-radius: 6px;
 }
 
-.scroller-track:hover .coverage-block {
-    background: linear-gradient(to bottom,
-            rgba(59, 130, 246, 0.6),
-            rgba(59, 130, 246, 0.8));
-}
-
-/* Live indicator */
-.live-indicator {
-    position: absolute;
-    width: 3px;
-    height: 100%;
-    background: #ff0055;
-    box-shadow: 0 0 8px rgba(255, 0, 85, 0.6);
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-
-    0%,
-    100% {
-        opacity: 1;
-    }
-
-    50% {
-        opacity: 0.6;
-    }
-}
-
-/* Scrubber handle */
+/* Scrubber - visible handle */
 .scrubber {
     position: absolute;
+    top: 0;
+    bottom: 0;
     width: 4px;
-    height: calc(100% + 8px);
-    top: -4px;
     background: #10b981;
-    border-radius: 2px;
     transform: translateX(-50%);
-    box-shadow:
-        0 0 0 2px rgba(16, 185, 129, 0.3),
-        0 2px 8px rgba(0, 0, 0, 0.3);
-    pointer-events: none;
-}
-
-.scrubber::before,
-.scrubber::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 12px;
-    height: 12px;
-    background: #10b981;
-    border-radius: 50%;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
 }
 
 .scrubber::before {
-    top: -6px;
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 16px;
+    height: 16px;
+    background: #10b981;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .scrubber::after {
-    bottom: -6px;
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 16px;
+    height: 16px;
+    background: #10b981;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.scroller-labels {
+/* No recordings message */
+.no-recordings {
+    position: absolute;
+    inset: 0;
     display: flex;
-    justify-content: space-between;
-    margin-top: 8px;
-    padding: 0 2px;
-}
-
-.scroller-labels span {
-    font-size: 10px;
-    font-weight: 500;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
     color: rgba(255, 255, 255, 0.4);
 }
 
-/* Mobile styles - simpler but still functional */
+/* Hour markers - simple numbers */
+.hour-markers {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    padding: 0 4px;
+}
+
+.hour-markers span {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.35);
+}
+
+/* Mobile optimizations */
 @media (max-width: 768px) {
     .time-scroller {
+        margin: 8px 0;
         padding: 10px;
     }
 
     .scroller-track {
-        height: 40px;
-    }
-
-    .scroller-header {
-        flex-wrap: wrap;
+        height: 64px;
+        /* Larger touch target on mobile */
     }
 
     .scroller-time {
-        order: 3;
-        width: 100%;
-        margin-top: 8px;
+        font-size: 24px;
+        /* Bigger time display */
+    }
+
+    .btn-live-pill {
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+
+    .scrubber::before,
+    .scrubber::after {
+        width: 20px;
+        height: 20px;
     }
 }

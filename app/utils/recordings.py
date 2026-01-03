@@ -49,13 +49,10 @@ def get_storage_usage():
 def get_live_channels():
     channels = {}
     for ch in settings.get_active_channels():
-        # Find latest file for this channel (checking HLS segments, MP4 and legacy MKV)
+        # Find latest HLS segment for this channel
         candidates = []
-        for ext in ["ts", "mp4", "mkv"]:
-            # Check Flat
-            candidates.extend(glob.glob(os.path.join(settings.record_dir, f"ch{ch}_*.{ext}")))
-            # Check Nested
-            candidates.extend(glob.glob(os.path.join(settings.record_dir, f"ch{ch}", "*", f"*.{ext}")))
+        # Check Nested HLS segments
+        candidates.extend(glob.glob(os.path.join(settings.record_dir, f"ch{ch}", "*", "*.ts")))
         
         status = "OFF"
         file_path = None
