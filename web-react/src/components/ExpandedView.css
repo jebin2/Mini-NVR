@@ -62,7 +62,7 @@
 
 @media (max-width: 768px) {
     .expanded-view {
-        padding: 10px;
+        padding: 0px;
     }
 
     .player-header {

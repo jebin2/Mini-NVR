@@ -1,5 +1,6 @@
 import './App.css'
 import MainApp from './components/MainApp'
+import PullToRefresh from './components/PullToRefresh'
 import {
   useGoogleAuth,
   GoogleSignInButton,
@@ -20,22 +21,31 @@ function App() {
   // Show login if not authenticated
   if (!user) {
     return (
-      <div className="login-wrapper">
-        <div className="login-card">
-          <div className="login-header">
-            <h2>📺 See Me</h2>
-            <p>NVR System Authentication</p>
-          </div>
-          <div className="login-content">
-            <GoogleSignInButton width={300} />
+      <>
+        <PullToRefresh />
+        <div className="login-wrapper">
+          <div className="login-card">
+            <div className="login-header">
+              <h2>📺 See Me</h2>
+              <p>NVR System Authentication</p>
+            </div>
+            <div className="login-content">
+              <GoogleSignInButton width={300} />
+            </div>
           </div>
         </div>
-      </div>
+      </>
     )
   }
 
-  // Show main app
-  return <MainApp user={user} />
+  // Show main app with pull-to-refresh
+  return (
+    <>
+      <PullToRefresh />
+      <MainApp user={user} />
+    </>
+  )
 }
 
 export default App
+

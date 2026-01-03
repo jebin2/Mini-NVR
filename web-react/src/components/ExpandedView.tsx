@@ -95,8 +95,13 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             return ''
         }
 
-        // For LIVE recording segment, use HLS via JellyJump
+        // For LIVE recording segment
         if (rec.live) {
+            // On mobile, use WebRTC directly for better performance
+            if (isMobile()) {
+                return getWebRTCUrl(camId)
+            }
+            // On desktop, use HLS via JellyJump
             const hlsUrl = getHlsApiUrl(camId)
             return getJellyJumpUrl(hlsUrl)
         }

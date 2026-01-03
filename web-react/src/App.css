@@ -30,6 +30,6 @@ main::-webkit-scrollbar-thumb {
 
 @media screen and (max-width: 768px) {
   main {
-    padding: 16px;
+    padding: 10px;
   }
 }
