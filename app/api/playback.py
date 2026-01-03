@@ -120,8 +120,26 @@ def generate_m3u8_playlist(segments: list[dict], base_url: str, start_dt: dateti
     Returns:
         M3U8 playlist content as string
     """
+    # Pre-calculated gap segment info
+    gap_url = "/assets/gap.ts"
+    gap_duration = 1.0
+    
     if not segments:
-        return "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:0\n#EXT-X-ENDLIST\n"
+        # No segments - return a short "No Video" playlist using gap.ts
+        # This prevents the player from being stuck on empty
+        lines = [
+            "#EXTM3U",
+            "#EXT-X-VERSION:3",
+            f"#EXT-X-TARGETDURATION:{int(gap_duration) + 1}",
+            "#EXT-X-MEDIA-SEQUENCE:0",
+            "#EXT-X-PLAYLIST-TYPE:VOD",
+        ]
+        # Add a few gap segments so player has something to show
+        for _ in range(5):  # 5 seconds of "No Video"
+            lines.append(f"#EXTINF:{gap_duration},")
+            lines.append(gap_url)
+        lines.append("#EXT-X-ENDLIST")
+        return "\n".join(lines)
     
     # Calculate max duration for TARGETDURATION header
     max_duration = max(s["duration"] for s in segments)
@@ -136,10 +154,6 @@ def generate_m3u8_playlist(segments: list[dict], base_url: str, start_dt: dateti
     
     last_end_time = None
     GAP_THRESHOLD = 1.5 # Seconds
-    
-    # Pre-calculated gap segment info
-    gap_url = "/assets/gap.ts" # Server endpoint for gap segment
-    gap_duration = 1.0 # Duration of gap.ts asset
 
     for seg in segments:
         current_start = seg["datetime"]
