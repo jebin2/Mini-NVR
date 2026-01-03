@@ -109,7 +109,7 @@ def get_segments_in_range(channel: int, date: str, start_time: str = None, end_t
     return segments
 
 
-def generate_m3u8_playlist(segments: list[dict], base_url: str) -> str:
+def generate_m3u8_playlist(segments: list[dict], base_url: str, start_dt: datetime = None) -> str:
     """
     Generate an HLS playlist (.m3u8) from a list of segments.
     
@@ -144,7 +144,22 @@ def generate_m3u8_playlist(segments: list[dict], base_url: str) -> str:
     for seg in segments:
         current_start = seg["datetime"]
         
-        # Check for gap
+        # Check for initial gap (between requested start and first segment)
+        if start_dt and not last_end_time:
+            if start_dt < current_start:
+                gap_seconds = (current_start - start_dt).total_seconds()
+                
+                # We always fill the initial gap if it exists, to match requested start time
+                num_fillers = int(gap_seconds // gap_duration)
+                
+                if num_fillers > 0:
+                    lines.append(f"#EXT-X-PROGRAM-DATE-TIME:{start_dt.isoformat()}")
+                    for _ in range(num_fillers):
+                        lines.append(f"#EXTINF:{gap_duration},")
+                        lines.append(gap_url)
+                    lines.append("#EXT-X-DISCONTINUITY")
+        
+        # Check for gap between segments
         if last_end_time:
             gap_seconds = (current_start - last_end_time).total_seconds()
             
@@ -216,8 +231,18 @@ def get_playback_playlist(
     # Segments are served from /recordings/chX/YYYY-MM-DD/
     base_url = f"/recordings/ch{channel}/{date}/"
     
+    # Parse start time for gap generation
+    start_dt = None
+    if start:
+        try:
+            h, m, s = map(int, start.split(':'))
+            base_date = datetime.strptime(date, "%Y-%m-%d")
+            start_dt = base_date.replace(hour=h, minute=m, second=s)
+        except ValueError:
+            pass
+
     # Generate playlist
-    playlist_content = generate_m3u8_playlist(segments, base_url)
+    playlist_content = generate_m3u8_playlist(segments, base_url, start_dt=start_dt)
     
     return Response(
         content=playlist_content,
