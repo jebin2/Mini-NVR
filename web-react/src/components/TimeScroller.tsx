@@ -6,6 +6,7 @@ import './TimeScroller.css'
 interface TimeScrollerProps {
     camId: string
     date: string
+    isLive: boolean
     onPlayHls: (url: string) => void
     onPlayLive: () => void
 }
@@ -39,8 +40,9 @@ function formatZoomLabel(minutes: number): string {
  * - Zoom: 30min to 24hr range
  * - Scroll: Horizontal scroll through day
  * - Seek: Tap/drag to select time
+ * - Live: Scrubber syncs with current time in live mode
  */
-export default function TimeScroller({ camId, date, onPlayHls, onPlayLive }: TimeScrollerProps) {
+export default function TimeScroller({ camId, date, isLive, onPlayHls, onPlayLive }: TimeScrollerProps) {
     const [segments, setSegments] = useState<Segment[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -58,6 +60,40 @@ export default function TimeScroller({ camId, date, onPlayHls, onPlayLive }: Tim
     const trackRef = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
 
+    // Helper: Get current time of day in seconds
+    const getCurrentTimeSeconds = () => {
+        const now = new Date()
+        return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+    }
+
+    // Effect: Live Mode Clock
+    useEffect(() => {
+        if (!isLive) return
+
+        // Update scrubber to current time immediately
+        const updateClock = () => {
+            const nowSec = getCurrentTimeSeconds()
+            setScrubberTime(nowSec)
+            return nowSec
+        }
+
+        const nowSec = updateClock()
+
+        // Center viewport on current time if we are not dragging
+        // and if scrubber is out of view (or just initially)
+        const viewportSeconds = zoomMinutes * 60
+        const viewportEnd = viewportStart + viewportSeconds
+
+        if (nowSec < viewportStart || nowSec > viewportEnd) {
+            setViewportStart(Math.max(0, nowSec - viewportSeconds / 2))
+        }
+
+        // Timer to update every second
+        const interval = setInterval(updateClock, 1000)
+
+        return () => clearInterval(interval)
+    }, [isLive, zoomMinutes]) // Only re-run if live state or zoom changes
+
     // Load segments
     useEffect(() => {
         async function load() {
@@ -66,11 +102,10 @@ export default function TimeScroller({ camId, date, onPlayHls, onPlayLive }: Tim
                 const data = await fetchSegments(camId, date)
                 setSegments(data.segments)
 
-                // Auto-scroll to latest recording
-                if (data.segments.length > 0) {
+                // If NOT live, center on latest recording
+                if (!isLive && data.segments.length > 0) {
                     const lastSeg = data.segments[data.segments.length - 1]
                     const lastTime = parseTime(lastSeg.time)
-                    // Center viewport on latest recording
                     const zoomSec = zoomMinutes * 60
                     setViewportStart(Math.max(0, lastTime - zoomSec / 2))
                 }
@@ -213,9 +248,15 @@ export default function TimeScroller({ camId, date, onPlayHls, onPlayLive }: Tim
                         </span>
                     )}
                 </div>
-                <button className="btn-live-pill" onClick={onPlayLive}>
-                    🔴 Live
-                </button>
+                {/* Only show Live button if NOT already in live mode */}
+                {!isLive && (
+                    <button className="btn-live-pill" onClick={onPlayLive}>
+                        🔴 Live
+                    </button>
+                )}
+                {isLive && (
+                    <span className="live-badge">LIVE VIEW</span>
+                )}
             </div>
 
             {/* Controls: Scroll + Zoom */}

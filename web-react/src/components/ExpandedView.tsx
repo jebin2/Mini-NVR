@@ -32,6 +32,10 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
     function playLive() {
         setHlsUrl(null)
+        // Switch to today/latest date when going live
+        if (dates.length > 0) {
+            setSelectedDate(dates[0])
+        }
     }
 
     // Handler for TimeScroller - plays HLS at a specific time
@@ -50,6 +54,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     }
 
     const videoSrc = getVideoSrc()
+    const isLive = !hlsUrl
 
     return (
         <div className="expanded-view">
@@ -64,9 +69,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                             <option key={date} value={date}>{date}</option>
                         ))}
                     </select>
-                    <button className="btn btn-live" onClick={playLive}>
-                        Live
-                    </button>
                 </div>
             </div>
 
@@ -87,6 +89,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                 <TimeScroller
                     camId={camId}
                     date={selectedDate}
+                    isLive={isLive}
                     onPlayHls={handlePlayHls}
                     onPlayLive={playLive}
                 />

@@ -115,7 +115,7 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                 "-f", "hls",
                 "-hls_time", str(segment_duration),
                 "-hls_list_size", "0",  # Keep all segments in playlist
-                "-hls_flags", "append_list+program_date_time+second_level_segment_index",
+                "-hls_flags", "append_list+program_date_time",
                 "-strftime", "1",
                 "-hls_segment_filename", f"{out_dir}/%H%M%S.ts",
                 f"{out_dir}/playlist.m3u8"
