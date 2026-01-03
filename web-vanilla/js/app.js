@@ -128,7 +128,7 @@ function playClip(index) {
         recordingUrl = go2rtc.getHlsUrl(currentCam);
     }
     const baseUrl = 'https://www.voidall.com/JellyJump/embed.html';
-    const controls = 'play,pause,volume,progress,time,fullscreen,speed,screenshot';
+    const controls = 'none';
     const embedUrl = `${baseUrl}?video_url=${encodeURIComponent(recordingUrl)}&controls=${controls}&credentials=true`;
 
     const iframe = document.createElement('iframe');

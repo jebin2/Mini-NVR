@@ -49,9 +49,9 @@ def get_storage_usage():
 def get_live_channels():
     channels = {}
     for ch in settings.get_active_channels():
-        # Find latest file for this channel (checking both MP4 and MKV)
+        # Find latest file for this channel (checking HLS segments, MP4 and legacy MKV)
         candidates = []
-        for ext in ["mp4", "mkv"]:
+        for ext in ["ts", "mp4", "mkv"]:
             # Check Flat
             candidates.extend(glob.glob(os.path.join(settings.record_dir, f"ch{ch}_*.{ext}")))
             # Check Nested
@@ -232,14 +232,15 @@ def get_recordings_for_date(ch, date):
                 pass
 
         for entry in candidates:
+             is_ts = entry.name.endswith(".ts")  # HLS segments
              is_mp4 = entry.name.endswith(".mp4")
-             is_mkv = entry.name.endswith(".mkv")
+             is_mkv = entry.name.endswith(".mkv")  # Legacy
              
-             if not (is_mp4 or is_mkv):
+             if not (is_ts or is_mp4 or is_mkv):
                  continue
                  
-             # Only show MKV if it is the latest file (likely currently recording)
-             # We rely on "latest" instead of "live" check as it is more robust to IO lags
+             # Only show MKV if it is the latest file (likely currently recording - legacy)
+             # For TS segments, we want to show all of them as they're the new format
              if is_mkv:
                  is_latest = (entry == latest_candidate)
                  if not is_latest:

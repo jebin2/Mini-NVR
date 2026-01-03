@@ -50,9 +50,9 @@ def get_output_dir(base_dir, channel):
 
 
 def get_latest_file(out_dir, channel):
-    """Get the latest recording file (MKV or MP4) for a channel."""
-    # Check both types to avoid restarting just because we converted the file
-    files = glob.glob(os.path.join(out_dir, "*.mkv")) + glob.glob(os.path.join(out_dir, "*.mp4"))
+    """Get the latest recording file (TS segment or legacy MP4) for a channel."""
+    # Check for HLS segments (.ts) or legacy MP4 files
+    files = glob.glob(os.path.join(out_dir, "*.ts")) + glob.glob(os.path.join(out_dir, "*.mp4"))
     
     def safe_getctime(path):
         try:
@@ -102,6 +102,8 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
         if proc is None:
             logger.info(f"[▶] CH{channel} starting -> {out_dir}")
 
+            # HLS output for time-scroll playback
+            # Segments are immediately web-playable, no conversion needed
             cmd = [
                 config.settings.ffmpeg_bin,
                 "-loglevel", "error",
@@ -109,12 +111,14 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                 "-fflags", "+genpts+igndts+discardcorrupt",
                 "-i", rtsp_url,
                 "-c:v", "copy",
-                #"-an", # NOTE: This removes audio. Remove this line if you want audio.
-                "-f", "segment",
-                "-segment_time", str(segment_duration),
-                "-reset_timestamps", "1",
+                "-c:a", "aac",  # HLS requires AAC audio
+                "-f", "hls",
+                "-hls_time", str(segment_duration),
+                "-hls_list_size", "0",  # Keep all segments in playlist
+                "-hls_flags", "append_list+program_date_time+second_level_segment_index",
                 "-strftime", "1",
-                f"{out_dir}/%H%M%S.mkv" # We record to MKV for stability, convert later
+                "-hls_segment_filename", f"{out_dir}/%H%M%S.ts",
+                f"{out_dir}/playlist.m3u8"
             ]
 
             try:

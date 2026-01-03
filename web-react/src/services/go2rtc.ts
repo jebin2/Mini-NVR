@@ -74,6 +74,6 @@ export function getSnapshotRefreshInterval(): number {
  */
 export function getJellyJumpUrl(videoUrl: string): string {
     const baseUrl = 'https://www.voidall.com/JellyJump/embed.html'
-    const controls = 'play,pause,volume,progress,time,fullscreen,speed,screenshot'
+    const controls = 'none'
     return `${baseUrl}?video_url=${encodeURIComponent(videoUrl)}&controls=${controls}&credentials=true`
 }

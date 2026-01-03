@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Channel, fetchDates, fetchRecordings, Recording } from '../services/api'
 import { getWebRTCUrl, getHlsApiUrl, getJellyJumpUrl, isMobile } from '../services/go2rtc'
 import Timeline from './Timeline'
+import TimeScroller from './TimeScroller'
 import Playlist from './Playlist'
 import './ExpandedView.css'
 
@@ -16,6 +17,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const [recordings, setRecordings] = useState<Recording[]>([])
     const [currentIndex, setCurrentIndex] = useState(-1)
     const [isLive, setIsLive] = useState(true)
+    const [hlsUrl, setHlsUrl] = useState<string | null>(null)  // For TimeScroller playback
 
     useEffect(() => {
         loadDates()
@@ -51,6 +53,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     function playLive() {
         setIsLive(true)
         setCurrentIndex(-1)
+        setHlsUrl(null)
     }
 
     function playClip(index: number) {
@@ -65,12 +68,25 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
         setIsLive(false)
         setCurrentIndex(index)
+        setHlsUrl(null)
+    }
+
+    // Handler for TimeScroller - plays HLS at a specific time
+    function handlePlayHls(url: string) {
+        setIsLive(false)
+        setCurrentIndex(-1)
+        setHlsUrl(url)
     }
 
     /**
      * Get the iframe source URL for the current video
      */
     function getVideoSrc(): string {
+        // If playing from TimeScroller
+        if (hlsUrl) {
+            return hlsUrl
+        }
+
         if (isLive) {
             // go2rtc WebRTC stream for LIVE
             return getWebRTCUrl(camId)
@@ -102,8 +118,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                 return getWebRTCUrl(camId)
             }
             // On desktop, use HLS via JellyJump
-            const hlsUrl = getHlsApiUrl(camId)
-            return getJellyJumpUrl(hlsUrl)
+            const hlsApiUrl = getHlsApiUrl(camId)
+            return getJellyJumpUrl(hlsApiUrl)
         }
 
         // For local recordings, use JellyJump embed
@@ -144,6 +160,16 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                 )}
             </div>
 
+            {/* New Time Scroller for HLS seeking */}
+            {selectedDate && (
+                <TimeScroller
+                    camId={camId}
+                    date={selectedDate}
+                    onPlayHls={handlePlayHls}
+                    onPlayLive={playLive}
+                />
+            )}
+
             <Timeline
                 recordings={recordings}
                 currentIndex={currentIndex}
@@ -158,3 +184,4 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         </div>
     )
 }
+

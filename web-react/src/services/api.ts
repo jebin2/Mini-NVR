@@ -79,3 +79,42 @@ export async function deleteRecording(path: string): Promise<void> {
 export async function restartYouTubeStream(): Promise<void> {
     await fetchAPI('/api/youtube/restart', { method: 'POST' })
 }
+
+// --- HLS Playback API ---
+
+export interface Segment {
+    time: string      // HH:MM:SS
+    duration: number  // seconds
+}
+
+export interface SegmentsResponse {
+    channel: number
+    date: string
+    segment_duration: number
+    segments: Segment[]
+}
+
+/**
+ * Get available HLS segments for a channel/date
+ * Used to build the time scroll UI
+ */
+export async function fetchSegments(channel: string, date: string): Promise<SegmentsResponse> {
+    return fetchAPI(`/api/playback/${channel}/${date}/segments`)
+}
+
+/**
+ * Get the HLS playlist URL for a time range
+ * @param channel Channel number
+ * @param date Date in YYYY-MM-DD format
+ * @param start Optional start time in HH:MM:SS format
+ * @param end Optional end time in HH:MM:SS format
+ */
+export function getPlaylistUrl(channel: string, date: string, start?: string, end?: string): string {
+    let url = `/api/playback/${channel}/${date}/playlist.m3u8`
+    const params = new URLSearchParams()
+    if (start) params.set('start', start)
+    if (end) params.set('end', end)
+    const queryStr = params.toString()
+    if (queryStr) url += `?${queryStr}`
+    return url
+}

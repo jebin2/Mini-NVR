@@ -1,0 +1,191 @@
+.time-scroller {
+    margin: 16px 0;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    user-select: none;
+}
+
+.scroller-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 12px;
+}
+
+.scroller-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.scroller-time {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.15);
+    padding: 4px 10px;
+    border-radius: 6px;
+    flex: 1;
+    text-align: center;
+}
+
+.btn-live-small {
+    padding: 6px 12px;
+    font-size: 12px;
+    background: rgba(255, 0, 85, 0.2);
+    border: 1px solid rgba(255, 0, 85, 0.4);
+    color: #ff0055;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-live-small:hover {
+    background: rgba(255, 0, 85, 0.4);
+    color: white;
+}
+
+.scroller-track {
+    position: relative;
+    height: 48px;
+    background: linear-gradient(to bottom,
+            rgba(255, 255, 255, 0.03),
+            rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    cursor: crosshair;
+    touch-action: none;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scroller-track.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.scroller-track.loading::after {
+    content: 'Loading...';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.scroller-track.dragging {
+    cursor: grabbing;
+}
+
+/* Coverage blocks - show recorded segments */
+.coverage-block {
+    position: absolute;
+    height: 100%;
+    background: linear-gradient(to bottom,
+            rgba(59, 130, 246, 0.5),
+            rgba(59, 130, 246, 0.7));
+    transition: background 0.15s;
+}
+
+.scroller-track:hover .coverage-block {
+    background: linear-gradient(to bottom,
+            rgba(59, 130, 246, 0.6),
+            rgba(59, 130, 246, 0.8));
+}
+
+/* Live indicator */
+.live-indicator {
+    position: absolute;
+    width: 3px;
+    height: 100%;
+    background: #ff0055;
+    box-shadow: 0 0 8px rgba(255, 0, 85, 0.6);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* Scrubber handle */
+.scrubber {
+    position: absolute;
+    width: 4px;
+    height: calc(100% + 8px);
+    top: -4px;
+    background: #10b981;
+    border-radius: 2px;
+    transform: translateX(-50%);
+    box-shadow:
+        0 0 0 2px rgba(16, 185, 129, 0.3),
+        0 2px 8px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+}
+
+.scrubber::before,
+.scrubber::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 12px;
+    background: #10b981;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.scrubber::before {
+    top: -6px;
+}
+
+.scrubber::after {
+    bottom: -6px;
+}
+
+.scroller-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    padding: 0 2px;
+}
+
+.scroller-labels span {
+    font-size: 10px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Mobile styles - simpler but still functional */
+@media (max-width: 768px) {
+    .time-scroller {
+        padding: 10px;
+    }
+
+    .scroller-track {
+        height: 40px;
+    }
+
+    .scroller-header {
+        flex-wrap: wrap;
+    }
+
+    .scroller-time {
+        order: 3;
+        width: 100%;
+        margin-top: 8px;
+    }
+}

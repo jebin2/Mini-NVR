@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router as api_router
+from api.playback import router as playback_router
 from utils.helpers import is_file_live
 from api.go2rtc_proxy import router as go2rtc_router, ws_router as go2rtc_ws_router
 from core import config
@@ -75,6 +76,7 @@ app.add_middleware(
 # Mount API
 app.include_router(auth.get_router(prefix="/api/auth")) # Routes: /api/auth/google, etc.
 app.include_router(api_router, prefix="/api")
+app.include_router(playback_router, prefix="/api")  # HLS playback API
 
 # go2rtc proxy: Restored
 app.include_router(go2rtc_ws_router, prefix="/api/go2rtc")
@@ -123,6 +125,10 @@ def serve_video(path: str, user = Depends(auth.current_user)): # Protected
     # Determine correct MIME type
     if path.lower().endswith('.mp4'):
         media_type = "video/mp4"
+    elif path.lower().endswith('.ts'):
+        media_type = "video/mp2t"  # HLS segment
+    elif path.lower().endswith('.m3u8'):
+        media_type = "application/vnd.apple.mpegurl"  # HLS playlist
     else:
         media_type = "video/x-matroska"
     
