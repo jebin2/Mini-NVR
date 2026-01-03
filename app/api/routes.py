@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Query, Path, HTTPException, Depends
 from core import config
-from services import store
+from utils import recordings as store # Keeping 'store' alias to minimize diff lines below? 
+# Actually let's just do it right.
+from utils import recordings
 from api.deps import get_current_user
 import re
 import os
@@ -17,11 +19,11 @@ def get_config():
 
 @router.get("/storage")
 def get_storage():
-    return store.get_storage_usage()
+    return recordings.get_storage_usage()
 
 @router.get("/live")
 def get_live_feeds():
-    return {"channels": store.get_live_channels()}
+    return {"channels": recordings.get_live_channels()}
 
 @router.get("/dates")
 def get_dates(channel: int = Query(None, ge=1, description="Channel number (1-based)")):
@@ -31,7 +33,7 @@ def get_dates(channel: int = Query(None, ge=1, description="Channel number (1-ba
     """
     if channel is not None and channel not in config.settings.get_active_channels():
         raise HTTPException(status_code=400, detail=f"Invalid or skipped channel.")
-    return {"dates": store.get_available_dates(channel)}
+    return {"dates": recordings.get_available_dates(channel)}
 
 @router.get("/channel/{ch}/recordings")
 def get_recordings(
@@ -47,7 +49,7 @@ def get_recordings(
     if not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
-    return {"recordings": store.get_recordings_for_date(ch, date)}
+    return {"recordings": recordings.get_recordings_for_date(ch, date)}
 
 @router.delete("/recording")
 def delete_recording(path: str = Query(..., description="Relative path to the recording file")):
