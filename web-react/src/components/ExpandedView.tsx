@@ -87,7 +87,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         return () => window.removeEventListener('message', handleMessage)
     }, [startTimeOffset])
 
-
     function playLive() {
         setHlsUrl(null)
         setPlaybackTime(null)

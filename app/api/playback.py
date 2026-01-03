@@ -134,10 +134,10 @@ def generate_m3u8_playlist(segments: list[dict], base_url: str, start_dt: dateti
             "#EXT-X-MEDIA-SEQUENCE:0",
             "#EXT-X-PLAYLIST-TYPE:VOD",
         ]
-        # Add a few gap segments so player has something to show
-        for _ in range(5):  # 5 seconds of "No Video"
+        # Add gap segments with unique index to avoid HLS.js deduplication
+        for i in range(5):  # 5 seconds of "No Video"
             lines.append(f"#EXTINF:{gap_duration},")
-            lines.append(gap_url)
+            lines.append(f"{gap_url}?i={i}")  # Unique URL for each segment
         lines.append("#EXT-X-ENDLIST")
         return "\n".join(lines)
     
