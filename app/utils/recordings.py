@@ -40,7 +40,10 @@ def get_storage_usage():
         for f in filenames:
             fp = os.path.join(dirpath, f)
             if not os.path.islink(fp):
-                total_size += os.path.getsize(fp)
+                try:
+                    total_size += os.path.getsize(fp)
+                except FileNotFoundError:
+                    pass
     
     used_gb = round(total_size / (1024**3), 1)
     summary = f"{used_gb} GB / {settings.max_storage_gb} GB"
