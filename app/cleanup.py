@@ -102,7 +102,7 @@ def main():
             files = get_all_recordings(config.settings.record_dir)
             if files:
                 # Delete oldest 5 files at a time until safe
-                for f in files[:5]:
+                for f in files[:10]:
                      try:
                         os.remove(f)
                         logger.info(f"[🚨] CRITICAL DELETE: {os.path.basename(f)}")
