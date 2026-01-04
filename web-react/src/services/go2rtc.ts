@@ -25,12 +25,7 @@ export function getSnapshotUrl(camId: string): string {
     return `${getBaseUrl()}/api/frame.jpeg?src=cam${camId}&t=${Date.now()}`
 }
 
-/**
- * Get the WebRTC stream URL for go2rtc embedded player (for LIVE)
- */
-export function getWebRTCUrl(camId: string): string {
-    return `${getBaseUrl()}/stream.html?src=cam${camId}`
-}
+
 
 /**
  * Get the HLS API URL for a camera (for usage in JellyJump)

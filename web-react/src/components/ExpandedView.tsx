@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Channel, fetchDates } from '../services/api'
-import { getWebRTCUrl } from '../services/go2rtc'
+import { getHlsApiUrl, getJellyJumpUrl } from '../services/go2rtc'
 import TimeScroller from './TimeScroller'
 import './ExpandedView.css'
 
@@ -108,7 +108,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         }
 
         // Default: go2rtc WebRTC stream for LIVE
-        return getWebRTCUrl(camId)
+        // Use JellyJump (HLS) for live view (Unified Player)
+        return getJellyJumpUrl(getHlsApiUrl(camId))
     }
 
     const videoSrc = getVideoSrc()
