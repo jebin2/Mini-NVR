@@ -91,6 +91,16 @@ for i in $(seq 1 "$NUM_CHANNELS"); do
     echo "    - $(generate_url "$i")" >> "$OUTPUT_FILE"
     echo "    - \"ffmpeg:cam${i}#video=copy#audio=aac\"" >> "$OUTPUT_FILE"
     echo "" >> "$OUTPUT_FILE"
+
+    # Mobile/Low-Bandwidth Stream (On-Demand Transcoding)
+    # Uses VIDEO_CODEC, VIDEO_CRF, VIDEO_PRESET from .env
+    CODEC="${VIDEO_CODEC:-libx264}"
+    CRF="${VIDEO_CRF:-30}"
+    PRESET="${VIDEO_PRESET:-superfast}"
+    
+    echo "  cam${i}_mobile:" >> "$OUTPUT_FILE"
+    echo "    - \"ffmpeg:cam${i}#video=${CODEC}#width=854#raw=-tune zerolatency -preset ${PRESET} -crf ${CRF}\"" >> "$OUTPUT_FILE"
+    echo "" >> "$OUTPUT_FILE"
 done
 
 # Note: YouTube streaming is handled by youtube_restart.py, not go2rtc
