@@ -170,9 +170,6 @@ flowchart TD
 2. **Stage 1 (Soft Limit)**: If over `MAX_STORAGE_GB`:
    - YouTube mode: Delete only `*_uploaded.mp4` files (safe to remove)
    - Standard mode: Delete 50% of oldest files
-3. **Stage 2 (Critical)**: If over `MAX_STORAGE_GB + MAX_STORAGE_EXCEED_ALLOWED_GB`:
-   - Force delete oldest 5 files regardless of upload status
-   - Logs critical warning to prevent system failure
 
 ---
 
