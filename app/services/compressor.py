@@ -60,8 +60,9 @@ class BackgroundCompressor(threading.Thread):
         Returns True if successful.
         """
         tmp_path = ts_path + ".tmp"
+        rel_path = os.path.relpath(ts_path, self.record_dir)
         
-        logger.info(f"[⚙] Starting compression: {os.path.basename(ts_path)}")
+        logger.info(f"[⚙] Starting compression: {rel_path}")
         
         # Clean up any leftover temp file
         if os.path.exists(tmp_path):
@@ -95,7 +96,7 @@ class BackgroundCompressor(threading.Thread):
             
             if result.returncode != 0:
                 logger.error(
-                    f"[✖] Compression failed for {os.path.basename(ts_path)}:\n"
+                    f"[✖] Compression failed for {rel_path}:\n"
                     f"{result.stderr[-1000:]}"
                 )
                 # Clean up temp file
@@ -120,7 +121,7 @@ class BackgroundCompressor(threading.Thread):
             compression_ratio = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
             
             logger.info(
-                f"[✓] Compressed: {os.path.basename(ts_path)} "
+                f"[✓] Compressed: {rel_path} "
                 f"({original_size:.1f}MB → {compressed_size:.1f}MB, "
                 f"-{compression_ratio:.0f}%, {duration:.1f}s)"
             )
@@ -128,12 +129,12 @@ class BackgroundCompressor(threading.Thread):
             return True
             
         except subprocess.TimeoutExpired:
-            logger.error(f"[✖] Compression timeout for {os.path.basename(ts_path)}")
+            logger.error(f"[✖] Compression timeout for {rel_path}")
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
             return False
         except Exception as e:
-            logger.error(f"[✖] Compression error for {os.path.basename(ts_path)}: {e}")
+            logger.error(f"[✖] Compression error for {rel_path}: {e}")
             if os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
