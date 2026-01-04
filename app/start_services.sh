@@ -18,19 +18,17 @@ declare -A SERVICE_CMD=(
     [server]="python server.py"
     [recorder]="python recorder.py"
     [cleanup]="python cleanup.py"
-    [compressor]="python compressor.py"
     [uploader]="python youtube_upload.py"
     [youtube_stream]="python youtube_stream.py"
 )
 
 # Order matters for startup
-SERVICES=(server recorder cleanup compressor uploader youtube_stream)
+SERVICES=(server recorder cleanup uploader youtube_stream)
 
 # Per-service "should run?" checks
 is_enabled() {
     local name=$1
     case $name in
-        compressor)      [ "${INLINE_TRANSCODING}" != "true" ] && [ "${COMPRESSOR_ENABLED}" = "true" ] ;;
         uploader)        [ "${YOUTUBE_UPLOAD_ENABLED}" = "true" ] ;;
         youtube_stream)  [ "${YOUTUBE_LIVE_ENABLED}" = "true" ] ;;
         *)               true ;;  # Core services always enabled
