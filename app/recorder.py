@@ -7,7 +7,7 @@ from datetime import datetime
 from core import config
 from core.logger import setup_logger
 
-logger = setup_logger("recorder")
+logger = setup_logger("recorder", "/logs/recorder.log")
 
 def is_stopped(channel):
     """Check if channel recording is stopped."""
@@ -116,19 +116,41 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                 # Use configured codec or default to libx265 if 'copy' is set
                 v_codec = config.settings.video_codec if config.settings.video_codec != "copy" else "libx265"
                 
-                logger.info(f"[🎥] CH{channel} Inline Transcoding ENABLED: {v_codec} (CRF {config.settings.video_crf}, {config.settings.video_preset})")
-                cmd.extend([
-                    "-c:v", v_codec,
-                    "-crf", str(config.settings.video_crf),
-                    "-preset", config.settings.video_preset,
-                    # Force keyframes at segment boundaries for cleaner HLS cutting
-                    "-force_key_frames", f"expr:gte(t,n_forced*{segment_duration})",
-                ])
+                logger.info(f"[🎥] CH{channel} Inline Transcoding ENABLED: {v_codec} (CRF {config.settings.video_crf}, VF: {config.settings.ffmpeg_vf_args})")
+                
+                # 1. Hardware Init (Correct place: BEFORE -i)
+                if config.settings.ffmpeg_hw_args:
+                     # Insert HW args at the beginning (after binary) to act as global options
+                     hw_args = config.settings.ffmpeg_hw_args.split()
+                     for arg in reversed(hw_args):
+                         cmd.insert(1, arg)
+                
+                # 2. Video Filters (AFTER -i, BEFORE Codec)
+                if config.settings.ffmpeg_vf_args:
+                     cmd.extend(["-vf", config.settings.ffmpeg_vf_args])
+
+                cmd.extend(["-c:v", v_codec])
+
+                # Logic for Quality: CRF vs QP
+                # If using VAAPI/QSV, mapped "video_crf" to "-qp" usually
+                is_vaapi = "vaapi" in v_codec or "qsv" in v_codec
+                if is_vaapi:
+                    cmd.extend(["-rc_mode", "CQP"])
+                    cmd.extend(["-qp", str(config.settings.video_crf)])
+                else:
+                    cmd.extend(["-crf", str(config.settings.video_crf)])
+                    cmd.extend(["-preset", config.settings.video_preset])
+                
+                # Audio: Force copy for inline VAAPI to keep it simple/fast
+                cmd.extend(["-c:a", "aac"])
+
+                # Force keyframes at segment boundaries
+                cmd.extend(["-force_key_frames", f"expr:gte(t,n_forced*{segment_duration})"])
             else:
                 cmd.extend(["-c:v", "copy"])
+                cmd.extend(["-c:a", "aac"])
 
             cmd.extend([
-                "-c:a", "aac",  # HLS requires AAC audio
                 "-f", "hls",
                 "-hls_time", str(segment_duration),
                 "-hls_list_size", "0",  # Keep all segments in playlist
@@ -137,6 +159,9 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                 "-hls_segment_filename", f"{out_dir}/%H%M%S.ts",
                 f"{out_dir}/playlist.m3u8"
             ])
+
+            # Log the full command for debugging
+            logger.info(f"[🐛] Full FFmpeg command:\n{' '.join(cmd)}")
 
             try:
                 proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
@@ -150,6 +175,12 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
         # Check if process is still running
         ret = proc.poll()
         if ret is not None:
+            # Capture error logs from ffmpeg
+            if proc.stderr:
+                err_output = proc.stderr.read().decode('utf-8', errors='ignore')
+                if err_output:
+                     logger.error(f"[❌] CH{channel} FFmpeg Crash Log:\n{err_output[-1000:]}")  # Last 1000 chars
+
             consecutive_failures += 1
             delay = 2 if consecutive_failures < 5 else min(consecutive_failures * 2, 30)
             logger.warning(f"[⚠] CH{channel} crashed (code {ret}), restart in {delay}s")
