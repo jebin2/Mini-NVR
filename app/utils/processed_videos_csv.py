@@ -101,6 +101,16 @@ def get_pending_uploads() -> List[dict]:
         ]
 
 
+def get_uploaded_videos() -> List[str]:
+    """Get list of video paths that have been uploaded."""
+    with _csv_lock:
+        rows = _read_csv()
+        return [
+            row["video_path"] for row in rows
+            if row.get("upload_status") == "done"
+        ]
+
+
 def get_pending_by_channel() -> Dict[str, List[dict]]:
     """
     Get pending uploads grouped by channel.

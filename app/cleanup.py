@@ -3,6 +3,7 @@ import time
 import glob
 from core import config
 from core.logger import setup_logger
+from utils.processed_videos_csv import get_uploaded_videos
 
 logger = setup_logger("cleanup")
 
@@ -22,8 +23,7 @@ def get_size_gb(path):
 
 def get_all_recordings(path):
     """Get all recording files sorted by creation time (oldest first)."""
-    files = glob.glob(os.path.join(path, "**/*.mp4"), recursive=True)
-    files += glob.glob(os.path.join(path, "**/*.mkv"), recursive=True)
+    files = glob.glob(os.path.join(path, "**/*.ts"), recursive=True)
     return sorted(files, key=lambda f: os.path.getctime(f))
 
 
@@ -57,8 +57,10 @@ def main():
                 
                 if config.settings.youtube_upload_enabled:
                     # Filter: Only delete files that are uploaded
+                    uploaded_paths = set(get_uploaded_videos())
                     for f in files:
-                        if "_uploaded" in os.path.basename(f):
+                        rel_path = os.path.relpath(f, config.settings.record_dir)
+                        if rel_path in uploaded_paths:
                             files_to_delete.append(f)
                     
                     if not files_to_delete and size <= limit_stage2:
