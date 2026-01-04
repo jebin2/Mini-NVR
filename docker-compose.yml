@@ -11,7 +11,7 @@ services:
     env_file: .env
     network_mode: host  # Required to access go2rtc at localhost
     volumes:
-      - ./recordings:/recordings
+      - ${RECORD_DIR}:/recordings
       - ./logs:/logs
       # Mount client secrets folder for multiple YouTube accounts
       - ./client:/app/client:ro
@@ -25,6 +25,7 @@ services:
     environment:
       - SSH_HOST_USER=${USER}
       - PROJECT_DIR=${PWD}
+      - RECORD_DIR=/recordings
 
   # go2rtc for low-latency WebRTC live streaming
   # Also serves as central RTSP hub for YouTube streaming
