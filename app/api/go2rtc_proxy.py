@@ -11,19 +11,17 @@ Supports:
 import asyncio
 import httpx
 import websockets
-from fastapi import APIRouter, Request, Response, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, Response, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
-from api.deps import get_current_user
-from core.security import is_session_valid
 from core import config
 from core.logger import setup_logger
 
 logger = setup_logger("go2rtc_proxy")
 
-# HTTP routes require auth
-router = APIRouter(dependencies=[Depends(get_current_user)])
+# HTTP routes - auth handled by GoogleAuthMiddleware
+router = APIRouter()
 
-# WebSocket router (auth checked manually since WS can't use Depends easily)
+# WebSocket router - auth handled by GoogleAuthMiddleware (user in scope)
 ws_router = APIRouter()
 
 GO2RTC_HTTP = f"http://127.0.0.1:{config.settings.go2rtc_api_port}"
@@ -43,18 +41,20 @@ def get_client():
 async def proxy_websocket(websocket: WebSocket):
     """
     Proxy WebSocket connections for WebRTC signaling.
-    Auth is checked via session cookie.
+    Auth is validated by GoogleAuthMiddleware - user available in scope.
     """
-    # Check auth from session cookie
-    session_data = websocket.cookies.get("session")
-    if not session_data:
+    # Get user from middleware (set in scope by GoogleAuthMiddleware)
+    user = websocket.scope.get("user")
+    payload = websocket.scope.get("auth_payload")
+    
+    if not user:
+        logger.warning("WebSocket rejected: Not authenticated (no user in scope)")
         await websocket.close(code=4001, reason="Not authenticated")
         return
     
-    # Parse session (itsdangerous format, we'll just rely on the session existing)
-    # The session middleware should have validated it, but WS doesn't go through middleware
-    # So we accept the connection if there's a session cookie present
-    # For full validation, we'd need to decode the session ourselves
+    # Log authenticated user
+    email = payload.email if payload else "unknown"
+    logger.debug(f"WebSocket authenticated for user: {email}")
     
     await websocket.accept()
     

@@ -60,10 +60,9 @@ app.add_middleware(
     GoogleAuthMiddleware,
     google_auth=auth,
     public_paths=[
-        "/api/auth/*", # Whitelist auth endpoints
+        "/api/auth/*",  # Whitelist auth endpoints
         "/login.html", 
-        "/", 
-        "/api/go2rtc",
+        "/",
         "/assets",
         "/manifest.json",
         "/sw.js",
