@@ -113,8 +113,8 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
 
             # Inline Transcoding Logic
             if config.settings.inline_transcoding:
-                # Use configured codec or default to libx264 if 'copy' is set
-                v_codec = config.settings.video_codec if config.settings.video_codec != "copy" else "libx264"
+                # Use configured codec or default to libx265 if 'copy' is set
+                v_codec = config.settings.video_codec if config.settings.video_codec != "copy" else "libx265"
                 
                 logger.info(f"[🎥] CH{channel} Inline Transcoding ENABLED: {v_codec} (CRF {config.settings.video_crf}, {config.settings.video_preset})")
                 cmd.extend([

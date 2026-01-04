@@ -29,8 +29,7 @@ export function getSnapshotUrl(camId: string): string {
  * Get the WebRTC stream URL for go2rtc embedded player (for LIVE)
  */
 export function getWebRTCUrl(camId: string): string {
-    const suffix = isMobile() ? '_mobile' : ''
-    return `${getBaseUrl()}/stream.html?src=cam${camId}${suffix}`
+    return `${getBaseUrl()}/stream.html?src=cam${camId}`
 }
 
 /**
@@ -53,15 +52,14 @@ export function getHLSUrl(camId: string): string {
  * Get the MSE player page URL
  */
 export function getMSEUrl(camId: string): string {
-    const suffix = isMobile() ? '_mobile' : ''
-    return `${getBaseUrl()}/mse.html?src=cam${camId}${suffix}`
+    return `${getBaseUrl()}/mse.html?src=cam${camId}`
 }
 
 /**
  * Get snapshot refresh interval (longer on mobile for better performance)
  */
 export function getSnapshotRefreshInterval(): number {
-    return isMobile() ? 10000 : 2000  // 10 seconds on mobile, 2 seconds on desktop
+    return isMobile() ? 60000 : 10000  // 1 minute on mobile, 10 seconds on desktop
 }
 
 /**

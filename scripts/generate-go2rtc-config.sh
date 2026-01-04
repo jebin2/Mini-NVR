@@ -93,24 +93,6 @@ for i in $(seq 1 "$NUM_CHANNELS"); do
     echo "" >> "$OUTPUT_FILE"
 
     # Mobile/Low-Bandwidth Stream (On-Demand Transcoding)
-    # Mobile/Low-Bandwidth Stream (On-Demand Transcoding)
-    # Uses VIDEO_CODEC, VIDEO_CRF, VIDEO_PRESET from .env
-    # Map codec to go2rtc format (libx264 -> h264, libx265 -> h265)
-    RAW_CODEC="${VIDEO_CODEC:-libx264}"
-    if [[ "$RAW_CODEC" == *"265"* ]] || [[ "$RAW_CODEC" == *"hevc"* ]]; then
-        GO2RTC_CODEC="h265"
-    else
-        GO2RTC_CODEC="h264"
-    fi
-
-    CRF="${VIDEO_CRF:-30}"
-    PRESET="${VIDEO_PRESET:-superfast}"
-    
-    # Note: We use #raw to inject custom flags.
-    # We must ensure spaces are handled if go2rtc supports them in raw, otherwise we rely on default FFmpeg behavior.
-    echo "  cam${i}_mobile:" >> "$OUTPUT_FILE"
-    echo "    - \"ffmpeg:cam${i}#video=${GO2RTC_CODEC}#width=854#raw=-tune zerolatency -preset ${PRESET} -crf ${CRF}\"" >> "$OUTPUT_FILE"
-    echo "" >> "$OUTPUT_FILE"
 done
 
 # Note: YouTube streaming is handled by youtube_restart.py, not go2rtc

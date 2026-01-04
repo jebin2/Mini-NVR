@@ -21,7 +21,7 @@ class BackgroundCompressor(threading.Thread):
     def __init__(
         self, 
         record_dir: str, 
-        video_codec: str = "libx264",
+        video_codec: str = "libx265",
         crf: int = 30,
         preset: str = "medium"
     ):
