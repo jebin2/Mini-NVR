@@ -95,8 +95,8 @@ class BackgroundCompressor(threading.Thread):
             
             if result.returncode != 0:
                 logger.error(
-                    f"[✖] Compression failed for {os.path.basename(ts_path)}: "
-                    f"{result.stderr[:500]}"
+                    f"[✖] Compression failed for {os.path.basename(ts_path)}:\n"
+                    f"{result.stderr[-1000:]}"
                 )
                 # Clean up temp file
                 if os.path.exists(tmp_path):
