@@ -13,6 +13,7 @@ import httpx
 import websockets
 from fastapi import APIRouter, Request, Response, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 from core import config
 from core.logger import setup_logger
 
@@ -154,7 +155,7 @@ async def proxy_go2rtc(path: str, request: Request):
             status_code=r.status_code,
             media_type=r.headers.get("content-type"),
             headers=response_headers,
-            background=None # We could close r here if needed, but client is long-lived
+            background=BackgroundTask(r.aclose)
         )
         
     except httpx.ConnectError:
