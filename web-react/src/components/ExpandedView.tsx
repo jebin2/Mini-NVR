@@ -123,6 +123,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             <div className="video-stage">
                 {videoSrc ? (
                     <iframe
+                        key={videoSrc}
                         src={videoSrc}
                         allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
                         className="video-player"
