@@ -98,6 +98,7 @@
     cursor: pointer;
     transition: all 0.2s;
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    margin: 6px;
 }
 
 .placeholder-btn:hover {
@@ -108,6 +109,17 @@
 
 .placeholder-btn:active {
     transform: translateY(0);
+}
+
+/* Go Live button - green styling */
+.placeholder-btn.go-live-btn {
+    background: #10b981;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.placeholder-btn.go-live-btn:hover {
+    background: #059669;
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
 }
 
 /* Error specifics inside placeholder */

@@ -16,7 +16,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const [playMode, setPlayMode] = useState<'live' | 'buffer'>('buffer')
 
     // Gap State
-    const [gapState, setGapState] = useState<{ isGap: boolean; nextTime: number | null }>({ isGap: false, nextTime: null })
+    const [gapState, setGapState] = useState<{ isGap: boolean; nextTime: number | null; isFuture: boolean }>({ isGap: false, nextTime: null, isFuture: false })
     const [forceTime, setForceTime] = useState<number | null>(null)
 
     useEffect(() => {
@@ -110,7 +110,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setStreamError(null)
         setForceTime(null)
         setPlayMode('live')
-        setGapState({ isGap: false, nextTime: null })
+        setGapState({ isGap: false, nextTime: null, isFuture: false })
         if (dates.length > 0) {
             setSelectedDate(dates[0])
         }
@@ -130,7 +130,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setSelectedDate(today)
         setPlayMode('buffer')
         setStreamError(null)
-        setGapState({ isGap: false, nextTime: null })  // Clear gap state immediately
+        setGapState({ isGap: false, nextTime: null, isFuture: false })  // Clear gap state immediately
         setForceTime(startSeconds)  // Force scroller to jump to this time
     }
 
@@ -205,6 +205,12 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                                 </button>
                             )}
 
+                            {gapState.isFuture && (
+                                <button className="placeholder-btn go-live-btn" onClick={play30sBuffer}>
+                                    📺 Go Live
+                                </button>
+                            )}
+
                             {/* If it's a stream error, maybe show retry too? */}
                             {streamError && (
                                 <div className="error-details">
@@ -230,7 +236,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     onPlayLive={playLive}
                     playMode={playMode}
                     onModeChange={handleModeChange}
-                    onGapChange={(isGap, nextTime) => setGapState({ isGap, nextTime })}
+                    onGapChange={(isGap, nextTime, isFuture) => setGapState({ isGap, nextTime, isFuture })}
                     externalForceTime={forceTime}
                 />
             )}

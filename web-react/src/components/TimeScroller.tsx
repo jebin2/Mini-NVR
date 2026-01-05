@@ -16,7 +16,7 @@ interface TimeScrollerProps {
     playMode: 'live' | 'buffer'
     onModeChange: (mode: 'live' | 'buffer') => void
     // New Props for Gap Logic
-    onGapChange: (isGap: boolean, nextSegTime: number | null) => void
+    onGapChange: (isGap: boolean, nextSegTime: number | null, isFuture: boolean) => void
     externalForceTime?: number | null
 }
 
@@ -68,7 +68,7 @@ export default function TimeScroller({
     const isDraggingRef = useRef(false)
 
     // Track previous gap state to avoid redundant calls
-    const prevGapStateRef = useRef<{ isGap: boolean; nextTime: number | null }>({ isGap: false, nextTime: null })
+    const prevGapStateRef = useRef<{ isGap: boolean; nextTime: number | null; isFuture: boolean }>({ isGap: false, nextTime: null, isFuture: false })
 
     // Helper: Get current time of day in seconds
     const getCurrentTimeSeconds = () => {
@@ -158,24 +158,40 @@ export default function TimeScroller({
             return currentTime >= s && currentTime < e
         })
 
-        // 2. Find next segment time
+        // 2. Find next segment time and check if in future
         let nextTime: number | null = null
+        let isFuture = false
+
         if (!hasVideo) {
             const nextSeg = segments.find(s => parseTime(s.time) > currentTime)
-            if (nextSeg) nextTime = parseTime(nextSeg.time)
+            if (nextSeg) {
+                nextTime = parseTime(nextSeg.time)
+            } else {
+                // No next segment - check if we're beyond the last segment (future)
+                if (segments.length > 0) {
+                    const lastSeg = segments[segments.length - 1]
+                    const lastSegEnd = parseTime(lastSeg.time) + lastSeg.duration
+                    if (currentTime >= lastSegEnd) {
+                        isFuture = true
+                    }
+                }
+            }
         }
 
         // Only notify parent if gap state CHANGED (avoid redundant re-renders)
         const isGap = !hasVideo
-        if (prevGapStateRef.current.isGap !== isGap || prevGapStateRef.current.nextTime !== nextTime) {
-            prevGapStateRef.current = { isGap, nextTime }
-            onGapChange(isGap, nextTime)
+        if (prevGapStateRef.current.isGap !== isGap ||
+            prevGapStateRef.current.nextTime !== nextTime ||
+            prevGapStateRef.current.isFuture !== isFuture) {
+            prevGapStateRef.current = { isGap, nextTime, isFuture }
+            onGapChange(isGap, nextTime, isFuture)
         }
 
-        // 3. If gap, simulate playback (tick every second)
+        // 3. If gap but NOT in future (has next segment), simulate playback (tick every second)
+        // Timer STOPS when in future (no more video ahead)
         let timer: number | null = null
 
-        if (!hasVideo && segments.length > 0) {
+        if (!hasVideo && !isFuture && segments.length > 0) {
             timer = window.setInterval(() => {
                 setCurrentTime(t => {
                     const next = t + 1
@@ -187,6 +203,7 @@ export default function TimeScroller({
         return () => {
             if (timer) clearInterval(timer)
         }
+
     }, [isLive, isDragging, currentTime, segments, loading, onGapChange])
 
     // Local helper 
