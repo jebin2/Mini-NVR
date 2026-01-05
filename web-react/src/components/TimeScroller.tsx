@@ -357,33 +357,33 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
 
     return (
         <div className="time-scroller" ref={containerRef}>
-            {/* Header: Date + Time + Live button */}
+            {/* Header: Date + Time + Mode Toggle */}
             <div className="scroller-header">
-                <div className="header-left">
-                    {/* Date Selector Pill */}
-                    <div className="date-select-wrapper">
-                        <select
-                            className="date-select"
-                            value={date}
-                            onChange={(e) => onDateChange(e.target.value)}
-                        >
-                            {availableDates.map(d => (
-                                <option key={d} value={d}>{d}</option>
-                            ))}
-                        </select>
-                        <span className="date-icon">📅</span>
-                    </div>
-
-                    <div className="time-display">
-                        {scrubberTime !== null ? (
-                            <span className="current-time">{formatTimeShort(scrubberTime)}</span>
-                        ) : (
-                            <span className="viewport-range">
-                                {formatTimeShort(viewportStart)} - {formatTimeShort(viewportEnd)}
-                            </span>
-                        )}
-                    </div>
+                {/* Date Selector Pill */}
+                <div className="date-select-wrapper">
+                    <select
+                        className="date-select"
+                        value={date}
+                        onChange={(e) => onDateChange(e.target.value)}
+                    >
+                        {availableDates.map(d => (
+                            <option key={d} value={d}>{d}</option>
+                        ))}
+                    </select>
+                    <span className="date-icon">📅</span>
                 </div>
+
+                {/* Time Display */}
+                <div className="time-display">
+                    {scrubberTime !== null ? (
+                        <span className="current-time">{formatTimeShort(scrubberTime)}</span>
+                    ) : (
+                        <span className="viewport-range">
+                            {formatTimeShort(viewportStart)} - {formatTimeShort(viewportEnd)}
+                        </span>
+                    )}
+                </div>
+
                 {/* Mode Toggle: Live vs 30s Buffer */}
                 <div className="mode-toggle">
                     <label className={`mode-option ${playMode === 'live' ? 'active' : ''}`}>
