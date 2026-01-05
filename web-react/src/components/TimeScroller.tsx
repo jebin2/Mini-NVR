@@ -21,7 +21,8 @@ interface TimeScrollerProps {
 
 const ZOOM_MINUTES = 30
 const SECONDS_IN_DAY = 86400
-const INTERACTION_DEBOUNCE_MS = 500 // Single debounce constant for all interactions
+const GAP_DEBOUNCE_MS = 500        // Debounce for gap detection after interaction
+const TIME_TOLERANCE_SECONDS = 10  // If video is > 10s away from target, retrigger playback
 
 function parseTime(timeStr: string): number {
     const parts = timeStr.split(':')
@@ -65,7 +66,8 @@ export default function TimeScroller({
     const refs = useRef({
         isDragging: false,
         currentTime: 0,
-        lastInteraction: 0,  // Single timestamp for ALL debouncing
+        targetTime: null as number | null,  // Where user WANTS to play (set on scrub release)
+        lastInteraction: 0,
         pendingDelta: 0,
         raf: null as number | null,
         prevGap: { isGap: false, nextTime: null as number | null, isFuture: false }
@@ -82,7 +84,7 @@ export default function TimeScroller({
         return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
     }
 
-    const isWithinDebounce = () => Date.now() - refs.current.lastInteraction < INTERACTION_DEBOUNCE_MS
+    const isWithinGapDebounce = () => Date.now() - refs.current.lastInteraction < GAP_DEBOUNCE_MS
 
     const triggerPlayAt = useCallback((time: number, segs: Segment[]) => {
         const found = segs.find(seg => {
@@ -150,8 +152,8 @@ export default function TimeScroller({
         if (isDragging || isLive || loading) return
 
         // Wait for debounce period after any interaction
-        if (isWithinDebounce()) {
-            const remaining = INTERACTION_DEBOUNCE_MS - (Date.now() - refs.current.lastInteraction)
+        if (isWithinGapDebounce()) {
+            const remaining = GAP_DEBOUNCE_MS - (Date.now() - refs.current.lastInteraction)
             const timeoutId = setTimeout(() => setCurrentTime(t => t), remaining + 10)
             return () => clearTimeout(timeoutId)
         }
@@ -191,11 +193,11 @@ export default function TimeScroller({
         return () => { if (timer) clearInterval(timer) }
     }, [isLive, isDragging, currentTime, segments, loading, onGapChange])
 
-    // 4. Sync with video playback
+    // 4. Sync with video playback OR retrigger if video is playing wrong position
     useEffect(() => {
         if (isDragging || isLive || videoTime == null || playlistStart == null) return
-        if (isWithinDebounce()) return
 
+        // Calculate what time the video is actually playing
         const relevantSegments = segments.filter(s => parseTime(s.time) >= playlistStart)
         if (relevantSegments.length === 0) return
 
@@ -211,8 +213,22 @@ export default function TimeScroller({
             cumulative += seg.duration
             actualTime = segStart + seg.duration
         }
+
+        // Compare with targetTime (where user WANTS to play)
+        const targetTime = refs.current.targetTime
+        if (targetTime !== null) {
+            const diff = Math.abs(actualTime - targetTime)
+            if (diff > TIME_TOLERANCE_SECONDS) {
+                // Video is playing wrong position → retrigger playback
+                console.log(`[TimeScroller] Video at ${actualTime.toFixed(0)}s but target is ${targetTime.toFixed(0)}s (diff: ${diff.toFixed(0)}s > ${TIME_TOLERANCE_SECONDS}s) → retriggering`)
+                triggerPlayAt(targetTime, segments)
+                return  // Don't sync scrubber to wrong video position
+            }
+        }
+
+        // Video is close to target, sync scrubber to video position
         setCurrentTime(actualTime)
-    }, [isLive, videoTime, playlistStart, segments, isDragging])
+    }, [isLive, videoTime, playlistStart, segments, isDragging, triggerPlayAt])
 
     // 5. Live mode clock
     useEffect(() => {
@@ -278,6 +294,7 @@ export default function TimeScroller({
         // Update state
         refs.current.isDragging = false
         refs.current.lastInteraction = Date.now()
+        refs.current.targetTime = finalTime  // Track where user WANTS to play
         setCurrentTime(finalTime)
         setIsDragging(false)
 
