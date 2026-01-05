@@ -57,10 +57,9 @@ export function getSnapshotRefreshInterval() {
 export function getSnapshotUrl(camId, bustCache = true) {
     let url = `${getBaseUrl()}/api/frame.jpeg?src=cam${camId}`;
 
-    // Reduce image size on mobile for faster loading
-    if (isMobile()) {
-        url += `&width=720`;  // Increased resolution for better viewing
-    }
+    // Request appropriately sized thumbnails - 2x for HiDPI displays
+    const width = isMobile() ? 640 : 800;
+    url += `&width=${width}`;
 
     if (bustCache) {
         url += `&t=${Date.now()}`;

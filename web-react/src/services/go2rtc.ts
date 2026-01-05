@@ -22,7 +22,9 @@ export function isMobile(): boolean {
  * Get snapshot URL for grid preview
  */
 export function getSnapshotUrl(camId: string): string {
-    return `${getBaseUrl()}/api/frame.jpeg?src=cam${camId}&t=${Date.now()}`
+    // Request appropriately sized thumbnails - 2x for HiDPI displays
+    const width = isMobile() ? 640 : 800
+    return `${getBaseUrl()}/api/frame.jpeg?src=cam${camId}&width=${width}&t=${Date.now()}`
 }
 
 
