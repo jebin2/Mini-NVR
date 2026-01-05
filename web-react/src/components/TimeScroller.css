@@ -109,6 +109,9 @@
     background: #334155;
     pointer-events: none;
     transform: translateX(-50%);
+    /* GPU acceleration for smooth scrolling */
+    will-change: transform;
+    contain: layout style;
 }
 
 .ruler-tick.major {

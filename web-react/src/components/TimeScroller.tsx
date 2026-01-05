@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Segment, fetchSegments, getPlaylistUrl } from '../services/api'
 import { getJellyJumpUrl } from '../services/go2rtc'
 import './TimeScroller.css'
@@ -63,6 +63,12 @@ export default function TimeScroller({
     const pendingDeltaRef = useRef(0)
 
     const trackRef = useRef<HTMLDivElement>(null)
+
+    // Use ref for isDragging to prevent callback recreation during parent re-renders
+    const isDraggingRef = useRef(false)
+
+    // Track previous gap state to avoid redundant calls
+    const prevGapStateRef = useRef<{ isGap: boolean; nextTime: number | null }>({ isGap: false, nextTime: null })
 
     // Helper: Get current time of day in seconds
     const getCurrentTimeSeconds = () => {
@@ -139,8 +145,11 @@ export default function TimeScroller({
     }
 
     // Gap Detection & Simulated Playback Loop
+    // IMPORTANT: Only run when NOT dragging to avoid jerkiness
     useEffect(() => {
-        if (isLive || isDragging || loading) return
+        // Skip gap detection entirely while dragging
+        if (isDragging) return
+        if (isLive || loading) return
 
         // 1. check if gap
         const hasVideo = segments.some(seg => {
@@ -156,8 +165,12 @@ export default function TimeScroller({
             if (nextSeg) nextTime = parseTime(nextSeg.time)
         }
 
-        // Notify parent
-        onGapChange(!hasVideo, nextTime)
+        // Only notify parent if gap state CHANGED (avoid redundant re-renders)
+        const isGap = !hasVideo
+        if (prevGapStateRef.current.isGap !== isGap || prevGapStateRef.current.nextTime !== nextTime) {
+            prevGapStateRef.current = { isGap, nextTime }
+            onGapChange(isGap, nextTime)
+        }
 
         // 3. If gap, simulate playback (tick every second)
         let timer: number | null = null
@@ -174,7 +187,7 @@ export default function TimeScroller({
         return () => {
             if (timer) clearInterval(timer)
         }
-    }, [isLive, isDragging, currentTime, segments, loading])
+    }, [isLive, isDragging, currentTime, segments, loading, onGapChange])
 
     // Local helper 
     function hasVideoAtCurrentTimeLocal(time: number, segs: Segment[]) {
@@ -231,12 +244,14 @@ export default function TimeScroller({
 
     // Pointer Events for Dragging
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
+        isDraggingRef.current = true
         setIsDragging(true);
         (e.target as HTMLElement).setPointerCapture(e.pointerId)
     }, [])
 
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
-        if (!isDragging || !trackRef.current) return
+        // Use ref to check drag state (avoids callback recreation)
+        if (!isDraggingRef.current || !trackRef.current) return
 
         const rect = trackRef.current.getBoundingClientRect()
         const secondsPerPixel = (ZOOM_MINUTES * 60) / rect.width
@@ -267,11 +282,12 @@ export default function TimeScroller({
                 })
             })
         }
-    }, [isDragging, date, onDateChange])
+    }, [date, onDateChange])  // Removed isDragging from deps - we use ref now
 
     // On Drag End Logic
     const onDragEnd = useCallback(() => {
-        if (!isDragging) return
+        // Use ref to check (more reliable than state during rapid interactions)
+        if (!isDraggingRef.current) return
 
         // Cancel any pending RAF
         if (rafRef.current !== null) {
@@ -288,7 +304,8 @@ export default function TimeScroller({
             else if (finalTime > SECONDS_IN_DAY) finalTime = finalTime - SECONDS_IN_DAY
         }
 
-        // Update state with final position
+        // Update both ref and state
+        isDraggingRef.current = false
         setCurrentTime(finalTime)
         setIsDragging(false)
         lastInteractionTimeRef.current = Date.now()
@@ -302,37 +319,41 @@ export default function TimeScroller({
     const handlePointerUp = onDragEnd
 
     // RENDER HELPERS
-    const viewportSeconds = ZOOM_MINUTES * 60
-    const halfViewport = viewportSeconds / 2
-    const viewStart = currentTime - halfViewport
-    const viewEnd = currentTime + halfViewport
+    // Memoize tick calculations to reduce re-renders during drag
+    const ticks = useMemo(() => {
+        const viewportSeconds = ZOOM_MINUTES * 60
+        const halfViewport = viewportSeconds / 2
+        const viewStart = currentTime - halfViewport
+        const viewEnd = currentTime + halfViewport
 
-    const getLeftPct = (time: number) => {
-        return ((time - viewStart) / viewportSeconds) * 100
-    }
-
-    const ticks: { pct: number; label: string | null; type: 'major' | 'minor' }[] = []
-    const majorInterval = 5 * 60
-    const minorInterval = 1 * 60
-    const startTick = Math.floor(viewStart / minorInterval) * minorInterval
-
-    for (let t = startTick; t <= viewEnd; t += minorInterval) {
-        let normalizedTime = t
-        if (t < 0) normalizedTime = SECONDS_IN_DAY + t
-        else if (t >= SECONDS_IN_DAY) normalizedTime = t - SECONDS_IN_DAY
-
-        const isMajor = (t % majorInterval === 0)
-        let label = null
-        if (isMajor) {
-            label = formatTimeShort(normalizedTime).slice(0, 5)
+        const getLeftPct = (time: number) => {
+            return ((time - viewStart) / viewportSeconds) * 100
         }
 
-        ticks.push({
-            pct: getLeftPct(t),
-            label,
-            type: isMajor ? 'major' : 'minor'
-        })
-    }
+        const result: { pct: number; label: string | null; type: 'major' | 'minor' }[] = []
+        const majorInterval = 5 * 60
+        const minorInterval = 1 * 60
+        const startTick = Math.floor(viewStart / minorInterval) * minorInterval
+
+        for (let t = startTick; t <= viewEnd; t += minorInterval) {
+            let normalizedTime = t
+            if (t < 0) normalizedTime = SECONDS_IN_DAY + t
+            else if (t >= SECONDS_IN_DAY) normalizedTime = t - SECONDS_IN_DAY
+
+            const isMajor = (t % majorInterval === 0)
+            let label = null
+            if (isMajor) {
+                label = formatTimeShort(normalizedTime).slice(0, 5)
+            }
+
+            result.push({
+                pct: getLeftPct(t),
+                label,
+                type: isMajor ? 'major' : 'minor'
+            })
+        }
+        return result
+    }, [currentTime])
 
     const hasVideoAtCurrentTime = hasVideoAtCurrentTimeLocal(currentTime, segments)
 
