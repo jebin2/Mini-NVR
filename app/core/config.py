@@ -81,6 +81,8 @@ class Settings:
     youtube_rotation_hours: float = field(default_factory=lambda: float(get_env("YOUTUBE_ROTATION_HOURS", "11")))
     youtube_live_restart_interval_hours: float = field(default_factory=lambda: float(get_env("YOUTUBE_LIVE_RESTART_INTERVAL_HOURS", "2")))
     youtube_grid: int = field(default_factory=lambda: int(get_env("YOUTUBE_GRID", "4")))
+    youtube_stream_hw_accel: bool = field(default_factory=lambda: get_env("YOUTUBE_STREAM_HW_ACCEL", "false").lower() == "true")
+    youtube_stream_hw_device: str = field(default_factory=lambda: get_env("YOUTUBE_STREAM_HW_DEVICE", "/dev/dri/renderD128"))
     
     # --- YouTube Upload ---
     youtube_video_privacy: str = field(default_factory=lambda: get_env("YOUTUBE_VIDEO_PRIVACY", "unlisted"))

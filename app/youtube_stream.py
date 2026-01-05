@@ -94,6 +94,15 @@ class YouTubeStreamer:
             "-threads", "0"  # Use all CPU cores
         ]
         
+        # VAAPI Hardware Acceleration Init (must be BEFORE -i inputs)
+        if settings.youtube_stream_hw_accel:
+            cmd.extend([
+                "-init_hw_device", f"vaapi=va:{settings.youtube_stream_hw_device}",
+                "-hwaccel", "vaapi",
+                "-hwaccel_output_format", "vaapi",
+                "-filter_hw_device", "va"
+            ])
+        
         # Inputs - with proper per-input RTSP flags and error handling
         for cam_idx in self.job.cameras:
             rtsp = f"rtsp://127.0.0.1:{settings.go2rtc_rtsp_port}/cam{cam_idx}"
@@ -116,9 +125,12 @@ class YouTubeStreamer:
         cmd.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
         
         # Filter / Mapping
+        # For VAAPI, we need to add hwupload at the end to transfer frames to GPU
+        vaapi_upload = ",format=nv12,hwupload" if settings.youtube_stream_hw_accel else ""
+        
         if len(self.job.cameras) == 1:
             # Single camera - scale to 2560x1440 with proper aspect ratio handling
-            filter_complex = "[0:v]scale=2560:1440:force_original_aspect_ratio=decrease,pad=2560:1440:(ow-iw)/2:(oh-ih)/2,fps=25,setsar=1[v]"
+            filter_complex = f"[0:v]scale=2560:1440:force_original_aspect_ratio=decrease,pad=2560:1440:(ow-iw)/2:(oh-ih)/2,fps=25,setsar=1{vaapi_upload}[v]"
             cmd.extend(["-filter_complex", filter_complex])
             cmd.extend(["-map", "[v]", "-map", f"{audio_input_idx}:a"])
         else:
@@ -159,13 +171,20 @@ class YouTubeStreamer:
                 x = col * cell_w
                 y = row * cell_h
                 
-                next_layer = f"tmp{i}" if i < n - 1 else "v"
+                # Last overlay adds VAAPI upload if needed
+                is_last = (i == n - 1)
+                next_layer = "pre_v" if is_last and settings.youtube_stream_hw_accel else ("v" if is_last else f"tmp{i}")
+                
                 # eof_action=pass: Keep going if this camera dies
                 # repeatlast=1: Repeat last frame if camera freezes
                 filter_parts.append(
                     f"[{current_layer}][v{i}]overlay={x}:{y}:eof_action=pass:repeatlast=1[{next_layer}]"
                 )
                 current_layer = next_layer
+            
+            # Add hwupload for VAAPI after all overlays
+            if settings.youtube_stream_hw_accel:
+                filter_parts.append("[pre_v]format=nv12,hwupload[v]")
             
             filter_complex = ";".join(filter_parts)
             
@@ -176,15 +195,31 @@ class YouTubeStreamer:
             cmd.extend(["-map", "[v]", "-map", f"{audio_input_idx}:a"])
 
         # Encoding Settings - OPTIMIZED FOR YOUTUBE
+        # Hardware acceleration or software fallback
+        if settings.youtube_stream_hw_accel:
+            # VAAPI Hardware Encoding (Intel GPU)
+            log.info(f"🎮 Using VAAPI hardware encoding (device: {settings.youtube_stream_hw_device})")
+            cmd.extend([
+                # Video codec settings - VAAPI
+                "-c:v", "h264_vaapi",
+                "-qp", "20",                        # Quality level (lower = better, 18-25 is good)
+                "-profile:v", "main",               # Better compatibility
+                "-level", "4.2",                    # Higher resolution support
+            ])
+        else:
+            # Software encoding (libx264)
+            log.info("🖥️ Using software encoding (libx264)")
+            cmd.extend([
+                # Video codec settings - Software
+                "-c:v", "libx264", 
+                "-preset", "ultrafast",             # Fast, but CPU-intensive
+                "-tune", "zerolatency",
+                "-profile:v", "main",               # Better compatibility than "high"
+                "-level", "4.2",                    # Higher resolution support
+                "-pix_fmt", "yuv420p",
+            ])
+        
         cmd.extend([
-            # Video codec settings
-            "-c:v", "libx264", 
-            "-preset", "ultrafast",  # Changed from "veryfast" for less CPU
-            "-tune", "zerolatency",
-            "-profile:v", "main",           # Better compatibility than "high"
-            "-level", "4.2",                # Higher resolution support
-            "-pix_fmt", "yuv420p",
-            
             # Bitrate settings (YouTube recommends 13.5 Mbps for 1440p)
             "-b:v", "10000k",   # 10 Mbps target
             "-maxrate", "12000k",  # Allow bursts up to 12 Mbps
