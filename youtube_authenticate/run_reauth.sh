@@ -11,6 +11,13 @@ REAUTH_SCRIPT="$SCRIPT_DIR/reauth.py"
 # Python with youtube_auto_pub installed (pyenv virtualenv named after project)
 PYTHON="$HOME/.pyenv/versions/${PROJECT_NAME}_env/bin/python"
 
+# Check if pyenv Python environment exists
+if [ ! -f "$PYTHON" ]; then
+    echo "[WARN] pyenv environment not found: $PYTHON"
+    echo "[WARN] YouTube reauth requires pyenv setup. Skipping."
+    exit 0
+fi
+
 # Check if reauth.py is already running
 if pgrep -f "python.*reauth.py" > /dev/null; then
     echo "Reauth script is already running. Skipping."

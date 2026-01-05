@@ -20,30 +20,46 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# 1. Environment Setup (Mimicking penv logic)
-# Get folder name as env name suffix
+# Check if YouTube features are enabled (determines if pyenv is needed)
+YOUTUBE_NEEDED=false
+if [ -f ".env" ]; then
+    YOUTUBE_LIVE=$(grep "^YOUTUBE_LIVE_ENABLED=" .env 2>/dev/null | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')
+    YOUTUBE_UPLOAD=$(grep "^YOUTUBE_UPLOAD_ENABLED=" .env 2>/dev/null | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')
+    if [ "$YOUTUBE_LIVE" = "true" ] || [ "$YOUTUBE_UPLOAD" = "true" ]; then
+        YOUTUBE_NEEDED=true
+    fi
+fi
+
+# 1. Environment Setup (only needed for YouTube features)
 DIR_NAME=$(basename "$(pwd)")
 ENV_NAME="${DIR_NAME}_env"
-REQUIRED_PYTHON="3.10" # Min version, adjust as needed
 
-log_info "Setting up environment: $ENV_NAME"
+if [ "$YOUTUBE_NEEDED" = "true" ]; then
+    log_info "YouTube features enabled - setting up pyenv environment: $ENV_NAME"
 
-if ! command -v pyenv &> /dev/null; then
-    log_error "pyenv is not installed or not in PATH. Please install pyenv."
-    return 1 2>/dev/null || exit 1
-fi
+    # Check if pyenv and penv are available
+    PYENV_AVAILABLE=true
+    if ! command -v pyenv &> /dev/null; then
+        log_warn "pyenv is not installed - YouTube features will be disabled"
+        PYENV_AVAILABLE=false
+    elif ! declare -F penv &>/dev/null; then
+        log_warn "'penv' command not found - YouTube features will be disabled"
+        PYENV_AVAILABLE=false
+    fi
 
-# penv FUNCTION check (important)
-if ! declare -F penv &>/dev/null; then
-    log_error "'penv' command not found."
-    return 1
-fi
-
-# Activate
-penv
-if [ $? -ne 0 ]; then
-    log_error "Failed to activate environment."
-    return 1 2>/dev/null || exit 1
+    if [ "$PYENV_AVAILABLE" = "true" ]; then
+        # Activate
+        penv
+        if [ $? -ne 0 ]; then
+            log_warn "Failed to activate pyenv environment - YouTube features will be disabled"
+            YOUTUBE_NEEDED=false
+        fi
+    else
+        YOUTUBE_NEEDED=false
+        log_warn "Continuing without YouTube upload/live streaming support"
+    fi
+else
+    log_info "YouTube features disabled - skipping pyenv setup"
 fi
 
 # 2. Frontend Build (New React App)
@@ -186,13 +202,17 @@ if [ -f ".env" ] && [ -f ".env.example" ]; then
     fi
 fi
 
-# 5. SSH Auth Setup for Docker (Required for YouTube uploader)
-echo ""
-log_info "Setting up SSH for Docker-to-host auth triggering..."
-if [ -f "scripts/setup-ssh-auth.sh" ]; then
-    bash scripts/setup-ssh-auth.sh
+# 5. SSH Auth Setup for Docker (Only needed for YouTube features)
+if [ "$YOUTUBE_NEEDED" = "true" ]; then
+    echo ""
+    log_info "Setting up SSH for Docker-to-host auth triggering..."
+    if [ -f "scripts/setup-ssh-auth.sh" ]; then
+        bash scripts/setup-ssh-auth.sh
+    else
+        log_error "SSH auth setup script not found: scripts/setup-ssh-auth.sh"
+    fi
 else
-    log_error "SSH auth setup script not found: scripts/setup-ssh-auth.sh"
+    log_info "YouTube features disabled - skipping SSH auth setup"
 fi
 
 # 6. Cloudflare Tunnel Setup (Optional)

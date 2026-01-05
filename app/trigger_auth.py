@@ -21,6 +21,11 @@ logging.basicConfig(level=logging.INFO, format='[TriggerAuth] %(message)s')
 logger = logging.getLogger("trigger_auth")
 
 def main():
+    # Skip reauth if YouTube features are not enabled
+    if not settings.youtube_live_enabled and not settings.youtube_upload_enabled:
+        logger.info("⏭️ YouTube features disabled, skipping reauth.")
+        return 0
+
     ssh_user = settings.ssh_host_user
     # PROJECT_DIR in Docker might not match Host, but we usually mount it same location or 
     # pass PROJECT_DIR env var to Docker. 
