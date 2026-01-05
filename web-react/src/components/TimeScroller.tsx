@@ -15,13 +15,13 @@ interface TimeScrollerProps {
     onPlayLive: () => void
     playMode: 'live' | 'buffer'
     onModeChange: (mode: 'live' | 'buffer') => void
-    // New Props for Gap Logic
     onGapChange: (isGap: boolean, nextSegTime: number | null, isFuture: boolean) => void
     externalForceTime?: number | null
 }
 
 const ZOOM_MINUTES = 30
 const SECONDS_IN_DAY = 86400
+const INTERACTION_DEBOUNCE_MS = 500 // Single debounce constant for all interactions
 
 function parseTime(timeStr: string): number {
     const parts = timeStr.split(':')
@@ -41,6 +41,14 @@ function getShiftedDate(currentDateStr: string, shiftDays: number): string {
     return d.toISOString().split('T')[0]
 }
 
+// Helper: check if time falls within any segment
+function hasVideoAt(time: number, segs: Segment[]): boolean {
+    return segs.some(seg => {
+        const s = parseTime(seg.time)
+        return time >= s && time < s + seg.duration
+    })
+}
+
 export default function TimeScroller({
     camId, date, availableDates, onDateChange,
     isLive, videoTime, playlistStart,
@@ -50,58 +58,64 @@ export default function TimeScroller({
 }: TimeScrollerProps) {
     const [segments, setSegments] = useState<Segment[]>([])
     const [loading, setLoading] = useState(true)
-
-    // The time at the CENTER of the scrubber
     const [currentTime, setCurrentTime] = useState(0)
     const [isDragging, setIsDragging] = useState(false)
 
-    // Track when user last released drag to debounce video updates
-    const lastInteractionTimeRef = useRef(0)
+    // === REFS (all interaction state in one place) ===
+    const refs = useRef({
+        isDragging: false,
+        currentTime: 0,
+        lastInteraction: 0,  // Single timestamp for ALL debouncing
+        pendingDelta: 0,
+        raf: null as number | null,
+        prevGap: { isGap: false, nextTime: null as number | null, isFuture: false }
+    })
 
-    // Track when drag ended to debounce gap detection
-    const dragEndTimeRef = useRef(0)
-    // Debounce period after drag ends before gap detection kicks in (ms)
-    const GAP_DETECTION_DEBOUNCE_MS = 500
-
-    // For smooth scrolling with requestAnimationFrame
-    const rafRef = useRef<number | null>(null)
-    const pendingDeltaRef = useRef(0)
-
-    // Keep a ref to currentTime for use in callbacks without stale closures
-    const currentTimeRef = useRef(0)
-    currentTimeRef.current = currentTime
+    // Keep currentTime ref in sync
+    refs.current.currentTime = currentTime
 
     const trackRef = useRef<HTMLDivElement>(null)
 
-    // Use ref for isDragging to prevent callback recreation during parent re-renders
-    const isDraggingRef = useRef(false)
-
-    // Track previous gap state to avoid redundant calls
-    const prevGapStateRef = useRef<{ isGap: boolean; nextTime: number | null; isFuture: boolean }>({ isGap: false, nextTime: null, isFuture: false })
-
-    // Helper: Get current time of day in seconds
+    // === HELPERS ===
     const getCurrentTimeSeconds = () => {
         const now = new Date()
         return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
     }
 
-    // Load segments
+    const isWithinDebounce = () => Date.now() - refs.current.lastInteraction < INTERACTION_DEBOUNCE_MS
+
+    const triggerPlayAt = useCallback((time: number, segs: Segment[]) => {
+        const found = segs.find(seg => {
+            const start = parseTime(seg.time)
+            return time >= start && time < start + seg.duration
+        })
+        if (found) {
+            const url = getPlaylistUrl(camId, date, found.time)
+            onPlayHls(getJellyJumpUrl(window.location.origin + url))
+        }
+        if (playMode === 'live') {
+            onModeChange('buffer')
+        }
+    }, [camId, date, onPlayHls, playMode, onModeChange])
+
+    // === EFFECTS ===
+
+    // 1. Load segments
     useEffect(() => {
         let isMounted = true
         let intervalId: number | null = null
 
         async function load() {
-            setLoading(prev => prev || true)
+            setLoading(true)
             try {
                 const data = await fetchSegments(camId, date)
                 if (!isMounted) return
                 setSegments(data.segments)
 
-                // Initial positioning if not live and valid data exists
-                if (!isLive && data.segments.length > 0 && loading) {
+                if (!isLive && data.segments.length > 0) {
                     const lastSeg = data.segments[data.segments.length - 1]
                     const lastTime = parseTime(lastSeg.time) + lastSeg.duration
-                    setCurrentTime(lastTime - 10) // 10s before end
+                    setCurrentTime(lastTime - 10)
                 }
             } catch (err) {
                 console.error('Failed to load segments:', err)
@@ -121,66 +135,28 @@ export default function TimeScroller({
             isMounted = false
             if (intervalId) clearInterval(intervalId)
         }
-    }, [camId, date])
+    }, [camId, date, isLive])
 
-    // External Force Time (from "Go Next" button)
+    // 2. External force time (from "Go Next" button)
     useEffect(() => {
         if (externalForceTime != null) {
             setCurrentTime(externalForceTime)
-            // Trigger play immediately
             triggerPlayAt(externalForceTime, segments)
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [externalForceTime])
+    }, [externalForceTime, segments, triggerPlayAt])
 
-    // Helper to find segment and play
-    const triggerPlayAt = (time: number, segs: Segment[]) => {
-        let found: Segment | null = null
-        for (const seg of segs) {
-            const start = parseTime(seg.time)
-            const end = start + seg.duration
-            if (time >= start && time < end) {
-                found = seg
-                break
-            }
-        }
-        if (found) {
-            const url = getPlaylistUrl(camId, date, found.time)
-            onPlayHls(getJellyJumpUrl(window.location.origin + url))
-        }
-        if (playMode === 'live') {
-            onModeChange('buffer')
-        }
-    }
-
-    // Gap Detection & Simulated Playback Loop
-    // IMPORTANT: Only run when NOT dragging to avoid jerkiness
+    // 3. Gap detection (with debounce)
     useEffect(() => {
-        // Skip gap detection entirely while dragging
-        if (isDragging) return
-        if (isLive || loading) return
+        if (isDragging || isLive || loading) return
 
-        // Also skip gap detection during debounce period after drag ends
-        // This prevents the player from being unmounted before new content loads
-        const timeSinceDragEnd = Date.now() - dragEndTimeRef.current
-        if (timeSinceDragEnd < GAP_DETECTION_DEBOUNCE_MS) {
-            // Schedule a re-evaluation after debounce period
-            const timeoutId = setTimeout(() => {
-                // Force re-run by updating a piece of state or just rely on next tick
-                // We can trigger this by calling setCurrentTime with same value
-                setCurrentTime(t => t) // Force re-render which triggers this effect again
-            }, GAP_DETECTION_DEBOUNCE_MS - timeSinceDragEnd + 10)
+        // Wait for debounce period after any interaction
+        if (isWithinDebounce()) {
+            const remaining = INTERACTION_DEBOUNCE_MS - (Date.now() - refs.current.lastInteraction)
+            const timeoutId = setTimeout(() => setCurrentTime(t => t), remaining + 10)
             return () => clearTimeout(timeoutId)
         }
 
-        // 1. check if gap
-        const hasVideo = segments.some(seg => {
-            const s = parseTime(seg.time)
-            const e = s + seg.duration
-            return currentTime >= s && currentTime < e
-        })
-
-        // 2. Find next segment time and check if in future
+        const hasVideo = hasVideoAt(currentTime, segments)
         let nextTime: number | null = null
         let isFuture = false
 
@@ -188,127 +164,88 @@ export default function TimeScroller({
             const nextSeg = segments.find(s => parseTime(s.time) > currentTime)
             if (nextSeg) {
                 nextTime = parseTime(nextSeg.time)
-            } else {
-                // No next segment - check if we're beyond the last segment (future)
-                if (segments.length > 0) {
-                    const lastSeg = segments[segments.length - 1]
-                    const lastSegEnd = parseTime(lastSeg.time) + lastSeg.duration
-                    if (currentTime >= lastSegEnd) {
-                        isFuture = true
-                    }
+            } else if (segments.length > 0) {
+                const lastSeg = segments[segments.length - 1]
+                if (currentTime >= parseTime(lastSeg.time) + lastSeg.duration) {
+                    isFuture = true
                 }
             }
         }
 
-        // Only notify parent if gap state CHANGED (avoid redundant re-renders)
+        // Only notify if changed
+        const prev = refs.current.prevGap
         const isGap = !hasVideo
-        if (prevGapStateRef.current.isGap !== isGap ||
-            prevGapStateRef.current.nextTime !== nextTime ||
-            prevGapStateRef.current.isFuture !== isFuture) {
-            prevGapStateRef.current = { isGap, nextTime, isFuture }
+        if (prev.isGap !== isGap || prev.nextTime !== nextTime || prev.isFuture !== isFuture) {
+            refs.current.prevGap = { isGap, nextTime, isFuture }
             onGapChange(isGap, nextTime, isFuture)
         }
 
-        // 3. If gap but NOT in future (has next segment), simulate playback (tick every second)
-        // Timer STOPS when in future (no more video ahead)
+        // Simulate playback in gaps (tick forward)
         let timer: number | null = null
-
         if (!hasVideo && !isFuture && segments.length > 0) {
             timer = window.setInterval(() => {
-                setCurrentTime(t => {
-                    const next = t + 1
-                    return next > SECONDS_IN_DAY ? SECONDS_IN_DAY : next
-                })
+                setCurrentTime(t => Math.min(t + 1, SECONDS_IN_DAY))
             }, 1000)
         }
 
-        return () => {
-            if (timer) clearInterval(timer)
-        }
-
+        return () => { if (timer) clearInterval(timer) }
     }, [isLive, isDragging, currentTime, segments, loading, onGapChange])
 
-    // Local helper 
-    function hasVideoAtCurrentTimeLocal(time: number, segs: Segment[]) {
-        return segs.some(seg => {
-            const s = parseTime(seg.time)
-            const e = s + seg.duration
-            return time >= s && time < e
-        })
-    }
-
-
-    // Sync with video playback (only if NOT dragging and grace period passed)
+    // 4. Sync with video playback
     useEffect(() => {
         if (isDragging || isLive || videoTime == null || playlistStart == null) return
+        if (isWithinDebounce()) return
 
-        // Grace period check (3 seconds to allow new video to load)
-        if (Date.now() - lastInteractionTimeRef.current < 3000) return
+        const relevantSegments = segments.filter(s => parseTime(s.time) >= playlistStart)
+        if (relevantSegments.length === 0) return
 
-        // Calculate actual time from videoTime
-        if (segments.length > 0) {
-            const relevantSegments = segments.filter(s => parseTime(s.time) >= playlistStart)
-            if (relevantSegments.length === 0) return
+        let cumulative = 0
+        let actualTime = playlistStart
 
-            let cumulativeVideoTime = 0
-            let actualTime = playlistStart
-
-            for (const seg of relevantSegments) {
-                const segStart = parseTime(seg.time)
-                const segDuration = seg.duration
-
-                if (videoTime < cumulativeVideoTime + segDuration) {
-                    actualTime = segStart + (videoTime - cumulativeVideoTime)
-                    break
-                }
-                cumulativeVideoTime += segDuration
-                actualTime = segStart + segDuration
+        for (const seg of relevantSegments) {
+            const segStart = parseTime(seg.time)
+            if (videoTime < cumulative + seg.duration) {
+                actualTime = segStart + (videoTime - cumulative)
+                break
             }
-            setCurrentTime(actualTime)
+            cumulative += seg.duration
+            actualTime = segStart + seg.duration
         }
+        setCurrentTime(actualTime)
     }, [isLive, videoTime, playlistStart, segments, isDragging])
 
-    // Live mode clock
+    // 5. Live mode clock
     useEffect(() => {
         if (!isLive || isDragging) return
 
-        const updateClock = () => {
-            setCurrentTime(getCurrentTimeSeconds())
-        }
-        updateClock()
-        const interval = setInterval(updateClock, 1000)
+        const update = () => setCurrentTime(getCurrentTimeSeconds())
+        update()
+        const interval = setInterval(update, 1000)
         return () => clearInterval(interval)
     }, [isLive, isDragging])
 
-
-    // Pointer Events for Dragging
+    // === POINTER HANDLERS ===
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
-        isDraggingRef.current = true
-        setIsDragging(true);
-        (e.target as HTMLElement).setPointerCapture(e.pointerId)
+        refs.current.isDragging = true
+        setIsDragging(true)
+            ; (e.target as HTMLElement).setPointerCapture(e.pointerId)
     }, [])
 
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
-        // Use ref to check drag state (avoids callback recreation)
-        if (!isDraggingRef.current || !trackRef.current) return
+        if (!refs.current.isDragging || !trackRef.current) return
 
         const rect = trackRef.current.getBoundingClientRect()
         const secondsPerPixel = (ZOOM_MINUTES * 60) / rect.width
+        refs.current.pendingDelta += -e.movementX * secondsPerPixel
 
-        // Accumulate delta for batching with requestAnimationFrame
-        pendingDeltaRef.current += -e.movementX * secondsPerPixel
-
-        // Only schedule RAF if not already pending
-        if (rafRef.current === null) {
-            rafRef.current = requestAnimationFrame(() => {
-                const delta = pendingDeltaRef.current
-                pendingDeltaRef.current = 0
-                rafRef.current = null
+        if (refs.current.raf === null) {
+            refs.current.raf = requestAnimationFrame(() => {
+                const delta = refs.current.pendingDelta
+                refs.current.pendingDelta = 0
+                refs.current.raf = null
 
                 setCurrentTime(t => {
                     let next = t + delta
-
-                    // Seamless Day Switching
                     if (next < 0) {
                         onDateChange(getShiftedDate(date, -1))
                         next = SECONDS_IN_DAY + next
@@ -316,62 +253,44 @@ export default function TimeScroller({
                         onDateChange(getShiftedDate(date, 1))
                         next = next - SECONDS_IN_DAY
                     }
-
                     return next
                 })
             })
         }
-    }, [date, onDateChange])  // Removed isDragging from deps - we use ref now
+    }, [date, onDateChange])
 
-    // On Drag End Logic
-    const onDragEnd = useCallback(() => {
-        // Use ref to check (more reliable than state during rapid interactions)
-        if (!isDraggingRef.current) return
+    const handlePointerUp = useCallback(() => {
+        if (!refs.current.isDragging) return
 
-        // Cancel any pending RAF
-        if (rafRef.current !== null) {
-            cancelAnimationFrame(rafRef.current)
-            rafRef.current = null
+        // Cancel pending animation
+        if (refs.current.raf !== null) {
+            cancelAnimationFrame(refs.current.raf)
+            refs.current.raf = null
         }
 
-        // Calculate final landing time using REF to avoid stale closure issues
-        // During rapid scrolling, the closure's currentTime can be outdated
-        let finalTime = currentTimeRef.current
-        if (pendingDeltaRef.current !== 0) {
-            finalTime = finalTime + pendingDeltaRef.current
-            pendingDeltaRef.current = 0
-            if (finalTime < 0) finalTime = SECONDS_IN_DAY + finalTime
-            else if (finalTime > SECONDS_IN_DAY) finalTime = finalTime - SECONDS_IN_DAY
-        }
+        // Calculate final time from REF (not stale closure)
+        let finalTime = refs.current.currentTime + refs.current.pendingDelta
+        refs.current.pendingDelta = 0
 
-        // Update both ref and state
-        isDraggingRef.current = false
-        const now = Date.now()
-        dragEndTimeRef.current = now  // Record drag end time for gap detection debounce
-        lastInteractionTimeRef.current = now
+        if (finalTime < 0) finalTime = SECONDS_IN_DAY + finalTime
+        else if (finalTime > SECONDS_IN_DAY) finalTime = finalTime - SECONDS_IN_DAY
 
+        // Update state
+        refs.current.isDragging = false
+        refs.current.lastInteraction = Date.now()
         setCurrentTime(finalTime)
         setIsDragging(false)
 
-        // Trigger Play immediately at the FINAL landing spot (not from closure)
+        // Play at final position
         triggerPlayAt(finalTime, segments)
+    }, [segments, triggerPlayAt])
 
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [segments])  // Removed currentTime from deps since we use ref now
-
-    const handlePointerUp = onDragEnd
-
-    // RENDER HELPERS
-    // Memoize tick calculations to reduce re-renders during drag
+    // === RENDER ===
     const ticks = useMemo(() => {
         const viewportSeconds = ZOOM_MINUTES * 60
         const halfViewport = viewportSeconds / 2
         const viewStart = currentTime - halfViewport
         const viewEnd = currentTime + halfViewport
-
-        const getLeftPct = (time: number) => {
-            return ((time - viewStart) / viewportSeconds) * 100
-        }
 
         const result: { pct: number; label: string | null; type: 'major' | 'minor' }[] = []
         const majorInterval = 5 * 60
@@ -383,26 +302,20 @@ export default function TimeScroller({
             if (t < 0) normalizedTime = SECONDS_IN_DAY + t
             else if (t >= SECONDS_IN_DAY) normalizedTime = t - SECONDS_IN_DAY
 
-            const isMajor = (t % majorInterval === 0)
-            let label = null
-            if (isMajor) {
-                label = formatTimeShort(normalizedTime).slice(0, 5)
-            }
-
+            const isMajor = t % majorInterval === 0
             result.push({
-                pct: getLeftPct(t),
-                label,
+                pct: ((t - viewStart) / viewportSeconds) * 100,
+                label: isMajor ? formatTimeShort(normalizedTime).slice(0, 5) : null,
                 type: isMajor ? 'major' : 'minor'
             })
         }
         return result
     }, [currentTime])
 
-    const hasVideoAtCurrentTime = hasVideoAtCurrentTimeLocal(currentTime, segments)
+    const hasVideoAtCurrentTime = hasVideoAt(currentTime, segments)
 
     return (
         <div className="time-scroller">
-            {/* Header */}
             <div className="scroller-header">
                 <div className="date-select-wrapper">
                     <select className="date-select" value={date} onChange={(e) => onDateChange(e.target.value)}>
@@ -420,13 +333,11 @@ export default function TimeScroller({
                         onModeChange('live')
                     }}>Live</button>
                     <button className={`mode-btn ${playMode === 'buffer' ? 'active' : ''}`} onClick={() => {
-                        // Always trigger - acts as refresh if already on buffer
                         onModeChange('buffer')
                     }}>Rec</button>
                 </div>
             </div>
 
-            {/* Scrubber Track */}
             <div
                 className="scroller-container ruler-style"
                 ref={trackRef}
@@ -436,7 +347,6 @@ export default function TimeScroller({
                 onPointerCancel={handlePointerUp}
                 onPointerLeave={handlePointerUp}
             >
-                {/* Ruler Ticks */}
                 {ticks.map((tick, i) => (
                     <div
                         key={i}
@@ -447,10 +357,8 @@ export default function TimeScroller({
                     </div>
                 ))}
 
-                {/* Center Line (Fixed) */}
                 <div className="center-line" />
 
-                {/* No Video Overlay - Visual Strip */}
                 {!hasVideoAtCurrentTime && !loading && segments.length > 0 && (
                     <div className="no-video-strip" />
                 )}
