@@ -69,7 +69,10 @@ export default function TimeScroller({
         lastInteraction: 0,
         pendingDelta: 0,
         raf: null as number | null,
-        prevGap: { isGap: false, nextTime: null as number | null, isFuture: false }
+        prevGap: { isGap: false, nextTime: null as number | null, isFuture: false },
+        isSeeking: false,
+        seekTarget: 0,
+        seekTimeout: null as number | null
     })
 
     // Keep currentTime ref in sync
@@ -192,6 +195,10 @@ export default function TimeScroller({
     useEffect(() => {
         if (isDragging || isLive || videoTime == null || playlistStart == null) return
 
+        // 1. GAP HANDLING: If scrubber is in a gap, DISABLE sync.
+        // We trust the scrubber position absolutely in gaps.
+        if (!hasVideoAt(refs.current.currentTime, segments)) return
+
         // Calculate server time from video time
         // Video time is relative to playlist start
         const relevantSegments = segments.filter(s => parseTime(s.time) >= playlistStart)
@@ -210,7 +217,22 @@ export default function TimeScroller({
             actualTime = segStart + seg.duration
         }
 
-        // Only sync if different enough to matter (avoid micro-jitters)
+        // 2. SEEK LOCKING: Prevent "jerky" jumps after scrubbing
+        // If we are waiting for a seek to complete, ignore video updates 
+        // until the video is close to our target time.
+        if (refs.current.isSeeking) {
+            const diff = Math.abs(actualTime - refs.current.seekTarget)
+            if (diff < 2) {
+                // Video has caught up! Unlock.
+                refs.current.isSeeking = false
+                if (refs.current.seekTimeout) clearTimeout(refs.current.seekTimeout)
+            } else {
+                // Video is still stale/seeking. Ignore it.
+                return
+            }
+        }
+
+        // Normal Sync (Unidirectional)
         if (Math.abs(actualTime - refs.current.currentTime) > 1) {
             setCurrentTime(actualTime)
         }
@@ -282,6 +304,17 @@ export default function TimeScroller({
         refs.current.lastInteraction = Date.now()
         setCurrentTime(finalTime)
         setIsDragging(false)
+
+        // ENABLE SEEK LOCK
+        // We expect the video to take a moment to seek.
+        // Lock the scrubber until video reports a time close to finalTime.
+        refs.current.isSeeking = true
+        refs.current.seekTarget = finalTime
+        // Safety timeout: If video never catches up (e.g. error), unlock after 5s
+        if (refs.current.seekTimeout) clearTimeout(refs.current.seekTimeout)
+        refs.current.seekTimeout = window.setTimeout(() => {
+            refs.current.isSeeking = false
+        }, 5000)
 
         // Play at final position
         triggerPlayAt(finalTime, segments)
