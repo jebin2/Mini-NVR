@@ -108,21 +108,29 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         return () => window.removeEventListener('message', handleMessage)
     }, [streamError])
 
+    // Helper to get LOCAL date as YYYY-MM-DD (not UTC)
+    function getLocalDateString(d: Date): string {
+        const year = d.getFullYear()
+        const month = (d.getMonth() + 1).toString().padStart(2, '0')
+        const day = d.getDate().toString().padStart(2, '0')
+        return `${year}-${month}-${day}`
+    }
+
     function playLive() {
-        const today = new Date().toISOString().split('T')[0]
+        const today = getLocalDateString(new Date())
         setHlsUrl(null)
         setVideoTime(null)
         setStreamError(null)
         setForceTime(null)
         setPlayMode('live')
         setGapState({ isGap: false, nextTime: null, isFuture: false })
-        setDebouncedGapIsGap(false)  // Clear debounced gap immediately
+        setDebouncedGapIsGap(false)
         setSelectedDate(today)
     }
 
     function play30sBuffer() {
         const now = new Date()
-        const today = now.toISOString().split('T')[0]
+        const today = getLocalDateString(now)
         const thirtySecondsAgo = new Date(now.getTime() - 30000)
         const startSeconds = thirtySecondsAgo.getHours() * 3600 +
             thirtySecondsAgo.getMinutes() * 60 +
@@ -135,7 +143,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setPlayMode('buffer')
         setStreamError(null)
         setGapState({ isGap: false, nextTime: null, isFuture: false })
-        setDebouncedGapIsGap(false)  // Clear debounced gap immediately
+        setDebouncedGapIsGap(false)
         setForceTime(startSeconds)
     }
 
