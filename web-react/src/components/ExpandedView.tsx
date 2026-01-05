@@ -68,7 +68,9 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setVideoTime(null)
     }, [hlsUrl])
 
-    // Listen for timeupdate messages from JellyJump player
+    // Listen for timeupdate and streamError messages from JellyJump player
+    const [streamError, setStreamError] = useState<{ title: string; message: string } | null>(null)
+
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
             // Security check: ensure message comes from expected player origin
@@ -80,20 +82,39 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     // Store raw video time - TimeScroller will map to actual segment time
                     setVideoTime(event.data.currentTime)
                 }
+                // Clear any previous error on successful playback
+                if (streamError) setStreamError(null)
+            }
+
+            // Handle stream error from JellyJump
+            if (event.data && event.data.type === 'streamError') {
+                console.warn('[ExpandedView] Stream error from player:', event.data.error)
+                setStreamError({
+                    title: event.data.error?.title || 'Stream Error',
+                    message: event.data.error?.message || 'Failed to load stream'
+                })
             }
         }
 
         window.addEventListener('message', handleMessage)
         return () => window.removeEventListener('message', handleMessage)
-    }, [])
+    }, [streamError])
 
     function playLive() {
         setHlsUrl(null)
         setVideoTime(null)
+        setStreamError(null) // Clear any previous error
         // Switch to today/latest date when going live
         if (dates.length > 0) {
             setSelectedDate(dates[0])
         }
+    }
+
+    // Force refresh the player to retry after error
+    const [retryKey, setRetryKey] = useState(0)
+    function retryStream() {
+        setStreamError(null)
+        setRetryKey(prev => prev + 1)
     }
 
     // Handler for TimeScroller - plays HLS at a specific time
@@ -124,13 +145,30 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             <div className="video-stage">
                 {videoSrc ? (
                     <iframe
-                        key={videoSrc}
+                        key={`${videoSrc}-${retryKey}`}
                         src={videoSrc}
                         allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
                         className="video-player"
                     />
                 ) : (
                     <div className="video-placeholder">Select a recording</div>
+                )}
+
+                {/* Stream Error Overlay with Retry Button */}
+                {streamError && (
+                    <div className="stream-error-overlay">
+                        <div className="stream-error-content">
+                            <span className="stream-error-icon">⚠️</span>
+                            <h3>{streamError.title}</h3>
+                            <p>{streamError.message}</p>
+                            <button className="stream-error-retry-btn" onClick={retryStream}>
+                                🔄 Retry
+                            </button>
+                            <button className="stream-error-live-btn" onClick={playLive}>
+                                📺 Go Live
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
 

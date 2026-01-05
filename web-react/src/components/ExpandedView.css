@@ -28,6 +28,75 @@
     border-radius: 12px;
     overflow: hidden;
     margin-bottom: 20px;
+    position: relative;
+}
+
+/* Stream Error Overlay */
+.stream-error-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.stream-error-content {
+    text-align: center;
+    color: #fff;
+    padding: 30px;
+}
+
+.stream-error-icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 15px;
+}
+
+.stream-error-content h3 {
+    font-size: 20px;
+    margin: 0 0 10px 0;
+    color: #ff6b6b;
+}
+
+.stream-error-content p {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    margin: 0 0 20px 0;
+}
+
+.stream-error-retry-btn,
+.stream-error-live-btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 5px;
+    transition: all 0.2s ease;
+}
+
+.stream-error-retry-btn {
+    background: #3b82f6;
+    color: #fff;
+}
+
+.stream-error-retry-btn:hover {
+    background: #2563eb;
+}
+
+.stream-error-live-btn {
+    background: #10b981;
+    color: #fff;
+}
+
+.stream-error-live-btn:hover {
+    background: #059669;
 }
 
 .video-player {
