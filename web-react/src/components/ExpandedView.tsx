@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Channel, fetchDates, getPlaylistUrl } from '../services/api'
 import { getHlsApiUrl, getJellyJumpUrl } from '../services/go2rtc'
+import { getLocalDateString } from '../utils/dateUtils'
 import TimeScroller from './TimeScroller'
 import './ExpandedView.css'
 
@@ -109,12 +110,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     }, [streamError])
 
     // Helper to get LOCAL date as YYYY-MM-DD (not UTC)
-    function getLocalDateString(d: Date): string {
-        const year = d.getFullYear()
-        const month = (d.getMonth() + 1).toString().padStart(2, '0')
-        const day = d.getDate().toString().padStart(2, '0')
-        return `${year}-${month}-${day}`
-    }
+    // MOVED to utils/dateUtils.ts
 
     function playLive() {
         const today = getLocalDateString(new Date())

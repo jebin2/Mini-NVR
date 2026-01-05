@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Segment, fetchSegments, getPlaylistUrl } from '../services/api'
 import { getJellyJumpUrl } from '../services/go2rtc'
+import { getLocalDateString } from '../utils/dateUtils'
 import './TimeScroller.css'
 
 interface TimeScrollerProps {
@@ -127,7 +128,8 @@ export default function TimeScroller({
 
         load()
 
-        const today = new Date().toISOString().split('T')[0]
+        const today = getLocalDateString(new Date())
+
         if (date === today) {
             intervalId = window.setInterval(load, 15000)
         }
