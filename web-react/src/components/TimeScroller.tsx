@@ -376,7 +376,10 @@ export default function TimeScroller({
                         onPlayLive()
                         onModeChange('live')
                     }}>Live</button>
-                    <button className={`mode-btn ${playMode === 'buffer' ? 'active' : ''}`} onClick={() => onModeChange('buffer')}>Rec</button>
+                    <button className={`mode-btn ${playMode === 'buffer' ? 'active' : ''}`} onClick={() => {
+                        // Always trigger - acts as refresh if already on buffer
+                        onModeChange('buffer')
+                    }}>Rec</button>
                 </div>
             </div>
 

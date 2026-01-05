@@ -130,7 +130,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setSelectedDate(today)
         setPlayMode('buffer')
         setStreamError(null)
-        setForceTime(null)
+        setGapState({ isGap: false, nextTime: null })  // Clear gap state immediately
+        setForceTime(startSeconds)  // Force scroller to jump to this time
     }
 
     function handleModeChange(mode: 'live' | 'buffer') {
