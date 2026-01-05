@@ -94,13 +94,13 @@ class YouTubeStreamer:
             "-threads", "0"  # Use all CPU cores
         ]
         
-        # VAAPI Hardware Acceleration Init (must be BEFORE -i inputs)
+        # VAAPI Hardware Acceleration Init (matching recorder.py pattern - BEFORE -i inputs)
+        # NOTE: For multiple camera inputs with complex filter_complex, we CANNOT use hwaccel for decoding
+        # because the scale/overlay filters are CPU filters. We only use VAAPI for encoding output.
         if settings.youtube_stream_hw_accel:
             cmd.extend([
                 "-init_hw_device", f"vaapi=va:{settings.youtube_stream_hw_device}",
-                "-hwaccel", "vaapi",
-                "-hwaccel_output_format", "vaapi",
-                "-filter_hw_device", "va"
+                "-filter_hw_device", "va",  # Use this device for hw filters
             ])
         
         # Inputs - with proper per-input RTSP flags and error handling
@@ -126,7 +126,7 @@ class YouTubeStreamer:
         
         # Filter / Mapping
         # For VAAPI, we need to add hwupload at the end to transfer frames to GPU
-        vaapi_upload = ",format=nv12,hwupload" if settings.youtube_stream_hw_accel else ""
+        vaapi_upload = ",format=nv12|vaapi,hwupload" if settings.youtube_stream_hw_accel else ""
         
         if len(self.job.cameras) == 1:
             # Single camera - scale to 2560x1440 with proper aspect ratio handling
@@ -184,7 +184,7 @@ class YouTubeStreamer:
             
             # Add hwupload for VAAPI after all overlays
             if settings.youtube_stream_hw_accel:
-                filter_parts.append("[pre_v]format=nv12,hwupload[v]")
+                filter_parts.append("[pre_v]format=nv12|vaapi,hwupload[v]")
             
             filter_complex = ";".join(filter_parts)
             
