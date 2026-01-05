@@ -105,15 +105,14 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     }, [streamError])
 
     function playLive() {
+        const today = new Date().toISOString().split('T')[0]
         setHlsUrl(null)
         setVideoTime(null)
         setStreamError(null)
         setForceTime(null)
         setPlayMode('live')
         setGapState({ isGap: false, nextTime: null, isFuture: false })
-        if (dates.length > 0) {
-            setSelectedDate(dates[0])
-        }
+        setSelectedDate(today)  // Always use TODAY for live
     }
 
     function play30sBuffer() {
