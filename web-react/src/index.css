@@ -191,14 +191,27 @@ input:focus {
   animation: fadeIn 0.5s ease-out;
 }
 
+.login-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+}
+
 .login-header h2 {
   font-family: 'Outfit', sans-serif;
-  font-size: 2rem;
+  font-size: 1.8rem;
   background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  margin-bottom: 8px;
+  margin: 0;
 }
 
 .login-header p {

@@ -23,7 +23,7 @@ export default function Header({ storage, showBack, onBack, onLogout }: HeaderPr
                 {showBack && (
                     <button className="btn btn-ghost" onClick={onBack}>←</button>
                 )}
-                <span>📺</span>
+                <img src="/icon-192.png" alt="See Me" className="header-logo" />
             </div>
             <div className="header-controls">
                 <div className="storage-info">{storage}</div>

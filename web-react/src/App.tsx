@@ -26,8 +26,8 @@ function App() {
         <div className="login-wrapper">
           <div className="login-card">
             <div className="login-header">
-              <h2>📺 See Me</h2>
-              <p>NVR System Authentication</p>
+              <img src="/icon-192.png" alt="See Me" className="login-logo" />
+              <h2>See Me</h2>
             </div>
             <div className="login-content">
               <GoogleSignInButton width={300} />
