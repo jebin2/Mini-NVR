@@ -87,6 +87,9 @@ def main():
             # Step 2: Sync recordings to backup using rsync
             sync_with_rsync(config.settings.record_dir, backup_dir)
             
+            # Step 3: Cleanup again after sync in case new files exceeded limit
+            cleanup_old_files(backup_dir, max_gb, logger)
+            
         except Exception as e:
             logger.error(f"[❌] Backup failed: {e}")
         
