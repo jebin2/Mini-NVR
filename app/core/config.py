@@ -89,6 +89,12 @@ class Settings:
     youtube_delete_after_upload: bool = field(default_factory=lambda: get_env("YOUTUBE_DELETE_AFTER_UPLOAD", "false").lower() == "true")
     youtube_upload_batch_size_mb: int = field(default_factory=lambda: int(get_env("YOUTUBE_UPLOAD_BATCH_SIZE_MB", "50")))
     
+    # --- Backup Service ---
+    backup_enabled: bool = field(default_factory=lambda: get_env("BACKUP_ENABLED", "false").lower() == "true")
+    backup_dir: str = field(default_factory=lambda: get_env("BACKUP_DIR"))
+    backup_max_storage_gb: int = field(default_factory=lambda: int(get_env("BACKUP_MAX_STORAGE_GB")))
+    backup_sync_interval: int = field(default_factory=lambda: int(get_env("BACKUP_SYNC_INTERVAL")))
+    
 
     
     # --- YouTube Accounts & Encryption ---

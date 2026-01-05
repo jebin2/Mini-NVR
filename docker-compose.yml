@@ -12,6 +12,7 @@ services:
     network_mode: host  # Required to access go2rtc at localhost
     volumes:
       - ${RECORD_DIR}:/recordings
+      - ${BACKUP_DIR}:/backup
       - ./logs:/logs
       # Mount client secrets folder for multiple YouTube accounts
       - ./client:/app/client:ro
@@ -29,6 +30,7 @@ services:
       - SSH_HOST_USER=${USER}
       - PROJECT_DIR=${PWD}
       - RECORD_DIR=/recordings
+      - BACKUP_DIR=/backup
 
   # go2rtc for low-latency WebRTC live streaming
   # Also serves as central RTSP hub for YouTube streaming

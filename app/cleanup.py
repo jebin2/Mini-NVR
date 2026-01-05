@@ -1,31 +1,19 @@
 import os
 import time
-import glob
 from core import config
 from core.logger import setup_logger
 from utils.processed_videos_csv import get_uploaded_videos
+from utils.storage import get_size_gb, get_all_ts_files
 
 # Use separate log file
 logger = setup_logger("cleanup", "/logs/cleanup.log")
 
 CHECK_INTERVAL = config.settings.cleanup_interval
 
-def get_size_gb(path):
-    """Calculate total size of directory in GB."""
-    total = 0
-    for root, _, files in os.walk(path):
-        for f in files:
-            try:
-                total += os.path.getsize(os.path.join(root, f))
-            except OSError:
-                pass
-    return total / (1024 ** 3)
-
 
 def get_all_recordings(path):
     """Get all recording files sorted by creation time (oldest first)."""
-    files = glob.glob(os.path.join(path, "**/*.ts"), recursive=True)
-    return sorted(files, key=lambda f: os.path.getctime(f))
+    return get_all_ts_files(path, sort_by="ctime")
 
 
 def main():
