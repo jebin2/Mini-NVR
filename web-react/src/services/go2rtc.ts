@@ -66,6 +66,6 @@ export function getSnapshotRefreshInterval(): number {
 export function getJellyJumpUrl(videoUrl: string): string {
     const baseUrl = 'https://www.voidall.com/JellyJump/embed.html'
     const controls = 'play,pause,volume,fullscreen'
-    // liveMode=realtime reduces buffer for live streams
-    return `${baseUrl}?video_url=${encodeURIComponent(videoUrl)}&controls=${controls}&credentials=true&autoplay=1&muted=1&controlBarMode=fixed&liveMode=realtime`
+    // autoplay=1 + muted=0: User click on Rec/Live satisfies browser autoplay policy
+    return `${baseUrl}?video_url=${encodeURIComponent(videoUrl)}&controls=${controls}&credentials=true&autoplay=1&muted=0&controlBarMode=fixed&liveMode=realtime`
 }
