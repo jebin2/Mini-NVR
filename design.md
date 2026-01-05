@@ -329,7 +329,6 @@ Mini-NVR/
 │
 ├── 📁 scripts/                  # Setup & control
 │   ├── generate-go2rtc-config.sh
-│   ├── generate-web-config.sh
 │   ├── setup-ssh-auth.sh        # SSH setup for Docker-to-host auth triggering
 │   ├── setup_cloudflare_tunnel.sh
 │   └── reauth.py                # Host-side OAuth script for re-authentication

@@ -220,7 +220,6 @@ Use placeholders: `{user}`, `{pass}`, `{ip}`, `{port}`, `{channel}`
 ├── scripts/
 │   ├── start.sh              # Main startup script
 │   ├── generate-go2rtc-config.sh
-│   └── generate-web-config.sh
 ├── app/
 │   ├── server.py             # FastAPI web server
 │   ├── recorder.py           # RTSP recording (via go2rtc)
