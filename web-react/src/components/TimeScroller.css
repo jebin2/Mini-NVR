@@ -1,375 +1,229 @@
+/* TimeScroller.css */
+
 .time-scroller {
     margin: 12px 0;
     padding: 12px;
-    background: rgba(0, 0, 0, 0.25);
+    background: #0f172a;
+    /* Match container bg for seamless feel */
     border-radius: 16px;
-    touch-action: pan-y;
     user-select: none;
     -webkit-user-select: none;
+    border: 1px solid #334155;
 }
 
-/* Header: time display + live button */
+/* Header */
 .scroller-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
-}
-
-.header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+    margin-bottom: 20px;
+    padding: 0 8px;
 }
 
 .date-select-wrapper {
     position: relative;
-    display: flex;
-    align-items: center;
+    z-index: 5;
 }
 
 .date-select {
     appearance: none;
     -webkit-appearance: none;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #1e293b;
+    border: 1px solid #334155;
     border-radius: 8px;
-    padding: 6px 32px 6px 12px;
+    padding: 6px 16px;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
-    color: #e2e8f0;
+    color: #94a3b8;
     cursor: pointer;
     transition: all 0.2s;
 }
 
 .date-select:hover {
-    background: rgba(0, 0, 0, 0.6);
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: #475569;
+    color: #e2e8f0;
 }
 
-.date-select:focus {
-    outline: none;
-    border-color: #10b981;
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+.time-display-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
 }
 
-.date-icon {
+.current-time-large {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: 1px;
+}
+
+.mode-toggle {
+    display: flex;
+    gap: 8px;
+}
+
+.mode-btn {
+    background: transparent;
+    border: 1px solid #334155;
+    color: #64748b;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mode-btn.active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: white;
+}
+
+/* Track / Container */
+.scroller-container {
+    position: relative;
+    height: 60px;
+    background: #0f172a;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    /* GPU acceleration for smooth scrolling */
+    will-change: contents;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+}
+
+.scroller-container:active {
+    cursor: grabbing;
+}
+
+/* Ruler Ticks */
+.ruler-tick {
     position: absolute;
-    right: 8px;
-    font-size: 14px;
+    bottom: 0;
+    width: 1px;
+    background: #334155;
+    pointer-events: none;
+    transform: translateX(-50%);
+}
+
+.ruler-tick.major {
+    height: 20px;
+    /* Taller tick */
+    background: #475569;
+    width: 2px;
+}
+
+.ruler-tick.minor {
+    height: 10px;
+    /* Shorter tick */
+    background: #334155;
+}
+
+.tick-label {
+    position: absolute;
+    bottom: 24px;
+    /* Above the tick */
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: #64748b;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    white-space: nowrap;
+}
+
+/* Center Line */
+.center-line {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #3b82f6;
+    /* Blue center line */
+    transform: translateX(-50%);
+    z-index: 10;
     pointer-events: none;
     opacity: 0.8;
 }
 
-.time-display {
-    font-family: 'SF Mono', 'Consolas', monospace;
-    display: flex;
-    /* Ensure alignment if flex children exist */
-    align-items: center;
-}
-
-.current-time {
-    font-size: 22px;
-    font-weight: 700;
-    color: #10b981;
-}
-
-.viewport-range {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-/* Mode Toggle: Radio pill selector for Live vs 30s Buffer */
-.mode-toggle {
-    display: flex;
-    background: rgba(0, 0, 0, 0.4);
-    border-radius: 8px;
-    padding: 2px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.mode-option {
-    display: flex;
-    align-items: center;
-    padding: 4px 8px;
-    border-radius: 16px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 11px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.mode-option input[type="radio"] {
-    display: none;
-}
-
-.mode-option.active {
-    background: rgba(255, 0, 85, 0.2);
-    color: #ff0055;
-}
-
-.mode-option.active span {
-    color: #ff0055;
-}
-
-.mode-option:not(.active):hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.mode-option span {
-    white-space: nowrap;
-}
-
-/* Controls row: navigation + zoom */
-.scroller-controls {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    gap: 8px;
-}
-
-.nav-btn {
-    width: 40px;
-    height: 36px;
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    border-radius: 8px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.nav-btn:active {
-    background: rgba(255, 255, 255, 0.2);
-    transform: scale(0.95);
-}
-
-.zoom-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    padding: 4px 12px;
-    border-radius: 20px;
-}
-
-.zoom-btn {
-    width: 32px;
-    height: 32px;
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    border-radius: 50%;
-    color: white;
-    font-size: 18px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.zoom-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-}
-
-.zoom-btn:not(:disabled):active {
-    background: rgba(255, 255, 255, 0.25);
-    transform: scale(0.9);
-}
-
-.zoom-label {
-    min-width: 36px;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.8);
-}
-
-/* Track */
-.scroller-track {
-    position: relative;
-    height: 56px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    cursor: pointer;
-    overflow: hidden;
-    touch-action: none;
-}
-
-.scroller-track.loading {
-    opacity: 0.5;
-}
-
-.scroller-track.active {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-/* Coverage blocks */
-.coverage-block {
+.center-line::after {
+    content: '';
     position: absolute;
-    top: 4px;
-    bottom: 4px;
-    background: linear-gradient(180deg,
-            rgba(59, 130, 246, 0.6) 0%,
-            rgba(59, 130, 246, 0.85) 100%);
-    border-radius: 6px;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 6px solid #3b82f6;
 }
 
-/* Scrubber */
-.scrubber {
+/* No Video Indicator (Strip) */
+.no-video-strip {
     position: absolute;
     top: 0;
-    bottom: 0;
-    width: 4px;
-    background: #10b981;
-    transform: translateX(-50%);
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
-    z-index: 10;
+    left: 50%;
+    /* We want to show indicator that "center is invalid" */
+    /* Maybe just dim the center line or show red? */
+    /* User asked for no ui error feedback, but server knows. 
+       "we will create black div with outlay say no video" was the request.
+       But later "remove segment blue bars (keep data for overlay only)"
+    */
+    width: 100%;
+    height: 100%;
+    /* Subtle red tint on the WHOLE track when in a gap? Or just a label? */
     pointer-events: none;
+    display: none;
+    /* Let's rely on the text overlay if we want, or actually user said "black div with outlay say no video" */
 }
 
-.scrubber::before {
-    content: '';
+/* If we want a specific "No Video" badge in the center */
+.no-video-strip::after {
+    content: 'NO DATA';
     position: absolute;
-    top: -8px;
+    top: 4px;
     left: 50%;
     transform: translateX(-50%);
-    width: 16px;
-    height: 16px;
-    background: #10b981;
-    border-radius: 50%;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-}
-
-.scrubber::after {
-    content: '';
-    position: absolute;
-    bottom: -8px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 16px;
-    height: 16px;
-    background: #10b981;
-    border-radius: 50%;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-}
-
-/* No recordings */
-.no-recordings {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.4);
-}
-
-/* Time markers */
-.time-markers {
-    position: relative;
-    height: 20px;
-    margin-top: 4px;
-}
-
-.time-markers span {
-    position: absolute;
-    transform: translateX(-50%);
-    font-size: 10px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.4);
-    white-space: nowrap;
-}
-
-/* Mobile optimizations */
-@media (max-width: 768px) {
-    .time-scroller {
-        padding: 10px;
-    }
-
-    .scroller-track {
-        height: 64px;
-    }
-
-    .current-time {
-        font-size: 26px;
-    }
-
-    .nav-btn {
-        width: 48px;
-        height: 40px;
-        font-size: 16px;
-    }
-
-    .zoom-btn {
-        width: 36px;
-        height: 36px;
-        font-size: 20px;
-    }
-
-    .scrubber::before,
-    .scrubber::after {
-        width: 20px;
-        height: 20px;
-    }
-
-    .time-markers span {
-        font-size: 11px;
-    }
-}
-
-/* Modal overlay and dialog */
-.timeline-modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    backdrop-filter: blur(4px);
-}
-
-.timeline-modal {
-    background: rgba(30, 30, 35, 0.98);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 16px;
-    padding: 24px 32px;
-    min-width: 280px;
-    max-width: 90%;
-    text-align: center;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-}
-
-.timeline-modal-message {
-    color: #e2e8f0;
-    font-size: 15px;
-    line-height: 1.6;
-    margin: 0 0 20px 0;
-    white-space: pre-line;
-}
-
-.timeline-modal-btn {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    font-size: 9px;
+    background: #d946ef;
+    /* Pink/Magenta warning */
     color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 12px 40px;
-    font-size: 14px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0.8;
+    display: block;
+}
+
+/* Re-implementing the badge logic via CSS on .scroller-container:has(...) if possible, 
+   but we have the div .no-video-strip conditionally rendered by React.
+   So let's style .no-video-strip to be that badge.
+*/
+.no-video-strip {
+    display: block;
+    /* Override none */
+    background: transparent;
+    width: auto;
+    height: auto;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+}
+
+.no-video-strip::after {
+    content: 'NO VIDEO';
+    position: static;
+    /* normal flow inside strip */
+    transform: none;
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
     font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.timeline-modal-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-}
-
-.timeline-modal-btn:active {
-    transform: translateY(0);
+    letter-spacing: 0.5px;
 }

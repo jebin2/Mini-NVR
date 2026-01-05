@@ -15,6 +15,10 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const [hlsUrl, setHlsUrl] = useState<string | null>(null)
     const [playMode, setPlayMode] = useState<'live' | 'buffer'>('buffer')
 
+    // Gap State
+    const [gapState, setGapState] = useState<{ isGap: boolean; nextTime: number | null }>({ isGap: false, nextTime: null })
+    const [forceTime, setForceTime] = useState<number | null>(null)
+
     useEffect(() => {
         loadDates()
     }, [camId])
@@ -33,16 +37,13 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         }
     }
 
-    // Raw video.currentTime from player (not wall-clock adjusted)
     const [videoTime, setVideoTime] = useState<number | null>(null)
 
-    // Helper to parse HH:MM:SS to seconds
     function parseTime(timeStr: string): number {
         const parts = timeStr.split(':')
         return (+parts[0]) * 3600 + (+parts[1]) * 60 + (+parts[2] || 0)
     }
 
-    // Helper to format seconds as HH:MM:SS
     function formatTimeHMS(seconds: number): string {
         const h = Math.floor(seconds / 3600)
         const m = Math.floor((seconds % 3600) / 60)
@@ -50,7 +51,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
     }
 
-    // Calculate playlist start time from the HLS URL (wall-clock seconds)
     const playlistStart = useMemo(() => {
         if (!hlsUrl) return null
         try {
@@ -58,7 +58,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             const videoUrl = urlObj.searchParams.get('video_url')
             if (!videoUrl) return null
 
-            // Handle relative video_url (prepend origin if needed)
             const fullVideoUrl = videoUrl.startsWith('/')
                 ? window.location.origin + videoUrl
                 : videoUrl
@@ -74,30 +73,24 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         return null
     }, [hlsUrl])
 
-    // Reset video time when playing new URL
     useEffect(() => {
         setVideoTime(null)
     }, [hlsUrl])
 
-    // Listen for timeupdate and streamError messages from JellyJump player
     const [streamError, setStreamError] = useState<{ title: string; message: string } | null>(null)
 
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
-            // Security check: ensure message comes from expected player origin
             const allowedOrigins = [window.location.origin, "https://www.voidall.com", "https://cctv.voidall.com"]
             if (!allowedOrigins.includes(event.origin)) return;
 
             if (event.data && event.data.type === 'timeupdate') {
                 if (typeof event.data.currentTime === 'number') {
-                    // Store raw video time - TimeScroller will map to actual segment time
                     setVideoTime(event.data.currentTime)
                 }
-                // Clear any previous error on successful playback
                 if (streamError) setStreamError(null)
             }
 
-            // Handle stream error from JellyJump
             if (event.data && event.data.type === 'streamError') {
                 console.warn('[ExpandedView] Stream error from player:', event.data.error)
                 setStreamError({
@@ -114,9 +107,10 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     function playLive() {
         setHlsUrl(null)
         setVideoTime(null)
-        setStreamError(null) // Clear any previous error
+        setStreamError(null)
+        setForceTime(null)
         setPlayMode('live')
-        // Switch to today/latest date when going live
+        setGapState({ isGap: false, nextTime: null })
         if (dates.length > 0) {
             setSelectedDate(dates[0])
         }
@@ -125,8 +119,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     function play30sBuffer() {
         const now = new Date()
         const today = now.toISOString().split('T')[0]
-
-        // Calculate 30 seconds ago
         const thirtySecondsAgo = new Date(now.getTime() - 30000)
         const startSeconds = thirtySecondsAgo.getHours() * 3600 +
             thirtySecondsAgo.getMinutes() * 60 +
@@ -138,6 +130,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setSelectedDate(today)
         setPlayMode('buffer')
         setStreamError(null)
+        setForceTime(null)
     }
 
     function handleModeChange(mode: 'live' | 'buffer') {
@@ -148,40 +141,50 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         }
     }
 
-    // Force refresh the player to retry after error
     const [retryKey, setRetryKey] = useState(0)
     function retryStream() {
         setStreamError(null)
         setRetryKey(prev => prev + 1)
     }
 
-    // Handler for TimeScroller - plays HLS at a specific time
     function handlePlayHls(url: string) {
         setHlsUrl(url)
-        setPlayMode('buffer') // When scrubbing, we're in buffer mode
+        setPlayMode('buffer')
+        setStreamError(null)
+        setForceTime(null) // Clear force time once we play
+    }
+
+    function handleGoToNext() {
+        if (gapState.nextTime !== null) {
+            // Set forceTime to trigger TimeScroller jump
+            setForceTime(gapState.nextTime)
+        }
     }
 
     function getVideoSrc(): string {
-        // If playing from TimeScroller or buffer mode
         if (hlsUrl) {
             return hlsUrl
         }
-
-        // Default: go2rtc HLS stream for LIVE
-        // Use JellyJump (HLS) for live view (Unified Player)
         return getJellyJumpUrl(getHlsApiUrl(camId))
     }
 
     const videoSrc = getVideoSrc()
     const isLive = playMode === 'live' && !hlsUrl
 
+    // Determining if we should show the player or placeholder
+    const showPlayer = !streamError && !gapState.isGap
+
+    // Explicitly unmount iframe if gap or error
+    // For error, we show overlay on top of placeholder? 
+    // Or just placeholder.
+    // Spec: "for network error... show the same 1) display by removing iframe with goto next available segm"
+
     return (
         <div className="expanded-view">
             <div className="video-stage">
-                {/* Camera ID Badge Overlay */}
                 <div className="camera-badge">📹 CH{camId}</div>
 
-                {videoSrc ? (
+                {showPlayer ? (
                     <iframe
                         key={`${videoSrc}-${retryKey}`}
                         src={videoSrc}
@@ -189,28 +192,30 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                         className="video-player"
                     />
                 ) : (
-                    <div className="video-placeholder">Select a recording</div>
-                )}
+                    <div className="no-video-placeholder">
+                        <div className="placeholder-content">
+                            <span className="placeholder-icon">🚫</span>
+                            <h3>Video Not Available</h3>
+                            <p>No recording found at this time.</p>
 
-                {/* Stream Error Overlay with Retry Button */}
-                {streamError && (
-                    <div className="stream-error-overlay">
-                        <div className="stream-error-content">
-                            <span className="stream-error-icon">⚠️</span>
-                            <h3>{streamError.title}</h3>
-                            <p>{streamError.message}</p>
-                            <button className="stream-error-retry-btn" onClick={retryStream}>
-                                🔄 Retry
-                            </button>
-                            <button className="stream-error-live-btn" onClick={playLive}>
-                                📺 Go Live
-                            </button>
+                            {gapState.nextTime !== null && (
+                                <button className="placeholder-btn" onClick={handleGoToNext}>
+                                    ⏭ Go to Next ({formatTimeHMS(gapState.nextTime)})
+                                </button>
+                            )}
+
+                            {/* If it's a stream error, maybe show retry too? */}
+                            {streamError && (
+                                <div className="error-details">
+                                    <p className="error-msg">{streamError.message}</p>
+                                    <button className="placeholder-retry-btn" onClick={retryStream}>🔄 Retry</button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Time Scroller for HLS seeking */}
             {selectedDate && (
                 <TimeScroller
                     camId={camId}
@@ -224,6 +229,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     onPlayLive={playLive}
                     playMode={playMode}
                     onModeChange={handleModeChange}
+                    onGapChange={(isGap, nextTime) => setGapState({ isGap, nextTime })}
+                    externalForceTime={forceTime}
                 />
             )}
         </div>
