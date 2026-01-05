@@ -175,11 +175,10 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
     return (
         <div className="expanded-view">
-            <div className="player-header">
-                <h2>Camera {camId}</h2>
-            </div>
-
             <div className="video-stage">
+                {/* Camera ID Badge Overlay */}
+                <div className="camera-badge">📹 CH{camId}</div>
+
                 {videoSrc ? (
                     <iframe
                         key={`${videoSrc}-${retryKey}`}
