@@ -22,7 +22,7 @@ interface TimeScrollerProps {
 const ZOOM_MINUTES = 30
 const SECONDS_IN_DAY = 86400
 const GAP_DEBOUNCE_MS = 500        // Debounce for gap detection after interaction
-const TIME_TOLERANCE_SECONDS = 20  // If video is > 20s away from scrubber, retrigger
+const TIME_TOLERANCE_SECONDS = 60  // If video is > 60s away from scrubber, retrigger
 
 function parseTime(timeStr: string): number {
     const parts = timeStr.split(':')
