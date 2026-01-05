@@ -22,8 +22,7 @@ interface TimeScrollerProps {
 const ZOOM_MINUTES = 30
 const SECONDS_IN_DAY = 86400
 const GAP_DEBOUNCE_MS = 500        // Debounce for gap detection after interaction
-const TIME_TOLERANCE_SECONDS = 10  // If video is > 10s away from target, retrigger playback
-const MAX_RETRIGGER_ATTEMPTS = 3   // Prevent infinite retrigger loops
+const TIME_TOLERANCE_SECONDS = 20  // If video is > 20s away from scrubber, retrigger
 
 function parseTime(timeStr: string): number {
     const parts = timeStr.split(':')
@@ -63,12 +62,10 @@ export default function TimeScroller({
     const [currentTime, setCurrentTime] = useState(0)
     const [isDragging, setIsDragging] = useState(false)
 
-    // === REFS (all interaction state in one place) ===
+    // === REFS ===
     const refs = useRef({
         isDragging: false,
         currentTime: 0,
-        targetTime: null as number | null,  // Where user WANTS to play (set on scrub release)
-        retriggerCount: 0,  // Prevent infinite retrigger loops
         lastInteraction: 0,
         pendingDelta: 0,
         raf: null as number | null,
@@ -141,25 +138,9 @@ export default function TimeScroller({
         }
     }, [camId, date, isLive])
 
-    // Clear targetTime when date changes (old target is invalid)
-    useEffect(() => {
-        refs.current.targetTime = null
-        refs.current.retriggerCount = 0
-    }, [date])
-
-    // Clear targetTime when switching to Live mode
-    useEffect(() => {
-        if (isLive) {
-            refs.current.targetTime = null
-            refs.current.retriggerCount = 0
-        }
-    }, [isLive])
-
     // 2. External force time (from "Go Next" button)
     useEffect(() => {
         if (externalForceTime != null) {
-            refs.current.targetTime = externalForceTime  // Set target for comparison
-            refs.current.retriggerCount = 0
             setCurrentTime(externalForceTime)
             triggerPlayAt(externalForceTime, segments)
         }
@@ -232,31 +213,18 @@ export default function TimeScroller({
             actualTime = segStart + seg.duration
         }
 
-        // Compare with targetTime (where user WANTS to play)
-        const targetTime = refs.current.targetTime
-        if (targetTime !== null) {
-            const diff = Math.abs(actualTime - targetTime)
-            if (diff > TIME_TOLERANCE_SECONDS) {
-                // Check retrigger limit to prevent infinite loops
-                if (refs.current.retriggerCount >= MAX_RETRIGGER_ATTEMPTS) {
-                    console.warn(`[TimeScroller] Max retrigger attempts reached, accepting video position`)
-                    refs.current.targetTime = null
-                    refs.current.retriggerCount = 0
-                } else {
-                    // Video is playing wrong position → retrigger playback
-                    refs.current.retriggerCount++
-                    console.log(`[TimeScroller] Video at ${actualTime.toFixed(0)}s but target is ${targetTime.toFixed(0)}s (attempt ${refs.current.retriggerCount}/${MAX_RETRIGGER_ATTEMPTS}) → retriggering`)
-                    triggerPlayAt(targetTime, segments)
-                    return  // Don't sync scrubber to wrong video position
-                }
-            } else {
-                // Video matched target, clear tracking
-                refs.current.targetTime = null
-                refs.current.retriggerCount = 0
-            }
+        // SIMPLE: Compare video position with CURRENT scrubber position
+        // If diff > 10s, video is playing wrong content → retrigger
+        const scrubberTime = refs.current.currentTime
+        const diff = Math.abs(actualTime - scrubberTime)
+
+        if (diff > TIME_TOLERANCE_SECONDS) {
+            console.log(`[TimeScroller] Video at ${actualTime.toFixed(0)}s but scrubber at ${scrubberTime.toFixed(0)}s (diff: ${diff.toFixed(0)}s) → retriggering`)
+            triggerPlayAt(scrubberTime, segments)
+            return  // Don't sync scrubber to wrong video
         }
 
-        // Video is close to target, sync scrubber to video position
+        // Video is playing correct position, sync scrubber to video
         setCurrentTime(actualTime)
     }, [isLive, videoTime, playlistStart, segments, isDragging, triggerPlayAt])
 
@@ -324,7 +292,6 @@ export default function TimeScroller({
         // Update state
         refs.current.isDragging = false
         refs.current.lastInteraction = Date.now()
-        refs.current.targetTime = finalTime  // Track where user WANTS to play
         setCurrentTime(finalTime)
         setIsDragging(false)
 
