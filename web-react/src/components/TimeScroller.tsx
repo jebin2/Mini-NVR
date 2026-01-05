@@ -13,6 +13,8 @@ interface TimeScrollerProps {
     playlistStart?: number | null  // Start time of playlist in seconds (wall-clock)
     onPlayHls: (url: string) => void
     onPlayLive: () => void
+    playMode: 'live' | 'buffer'
+    onModeChange: (mode: 'live' | 'buffer') => void
 }
 
 // Zoom levels in minutes
@@ -46,7 +48,7 @@ function formatZoomLabel(minutes: number): string {
  * - Seek: Tap/drag to select time
  * - Live: Scrubber syncs with current time in live mode
  */
-export default function TimeScroller({ camId, date, availableDates, onDateChange, isLive, videoTime, playlistStart, onPlayHls, onPlayLive }: TimeScrollerProps) {
+export default function TimeScroller({ camId, date, availableDates, onDateChange, isLive, videoTime, playlistStart, onPlayHls, onPlayLive, playMode, onModeChange }: TimeScrollerProps) {
     const [segments, setSegments] = useState<Segment[]>([])
     const [loading, setLoading] = useState(true)
 
@@ -382,15 +384,29 @@ export default function TimeScroller({ camId, date, availableDates, onDateChange
                         )}
                     </div>
                 </div>
-                {/* Only show Live button if NOT already in live mode */}
-                {!isLive && (
-                    <button className="btn-live-pill" onClick={onPlayLive}>
-                        🔴 Live
-                    </button>
-                )}
-                {isLive && (
-                    <span className="live-badge">LIVE VIEW</span>
-                )}
+                {/* Mode Toggle: Live vs 30s Buffer */}
+                <div className="mode-toggle">
+                    <label className={`mode-option ${playMode === 'live' ? 'active' : ''}`}>
+                        <input
+                            type="radio"
+                            name="playMode"
+                            value="live"
+                            checked={playMode === 'live'}
+                            onChange={() => onModeChange('live')}
+                        />
+                        <span>🔴 Live</span>
+                    </label>
+                    <label className={`mode-option ${playMode === 'buffer' ? 'active' : ''}`}>
+                        <input
+                            type="radio"
+                            name="playMode"
+                            value="buffer"
+                            checked={playMode === 'buffer'}
+                            onChange={() => onModeChange('buffer')}
+                        />
+                        <span>⏪ 30s</span>
+                    </label>
+                </div>
             </div>
 
             {/* Controls: Scroll + Zoom */}

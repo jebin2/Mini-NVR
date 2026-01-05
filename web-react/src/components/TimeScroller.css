@@ -80,33 +80,47 @@
     color: rgba(255, 255, 255, 0.5);
 }
 
-.btn-live-pill {
-    padding: 8px 16px;
+/* Mode Toggle: Radio pill selector for Live vs 30s Buffer */
+.mode-toggle {
+    display: flex;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 20px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mode-option {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
     font-size: 13px;
     font-weight: 600;
-    background: rgba(255, 0, 85, 0.15);
-    border: none;
-    color: #ff0055;
-    border-radius: 20px;
-    cursor: pointer;
-    transition: all 0.15s;
+    color: rgba(255, 255, 255, 0.5);
 }
 
-.btn-live-pill:active {
-    background: rgba(255, 0, 85, 0.3);
-    transform: scale(0.97);
+.mode-option input[type="radio"] {
+    display: none;
 }
 
-.live-badge {
-    padding: 4px 10px;
-    font-size: 12px;
-    font-weight: 700;
+.mode-option.active {
+    background: rgba(255, 0, 85, 0.2);
     color: #ff0055;
-    background: rgba(255, 0, 85, 0.1);
-    border: 1px solid rgba(255, 0, 85, 0.3);
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+}
+
+.mode-option.active span {
+    color: #ff0055;
+}
+
+.mode-option:not(.active):hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.mode-option span {
+    white-space: nowrap;
 }
 
 /* Controls row: navigation + zoom */

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Channel, fetchDates } from '../services/api'
+import { Channel, fetchDates, getPlaylistUrl } from '../services/api'
 import { getHlsApiUrl, getJellyJumpUrl } from '../services/go2rtc'
 import TimeScroller from './TimeScroller'
 import './ExpandedView.css'
@@ -13,6 +13,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const [dates, setDates] = useState<string[]>([])
     const [selectedDate, setSelectedDate] = useState('')
     const [hlsUrl, setHlsUrl] = useState<string | null>(null)
+    const [playMode, setPlayMode] = useState<'live' | 'buffer'>('live')
 
     useEffect(() => {
         loadDates()
@@ -37,6 +38,14 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     function parseTime(timeStr: string): number {
         const parts = timeStr.split(':')
         return (+parts[0]) * 3600 + (+parts[1]) * 60 + (+parts[2] || 0)
+    }
+
+    // Helper to format seconds as HH:MM:SS
+    function formatTimeHMS(seconds: number): string {
+        const h = Math.floor(seconds / 3600)
+        const m = Math.floor((seconds % 3600) / 60)
+        const s = Math.floor(seconds % 60)
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
     }
 
     // Calculate playlist start time from the HLS URL (wall-clock seconds)
@@ -104,9 +113,36 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setHlsUrl(null)
         setVideoTime(null)
         setStreamError(null) // Clear any previous error
+        setPlayMode('live')
         // Switch to today/latest date when going live
         if (dates.length > 0) {
             setSelectedDate(dates[0])
+        }
+    }
+
+    function play30sBuffer() {
+        const now = new Date()
+        const today = now.toISOString().split('T')[0]
+
+        // Calculate 30 seconds ago
+        const thirtySecondsAgo = new Date(now.getTime() - 30000)
+        const startSeconds = thirtySecondsAgo.getHours() * 3600 +
+            thirtySecondsAgo.getMinutes() * 60 +
+            thirtySecondsAgo.getSeconds()
+        const startTime = formatTimeHMS(startSeconds)
+
+        const url = getPlaylistUrl(camId, today, startTime)
+        setHlsUrl(getJellyJumpUrl(window.location.origin + url))
+        setSelectedDate(today)
+        setPlayMode('buffer')
+        setStreamError(null)
+    }
+
+    function handleModeChange(mode: 'live' | 'buffer') {
+        if (mode === 'live') {
+            playLive()
+        } else {
+            play30sBuffer()
         }
     }
 
@@ -120,21 +156,22 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     // Handler for TimeScroller - plays HLS at a specific time
     function handlePlayHls(url: string) {
         setHlsUrl(url)
+        setPlayMode('buffer') // When scrubbing, we're in buffer mode
     }
 
     function getVideoSrc(): string {
-        // If playing from TimeScroller
+        // If playing from TimeScroller or buffer mode
         if (hlsUrl) {
             return hlsUrl
         }
 
-        // Default: go2rtc WebRTC stream for LIVE
+        // Default: go2rtc HLS stream for LIVE
         // Use JellyJump (HLS) for live view (Unified Player)
         return getJellyJumpUrl(getHlsApiUrl(camId))
     }
 
     const videoSrc = getVideoSrc()
-    const isLive = !hlsUrl
+    const isLive = playMode === 'live' && !hlsUrl
 
     return (
         <div className="expanded-view">
@@ -184,6 +221,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     playlistStart={playlistStart}
                     onPlayHls={handlePlayHls}
                     onPlayLive={playLive}
+                    playMode={playMode}
+                    onModeChange={handleModeChange}
                 />
             )}
         </div>
