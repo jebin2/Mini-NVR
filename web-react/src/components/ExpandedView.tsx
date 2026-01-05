@@ -13,7 +13,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const [dates, setDates] = useState<string[]>([])
     const [selectedDate, setSelectedDate] = useState('')
     const [hlsUrl, setHlsUrl] = useState<string | null>(null)
-    const [playMode, setPlayMode] = useState<'live' | 'buffer'>('live')
+    const [playMode, setPlayMode] = useState<'live' | 'buffer'>('buffer')
 
     useEffect(() => {
         loadDates()
@@ -26,6 +26,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             if (data.dates?.length > 0) {
                 setSelectedDate(data.dates[0])
             }
+            // Start with 30s buffer mode by default
+            setTimeout(() => play30sBuffer(), 100)
         } catch (err) {
             console.error('Failed to load dates:', err)
         }
