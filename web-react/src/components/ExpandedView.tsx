@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Channel, fetchDates, getPlaylistUrl } from '../services/api'
 import { getHlsApiUrl, getJellyJumpUrl } from '../services/go2rtc'
 import TimeScroller from './TimeScroller'
@@ -15,8 +15,12 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const [hlsUrl, setHlsUrl] = useState<string | null>(null)
     const [playMode, setPlayMode] = useState<'live' | 'buffer'>('buffer')
 
-    // Gap State
+    // Gap State (raw from TimeScroller)
     const [gapState, setGapState] = useState<{ isGap: boolean; nextTime: number | null; isFuture: boolean }>({ isGap: false, nextTime: null, isFuture: false })
+    // Debounced gap state for player visibility (prevents unmount during brief transitions)
+    const [debouncedGapIsGap, setDebouncedGapIsGap] = useState(false)
+    const gapDebounceRef = useRef<number | null>(null)
+
     const [forceTime, setForceTime] = useState<number | null>(null)
 
     useEffect(() => {
@@ -112,7 +116,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setForceTime(null)
         setPlayMode('live')
         setGapState({ isGap: false, nextTime: null, isFuture: false })
-        setSelectedDate(today)  // Always use TODAY for live
+        setDebouncedGapIsGap(false)  // Clear debounced gap immediately
+        setSelectedDate(today)
     }
 
     function play30sBuffer() {
@@ -129,9 +134,33 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setSelectedDate(today)
         setPlayMode('buffer')
         setStreamError(null)
-        setGapState({ isGap: false, nextTime: null, isFuture: false })  // Clear gap state immediately
-        setForceTime(startSeconds)  // Force scroller to jump to this time
+        setGapState({ isGap: false, nextTime: null, isFuture: false })
+        setDebouncedGapIsGap(false)  // Clear debounced gap immediately
+        setForceTime(startSeconds)
     }
+
+    // Debounce gap state for player visibility
+    // Player only hides if gap persists for 1 second (prevents brief transitions from unmounting iframe)
+    useEffect(() => {
+        if (gapState.isGap) {
+            // Delay showing placeholder by 1 second
+            gapDebounceRef.current = window.setTimeout(() => {
+                setDebouncedGapIsGap(true)
+            }, 1000)
+        } else {
+            // Clear gap immediately when video is available
+            if (gapDebounceRef.current) {
+                clearTimeout(gapDebounceRef.current)
+                gapDebounceRef.current = null
+            }
+            setDebouncedGapIsGap(false)
+        }
+        return () => {
+            if (gapDebounceRef.current) {
+                clearTimeout(gapDebounceRef.current)
+            }
+        }
+    }, [gapState.isGap])
 
     function handleModeChange(mode: 'live' | 'buffer') {
         if (mode === 'live') {
@@ -172,7 +201,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const isLive = playMode === 'live' && !hlsUrl
 
     // Determining if we should show the player or placeholder
-    const showPlayer = !streamError && !gapState.isGap
+    // Use DEBOUNCED gap state to prevent brief transitions from unmounting iframe
+    const showPlayer = !streamError && !debouncedGapIsGap
 
     // Explicitly unmount iframe if gap or error
     // For error, we show overlay on top of placeholder? 
