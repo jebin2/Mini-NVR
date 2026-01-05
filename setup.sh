@@ -6,100 +6,122 @@
 
 # Ensure script is sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  echo "❌ Please run: source setup.sh"
-  exit 1
+    echo "❌ Please run: source setup.sh"
+    exit 1
 fi
 
-# Colors
+# ============================================
+# GLOBAL VARIABLES
+# ============================================
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+DIR_NAME=$(basename "$(pwd)")
+ENV_NAME="${DIR_NAME}_env"
+YOUTUBE_NEEDED=false
+
+# ============================================
+# UTILITY FUNCTIONS
+# ============================================
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Check if YouTube features are enabled (determines if pyenv is needed)
-YOUTUBE_NEEDED=false
-if [ -f ".env" ]; then
-    YOUTUBE_LIVE=$(grep "^YOUTUBE_LIVE_ENABLED=" .env 2>/dev/null | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')
-    YOUTUBE_UPLOAD=$(grep "^YOUTUBE_UPLOAD_ENABLED=" .env 2>/dev/null | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')
-    if [ "$YOUTUBE_LIVE" = "true" ] || [ "$YOUTUBE_UPLOAD" = "true" ]; then
-        YOUTUBE_NEEDED=true
-    fi
-fi
+# ============================================
+# SETUP FUNCTIONS
+# ============================================
 
-# 1. Environment Setup (only needed for YouTube features)
-DIR_NAME=$(basename "$(pwd)")
-ENV_NAME="${DIR_NAME}_env"
-
-if [ "$YOUTUBE_NEEDED" = "true" ]; then
-    log_info "YouTube features enabled - setting up pyenv environment: $ENV_NAME"
-
-    # Check if pyenv and penv are available
-    PYENV_AVAILABLE=true
-    if ! command -v pyenv &> /dev/null; then
-        log_warn "pyenv is not installed - YouTube features will be disabled"
-        PYENV_AVAILABLE=false
-    elif ! declare -F penv &>/dev/null; then
-        log_warn "'penv' command not found - YouTube features will be disabled"
-        PYENV_AVAILABLE=false
-    fi
-
-    if [ "$PYENV_AVAILABLE" = "true" ]; then
-        # Activate
-        penv
-        if [ $? -ne 0 ]; then
-            log_warn "Failed to activate pyenv environment - YouTube features will be disabled"
-            YOUTUBE_NEEDED=false
+detect_youtube_features() {
+    log_info "Detecting YouTube feature configuration..."
+    
+    if [ -f ".env" ]; then
+        local yt_live=$(grep "^YOUTUBE_LIVE_ENABLED=" .env 2>/dev/null | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')
+        local yt_upload=$(grep "^YOUTUBE_UPLOAD_ENABLED=" .env 2>/dev/null | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')
+        
+        if [ "$yt_live" = "true" ] || [ "$yt_upload" = "true" ]; then
+            YOUTUBE_NEEDED=true
+            log_info "YouTube features: ENABLED"
+        else
+            log_info "YouTube features: DISABLED"
         fi
     else
-        YOUTUBE_NEEDED=false
-        log_warn "Continuing without YouTube upload/live streaming support"
+        log_warn ".env not found - assuming YouTube features disabled"
     fi
-else
-    log_info "YouTube features disabled - skipping pyenv setup"
-fi
+}
 
-# 2. Frontend Build (New React App)
-log_info "Building React Frontend..."
+setup_pyenv() {
+    if [ "$YOUTUBE_NEEDED" != "true" ]; then
+        log_info "Skipping pyenv setup (YouTube features disabled)"
+        return 0
+    fi
 
-# Extract GOOGLE_CLIENT_ID from .env
-if [ -f ".env" ]; then
-    G_CLIENT_ID=$(grep "^GOOGLE_CLIENT_ID=" .env | cut -d '=' -f2 | tr -d '"' | tr -d "'")
-else
-    G_CLIENT_ID=""
-fi
+    log_info "Setting up pyenv environment: $ENV_NAME"
 
-if [ -z "$G_CLIENT_ID" ]; then
-    log_warn "GOOGLE_CLIENT_ID not found in .env. Frontend google auth may not work."
-fi
+    # Check if pyenv is available
+    if ! command -v pyenv &> /dev/null; then
+        log_warn "pyenv is not installed - YouTube features will be disabled"
+        YOUTUBE_NEEDED=false
+        return 0
+    fi
 
-# Build web-react
-if [ -d "web-react" ]; then
+    # Check if penv function exists
+    if ! declare -F penv &>/dev/null; then
+        log_warn "'penv' command not found - YouTube features will be disabled"
+        YOUTUBE_NEEDED=false
+        return 0
+    fi
+
+    # Activate environment
+    penv
+    if [ $? -ne 0 ]; then
+        log_warn "Failed to activate pyenv - YouTube features will be disabled"
+        YOUTUBE_NEEDED=false
+        return 0
+    fi
+
+    log_info "pyenv environment activated"
+}
+
+build_frontend() {
+    log_info "Building React Frontend..."
+
+    # Get Google Client ID from .env
+    local g_client_id=""
+    if [ -f ".env" ]; then
+        g_client_id=$(grep "^GOOGLE_CLIENT_ID=" .env | cut -d '=' -f2 | tr -d '"' | tr -d "'")
+    fi
+
+    if [ -z "$g_client_id" ]; then
+        log_warn "GOOGLE_CLIENT_ID not found in .env. Frontend google auth may not work."
+    fi
+
+    # Build web-react
+    if [ ! -d "web-react" ]; then
+        log_warn "web-react directory not found. Skipping frontend build."
+        return 0
+    fi
+
     pushd web-react > /dev/null
-    
+
     log_info "Clean install: removing node_modules and lockfile..."
     rm -rf node_modules package-lock.json
-    
+
     log_info "Installing frontend dependencies..."
     npm install
-    
+
     log_info "Building frontend..."
-    # VITE_API_BASE_URL defaults to /api for production build
-    VITE_GOOGLE_CLIENT_ID="$G_CLIENT_ID" VITE_API_BASE_URL="/api" npm run build
-    
+    VITE_GOOGLE_CLIENT_ID="$g_client_id" VITE_API_BASE_URL="/api" npm run build
+
     if [ $? -eq 0 ]; then
         log_info "Frontend build successful."
         popd > /dev/null
-        
-        # Replace web directory
+
+        # Deploy to web/
         if [ -d "web-react/dist" ]; then
             log_info "Deploying new frontend to web/..."
-            if [ -d "web" ]; then
-                 rm -rf web
-            fi
+            rm -rf web 2>/dev/null
             mv web-react/dist web
             log_info "Deployment complete."
         else
@@ -108,130 +130,174 @@ if [ -d "web-react" ]; then
     else
         log_error "Frontend build failed."
         popd > /dev/null
+        return 1
     fi
-else
-    log_warn "web-react directory not found. Skipping frontend build."
-fi
+}
 
-# 3. Dependencies
-log_info "Installing requirements..."
-pip install --force-reinstall -r requirements.txt
+install_python_deps() {
+    log_info "Installing Python requirements..."
+    pip install --force-reinstall -r requirements.txt
+}
 
-# 3. System Dependencies
-log_info "Checking system dependencies..."
+check_system_deps() {
+    log_info "Checking system dependencies..."
 
-# Check ffmpeg
-if command -v ffmpeg &> /dev/null; then
-    log_info "ffmpeg is installed."
-else
-    log_warn "ffmpeg is NOT installed."
-    if [ -f /etc/debian_version ]; then
-        read -p "Do you want to try installing ffmpeg via apt? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            sudo apt-get update && sudo apt-get install -y ffmpeg
-        else
-            log_warn "Skipping ffmpeg installation. Some features may not work."
-        fi
+    # Check ffmpeg
+    if command -v ffmpeg &> /dev/null; then
+        log_info "ffmpeg: ✓ installed"
     else
-        log_warn "Please install ffmpeg manually."
-    fi
-fi
-
-# Check cloudflared (for Cloudflare Tunnel)
-if command -v cloudflared &> /dev/null; then
-    log_info "cloudflared is installed."
-else
-    log_warn "cloudflared is NOT installed (needed for Cloudflare Tunnel)."
-    if [ -f /etc/debian_version ]; then
-        read -p "Do you want to install cloudflared? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            log_info "Installing cloudflared..."
-            curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
-            echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared jammy main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
-            sudo apt-get update && sudo apt-get install -y cloudflared
-            log_info "cloudflared installed successfully."
+        log_warn "ffmpeg: ✗ not installed"
+        if [ -f /etc/debian_version ]; then
+            read -p "Install ffmpeg via apt? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                sudo apt-get update && sudo apt-get install -y ffmpeg
+            fi
         else
-            log_warn "Skipping cloudflared installation. Run scripts/setup_cloudflare_tunnel.sh later."
+            log_warn "Please install ffmpeg manually."
         fi
-    else
-        log_warn "Please install cloudflared manually: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
     fi
-fi
 
-# 4. Configuration Check
-log_info "Checking configuration..."
-if [ ! -f ".env" ]; then
-    log_warn ".env file not found!"
+    # Check cloudflared
+    if command -v cloudflared &> /dev/null; then
+        log_info "cloudflared: ✓ installed"
+    else
+        log_warn "cloudflared: ✗ not installed (needed for Cloudflare Tunnel)"
+        if [ -f /etc/debian_version ]; then
+            read -p "Install cloudflared? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                log_info "Installing cloudflared..."
+                curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+                echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared jammy main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+                sudo apt-get update && sudo apt-get install -y cloudflared
+                log_info "cloudflared installed."
+            fi
+        else
+            log_warn "Please install cloudflared manually."
+        fi
+    fi
+}
+
+validate_config() {
+    log_info "Validating configuration..."
+
+    # Create .env if missing
+    if [ ! -f ".env" ]; then
+        log_warn ".env file not found!"
+        if [ -f ".env.example" ]; then
+            cp .env.example .env
+            log_info "Created .env from .env.example. Please edit it."
+        fi
+        return 0
+    fi
+
+    # Check for missing keys
     if [ -f ".env.example" ]; then
-        cp .env.example .env
-        log_info "Created .env from .env.example. Please edit it with your settings."
-    fi
-fi
+        local missing=0
+        while IFS='=' read -r key value || [ -n "$key" ]; do
+            [[ $key =~ ^#.* ]] && continue
+            [[ -z $key ]] && continue
+            if ! grep -q "^$key=" .env; then
+                log_warn "Missing key: $key"
+                missing=$((missing+1))
+            fi
+        done < .env.example
 
-if [ -f ".env" ] && [ -f ".env.example" ]; then
-    # Simple key check
-    MISSING_KEYS=0
-    while IFS='=' read -r key value || [ -n "$key" ]; do
-        # Skip comments and empty lines
-        [[ $key =~ ^#.* ]] && continue
-        [[ -z $key ]] && continue
-        
-        # Check if key exists in .env
-        if ! grep -q "^$key=" .env; then
-            log_warn "Missing key in .env: $key"
-            MISSING_KEYS=$((MISSING_KEYS+1))
+        if [ $missing -eq 0 ]; then
+            log_info "All configuration keys present."
+        else
+            log_warn "Found $missing missing keys in .env"
         fi
-    done < .env.example
-    
-    if [ $MISSING_KEYS -eq 0 ]; then
-        log_info "Configuration check passed (keys exist)."
-    else
-        log_warn "Found $MISSING_KEYS missing configuration keys in .env."
     fi
 
-    # Specific check for JWT_SECRET
-    JWT_SECRET=$(grep "^JWT_SECRET=" .env | cut -d '=' -f2)
-    if [ -z "$JWT_SECRET" ]; then
-        log_error "JWT_SECRET is missing or empty in .env!"
-        echo "Please generate one using:"
-        echo "python -c \"import secrets; print(secrets.token_urlsafe(64))\""
-        echo "Then add it to .env: JWT_SECRET=your_secret_here"
-        exit 1
+    # Check JWT_SECRET
+    local jwt=$(grep "^JWT_SECRET=" .env | cut -d '=' -f2)
+    if [ -z "$jwt" ]; then
+        log_error "JWT_SECRET is missing or empty!"
+        echo "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+        return 1
     fi
-fi
+}
 
-# 5. SSH Auth Setup for Docker (Only needed for YouTube features)
-if [ "$YOUTUBE_NEEDED" = "true" ]; then
+setup_ssh_auth() {
+    if [ "$YOUTUBE_NEEDED" != "true" ]; then
+        log_info "Skipping SSH auth setup (YouTube features disabled)"
+        return 0
+    fi
+
     echo ""
-    log_info "Setting up SSH for Docker-to-host auth triggering..."
+    log_info "Setting up SSH for Docker-to-host auth..."
+    
     if [ -f "scripts/setup-ssh-auth.sh" ]; then
         bash scripts/setup-ssh-auth.sh
     else
-        log_error "SSH auth setup script not found: scripts/setup-ssh-auth.sh"
+        log_error "SSH auth script not found: scripts/setup-ssh-auth.sh"
     fi
-else
-    log_info "YouTube features disabled - skipping SSH auth setup"
-fi
+}
 
-# 6. Cloudflare Tunnel Setup (Optional)
-echo ""
-read -p "Do you want to set up Cloudflare Tunnel for remote access? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    if command -v cloudflared &> /dev/null; then
-        if [ -f "scripts/setup_cloudflare_tunnel.sh" ]; then
-            bash scripts/setup_cloudflare_tunnel.sh
-        else
-            log_error "Cloudflare tunnel script not found: scripts/setup_cloudflare_tunnel.sh"
-        fi
+setup_cloudflare_tunnel() {
+    echo ""
+    read -p "Set up Cloudflare Tunnel for remote access? (y/n) " -n 1 -r
+    echo
+
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Skipped Cloudflare Tunnel setup."
+        log_info "Run later with: ./scripts/setup_cloudflare_tunnel.sh"
+        return 0
+    fi
+
+    if ! command -v cloudflared &> /dev/null; then
+        log_error "cloudflared not installed. Run setup.sh again to install."
+        return 1
+    fi
+
+    if [ -f "scripts/setup_cloudflare_tunnel.sh" ]; then
+        bash scripts/setup_cloudflare_tunnel.sh
     else
-        log_error "cloudflared is not installed. Please run setup.sh again and install it first."
+        log_error "Tunnel script not found: scripts/setup_cloudflare_tunnel.sh"
     fi
-else
-    log_info "Skipped Cloudflare Tunnel setup."
-    log_info "You can set it up later with: ./scripts/setup_cloudflare_tunnel.sh"
-fi
+}
 
-log_info "Setup complete! Environment '$ENV_NAME' is active."
+# ============================================
+# MAIN
+# ============================================
+main() {
+    echo ""
+    echo "============================================"
+    echo "         Mini-NVR Setup"
+    echo "============================================"
+    echo ""
+
+    # Step 1: Detect YouTube features
+    detect_youtube_features
+
+    # Step 2: Setup pyenv (if YouTube enabled)
+    setup_pyenv
+
+    # Step 3: Build frontend
+    build_frontend
+
+    # Step 4: Install Python dependencies
+    install_python_deps
+
+    # Step 5: Check system dependencies
+    check_system_deps
+
+    # Step 6: Validate configuration
+    validate_config || return 1
+
+    # Step 7: SSH auth (if YouTube enabled)
+    setup_ssh_auth
+
+    # Step 8: Cloudflare tunnel (optional)
+    setup_cloudflare_tunnel
+
+    echo ""
+    log_info "============================================"
+    log_info "  Setup complete! Environment: $ENV_NAME"
+    log_info "============================================"
+}
+
+# Run main
+main
