@@ -23,7 +23,6 @@ interface TimeScrollerProps {
 const ZOOM_MINUTES = 30
 const SECONDS_IN_DAY = 86400
 const GAP_DEBOUNCE_MS = 500        // Debounce for gap detection after interaction
-const TIME_TOLERANCE_SECONDS = 60  // If video is > 60s away from scrubber, retrigger
 
 function parseTime(timeStr: string): number {
     const parts = timeStr.split(':')
@@ -185,21 +184,16 @@ export default function TimeScroller({
         }
 
         // Simulate playback in gaps (tick forward)
-        let timer: number | null = null
-        if (!hasVideo && !isFuture && segments.length > 0) {
-            timer = window.setInterval(() => {
-                setCurrentTime(t => Math.min(t + 1, SECONDS_IN_DAY))
-            }, 1000)
-        }
-
-        return () => { if (timer) clearInterval(timer) }
+        // No timer needed - clean/simple
     }, [isLive, isDragging, currentTime, segments, loading, onGapChange])
 
-    // 4. Sync with video playback OR retrigger if video is playing wrong position
+    // 4. Video Sync (Unidirectional: Video -> Scrubber)
+    // Only update scrubber if user is NOT dragging
     useEffect(() => {
         if (isDragging || isLive || videoTime == null || playlistStart == null) return
 
-        // Calculate what time the video is actually playing
+        // Calculate server time from video time
+        // Video time is relative to playlist start
         const relevantSegments = segments.filter(s => parseTime(s.time) >= playlistStart)
         if (relevantSegments.length === 0) return
 
@@ -216,20 +210,11 @@ export default function TimeScroller({
             actualTime = segStart + seg.duration
         }
 
-        // SIMPLE: Compare video position with CURRENT scrubber position
-        // If diff > 10s, video is playing wrong content → retrigger
-        const scrubberTime = refs.current.currentTime
-        const diff = Math.abs(actualTime - scrubberTime)
-
-        if (diff > TIME_TOLERANCE_SECONDS) {
-            console.log(`[TimeScroller] Video at ${actualTime.toFixed(0)}s but scrubber at ${scrubberTime.toFixed(0)}s (diff: ${diff.toFixed(0)}s) → retriggering`)
-            triggerPlayAt(scrubberTime, segments)
-            return  // Don't sync scrubber to wrong video
+        // Only sync if different enough to matter (avoid micro-jitters)
+        if (Math.abs(actualTime - refs.current.currentTime) > 1) {
+            setCurrentTime(actualTime)
         }
-
-        // Video is playing correct position, sync scrubber to video
-        setCurrentTime(actualTime)
-    }, [isLive, videoTime, playlistStart, segments, isDragging, triggerPlayAt])
+    }, [isLive, videoTime, playlistStart, segments, isDragging])
 
     // 5. Live mode clock
     useEffect(() => {
