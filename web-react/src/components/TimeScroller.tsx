@@ -58,9 +58,18 @@ export default function TimeScroller({
     // Track when user last released drag to debounce video updates
     const lastInteractionTimeRef = useRef(0)
 
+    // Track when drag ended to debounce gap detection
+    const dragEndTimeRef = useRef(0)
+    // Debounce period after drag ends before gap detection kicks in (ms)
+    const GAP_DETECTION_DEBOUNCE_MS = 500
+
     // For smooth scrolling with requestAnimationFrame
     const rafRef = useRef<number | null>(null)
     const pendingDeltaRef = useRef(0)
+
+    // Keep a ref to currentTime for use in callbacks without stale closures
+    const currentTimeRef = useRef(0)
+    currentTimeRef.current = currentTime
 
     const trackRef = useRef<HTMLDivElement>(null)
 
@@ -150,6 +159,19 @@ export default function TimeScroller({
         // Skip gap detection entirely while dragging
         if (isDragging) return
         if (isLive || loading) return
+
+        // Also skip gap detection during debounce period after drag ends
+        // This prevents the player from being unmounted before new content loads
+        const timeSinceDragEnd = Date.now() - dragEndTimeRef.current
+        if (timeSinceDragEnd < GAP_DETECTION_DEBOUNCE_MS) {
+            // Schedule a re-evaluation after debounce period
+            const timeoutId = setTimeout(() => {
+                // Force re-run by updating a piece of state or just rely on next tick
+                // We can trigger this by calling setCurrentTime with same value
+                setCurrentTime(t => t) // Force re-render which triggers this effect again
+            }, GAP_DETECTION_DEBOUNCE_MS - timeSinceDragEnd + 10)
+            return () => clearTimeout(timeoutId)
+        }
 
         // 1. check if gap
         const hasVideo = segments.some(seg => {
@@ -312,10 +334,11 @@ export default function TimeScroller({
             rafRef.current = null
         }
 
-        // Calculate final landing time synchronously (avoid stale closure)
-        let finalTime = currentTime
+        // Calculate final landing time using REF to avoid stale closure issues
+        // During rapid scrolling, the closure's currentTime can be outdated
+        let finalTime = currentTimeRef.current
         if (pendingDeltaRef.current !== 0) {
-            finalTime = currentTime + pendingDeltaRef.current
+            finalTime = finalTime + pendingDeltaRef.current
             pendingDeltaRef.current = 0
             if (finalTime < 0) finalTime = SECONDS_IN_DAY + finalTime
             else if (finalTime > SECONDS_IN_DAY) finalTime = finalTime - SECONDS_IN_DAY
@@ -323,15 +346,18 @@ export default function TimeScroller({
 
         // Update both ref and state
         isDraggingRef.current = false
+        const now = Date.now()
+        dragEndTimeRef.current = now  // Record drag end time for gap detection debounce
+        lastInteractionTimeRef.current = now
+
         setCurrentTime(finalTime)
         setIsDragging(false)
-        lastInteractionTimeRef.current = Date.now()
 
         // Trigger Play immediately at the FINAL landing spot (not from closure)
         triggerPlayAt(finalTime, segments)
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isDragging, currentTime, segments])
+    }, [segments])  // Removed currentTime from deps since we use ref now
 
     const handlePointerUp = onDragEnd
 
