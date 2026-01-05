@@ -174,8 +174,9 @@ export default function TimeScroller({
         }
 
         // Only notify if changed
+        // IMPORTANT: Don't report gap if segments haven't loaded - prevents iframe unmount during load
         const prev = refs.current.prevGap
-        const isGap = !hasVideo
+        const isGap = !hasVideo && segments.length > 0  // Only gap if we HAVE segments but none match
         if (prev.isGap !== isGap || prev.nextTime !== nextTime || prev.isFuture !== isFuture) {
             refs.current.prevGap = { isGap, nextTime, isFuture }
             onGapChange(isGap, nextTime, isFuture)
