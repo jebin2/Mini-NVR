@@ -8,7 +8,8 @@ RUN apt-get update && \
     openssh-client \
     docker.io \
     intel-media-va-driver \
-    libva-drm2 && \
+    libva-drm2 \
+    rsync && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
