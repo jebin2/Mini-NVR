@@ -101,6 +101,10 @@
     cursor: grabbing;
 }
 
+.scroller-container.is-dragging {
+    cursor: grabbing;
+}
+
 /* Ruler Ticks */
 .ruler-tick {
     position: absolute;

@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { Channel, fetchDates, getPlaylistUrl } from '../services/api'
+import { useState, useEffect } from 'react'
+import { Channel, Segment, fetchDates, fetchSegments, getPlaylistUrl } from '../services/api'
 import { getHlsApiUrl, getJellyJumpUrl } from '../services/go2rtc'
 import { getLocalDateString } from '../utils/dateUtils'
+import VideoPlayer from './VideoPlayer'
+import InfoOverlay from './InfoOverlay'
 import TimeScroller from './TimeScroller'
 import './ExpandedView.css'
 
@@ -10,20 +12,40 @@ interface ExpandedViewProps {
     channels: Record<string, Channel>
 }
 
+// Helper to parse time string to seconds
+function parseTime(timeStr: string): number {
+    const parts = timeStr.split(':')
+    return (+parts[0]) * 3600 + (+parts[1]) * 60 + (+parts[2] || 0)
+}
+
+// Find segment containing the given time
+function findSegmentAt(time: number, segments: Segment[]): Segment | null {
+    return segments.find(seg => {
+        const start = parseTime(seg.time)
+        return time >= start && time < start + seg.duration
+    }) || null
+}
+
+// Simple state machine for video area
+type VideoAreaState =
+    | { type: 'live' }
+    | { type: 'loading' }
+    | { type: 'playing'; url: string; segmentStartTime: number }
+    | { type: 'no-video'; nextTime: number | null }
+
 export default function ExpandedView({ camId, channels: _channels }: ExpandedViewProps) {
     const [dates, setDates] = useState<string[]>([])
     const [selectedDate, setSelectedDate] = useState('')
-    const [hlsUrl, setHlsUrl] = useState<string | null>(null)
-    const [playMode, setPlayMode] = useState<'live' | 'buffer'>('buffer')
-
-    // Gap State (raw from TimeScroller)
-    const [gapState, setGapState] = useState<{ isGap: boolean; nextTime: number | null; isFuture: boolean }>({ isGap: false, nextTime: null, isFuture: false })
-    // Debounced gap state for player visibility (prevents unmount during brief transitions)
-    const [debouncedGapIsGap, setDebouncedGapIsGap] = useState(false)
-    const gapDebounceRef = useRef<number | null>(null)
-
     const [forceTime, setForceTime] = useState<number | null>(null)
+    const [segments, setSegments] = useState<Segment[]>([])
 
+    // Simple state machine - one source of truth
+    const [videoState, setVideoState] = useState<VideoAreaState>({ type: 'live' })
+
+    // Video playback time (from VideoPlayer)
+    const [playerTime, setPlayerTime] = useState<number | null>(null)
+
+    // === LOAD DATES ===
     useEffect(() => {
         loadDates()
     }, [camId])
@@ -35,19 +57,100 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             if (data.dates?.length > 0) {
                 setSelectedDate(data.dates[0])
             }
-            // Start with 30s buffer mode by default
-            setTimeout(() => play30sBuffer(), 100)
         } catch (err) {
             console.error('Failed to load dates:', err)
         }
     }
 
-    const [videoTime, setVideoTime] = useState<number | null>(null)
+    // === LOAD SEGMENTS ===
+    useEffect(() => {
+        if (!selectedDate) return
 
-    function parseTime(timeStr: string): number {
-        const parts = timeStr.split(':')
-        return (+parts[0]) * 3600 + (+parts[1]) * 60 + (+parts[2] || 0)
+        let isMounted = true
+
+        async function load() {
+            try {
+                const data = await fetchSegments(camId, selectedDate)
+                if (isMounted) {
+                    setSegments(data.segments || [])
+                }
+            } catch (err) {
+                console.error('Failed to load segments:', err)
+                if (isMounted) setSegments([])
+            }
+        }
+
+        load()
+
+        // Refresh every 15s if today
+        const today = getLocalDateString(new Date())
+        let intervalId: number | null = null
+        if (selectedDate === today) {
+            intervalId = window.setInterval(load, 15000)
+        }
+
+        return () => {
+            isMounted = false
+            if (intervalId) clearInterval(intervalId)
+        }
+    }, [camId, selectedDate])
+
+    // === HANDLERS ===
+
+    function handleScrollStart() {
+        // User started scrolling → unmount video player, show loading
+        setVideoState({ type: 'loading' })
+        setPlayerTime(null)
     }
+
+    function handleScrollEnd(time: number) {
+        // Find segment at user's selected time
+        const segment = findSegmentAt(time, segments)
+
+        if (segment) {
+            const segmentStartTime = parseTime(segment.time)
+            const url = getPlaylistUrl(camId, selectedDate, segment.time)
+
+            setVideoState({
+                type: 'playing',
+                url: getJellyJumpUrl(window.location.origin + url),
+                segmentStartTime
+            })
+            setPlayerTime(null)  // Will be updated by VideoPlayer
+        } else {
+            // No video at this time
+            // Find next available segment
+            const nextSeg = segments.find(seg => parseTime(seg.time) > time)
+            setVideoState({
+                type: 'no-video',
+                nextTime: nextSeg ? parseTime(nextSeg.time) : null
+            })
+        }
+    }
+
+    function handleVideoTimeUpdate(time: number) {
+        setPlayerTime(time)
+    }
+
+    function handleDateChange(date: string) {
+        setSelectedDate(date)
+        setVideoState({ type: 'loading' })
+        setPlayerTime(null)
+    }
+
+    function handleGoLive() {
+        setVideoState({ type: 'live' })
+        setPlayerTime(null)
+        setSelectedDate(getLocalDateString(new Date()))
+    }
+
+    function handleGoNext() {
+        if (videoState.type === 'no-video' && videoState.nextTime !== null) {
+            setForceTime(videoState.nextTime)
+        }
+    }
+
+    // === RENDER HELPERS ===
 
     function formatTimeHMS(seconds: number): string {
         const h = Math.floor(seconds / 3600)
@@ -56,203 +159,43 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
     }
 
-    const playlistStart = useMemo(() => {
-        if (!hlsUrl) return null
-        try {
-            const urlObj = new URL(hlsUrl)
-            const videoUrl = urlObj.searchParams.get('video_url')
-            if (!videoUrl) return null
-
-            const fullVideoUrl = videoUrl.startsWith('/')
-                ? window.location.origin + videoUrl
-                : videoUrl
-
-            const vUrlObj = new URL(fullVideoUrl)
-            const start = vUrlObj.searchParams.get('start')
-            if (start) {
-                return parseTime(start)
-            }
-        } catch (e) {
-            console.warn("Failed to parse start time from URL", e)
-        }
-        return null
-    }, [hlsUrl])
-
-    useEffect(() => {
-        setVideoTime(null)
-    }, [hlsUrl])
-
-    const [streamError, setStreamError] = useState<{ title: string; message: string } | null>(null)
-
-    useEffect(() => {
-        const handleMessage = (event: MessageEvent) => {
-            const allowedOrigins = [window.location.origin, "https://www.voidall.com", "https://cctv.voidall.com"]
-            if (!allowedOrigins.includes(event.origin)) return;
-
-            if (event.data && event.data.type === 'timeupdate') {
-                if (typeof event.data.currentTime === 'number') {
-                    setVideoTime(event.data.currentTime)
-                }
-                if (streamError) setStreamError(null)
-            }
-
-            if (event.data && event.data.type === 'streamError') {
-                console.warn('[ExpandedView] Stream error from player:', event.data.error)
-                setStreamError({
-                    title: event.data.error?.title || 'Stream Error',
-                    message: event.data.error?.message || 'Failed to load stream'
-                })
-            }
-        }
-
-        window.addEventListener('message', handleMessage)
-        return () => window.removeEventListener('message', handleMessage)
-    }, [streamError])
-
-    // Helper to get LOCAL date as YYYY-MM-DD (not UTC)
-    // MOVED to utils/dateUtils.ts
-
-    function playLive() {
-        const today = getLocalDateString(new Date())
-        setHlsUrl(null)
-        setVideoTime(null)
-        setStreamError(null)
-        setForceTime(null)
-        setPlayMode('live')
-        setGapState({ isGap: false, nextTime: null, isFuture: false })
-        setDebouncedGapIsGap(false)
-        setSelectedDate(today)
-    }
-
-    function play30sBuffer() {
-        const now = new Date()
-        const today = getLocalDateString(now)
-        const thirtySecondsAgo = new Date(now.getTime() - 30000)
-        const startSeconds = thirtySecondsAgo.getHours() * 3600 +
-            thirtySecondsAgo.getMinutes() * 60 +
-            thirtySecondsAgo.getSeconds()
-        const startTime = formatTimeHMS(startSeconds)
-
-        const url = getPlaylistUrl(camId, today, startTime)
-        setHlsUrl(getJellyJumpUrl(window.location.origin + url))
-        setSelectedDate(today)
-        setPlayMode('buffer')
-        setStreamError(null)
-        setGapState({ isGap: false, nextTime: null, isFuture: false })
-        setDebouncedGapIsGap(false)
-        setForceTime(startSeconds)
-    }
-
-    // Debounce gap state for player visibility
-    // Player only hides if gap persists for 1 second (prevents brief transitions from unmounting iframe)
-    useEffect(() => {
-        if (gapState.isGap) {
-            // Delay showing placeholder by 1 second
-            gapDebounceRef.current = window.setTimeout(() => {
-                setDebouncedGapIsGap(true)
-            }, 1000)
-        } else {
-            // Clear gap immediately when video is available
-            if (gapDebounceRef.current) {
-                clearTimeout(gapDebounceRef.current)
-                gapDebounceRef.current = null
-            }
-            setDebouncedGapIsGap(false)
-        }
-        return () => {
-            if (gapDebounceRef.current) {
-                clearTimeout(gapDebounceRef.current)
-            }
-        }
-    }, [gapState.isGap])
-
-    function handleModeChange(mode: 'live' | 'buffer') {
-        if (mode === 'live') {
-            playLive()
-        } else {
-            play30sBuffer()
-        }
-    }
-
-    const [retryKey, setRetryKey] = useState(0)
-    function retryStream() {
-        setStreamError(null)
-        setRetryKey(prev => prev + 1)
-    }
-
-    function handlePlayHls(url: string) {
-        setHlsUrl(url)
-        setPlayMode('buffer')
-        setStreamError(null)
-        setForceTime(null) // Clear force time once we play
-    }
-
-    function handleGoToNext() {
-        if (gapState.nextTime !== null) {
-            // Set forceTime to trigger TimeScroller jump
-            setForceTime(gapState.nextTime)
-        }
-    }
-
-    function getVideoSrc(): string {
-        if (hlsUrl) {
-            return hlsUrl
-        }
+    function getLiveUrl(): string {
         return getJellyJumpUrl(getHlsApiUrl(camId))
     }
 
-    const videoSrc = getVideoSrc()
-    const isLive = playMode === 'live' && !hlsUrl
+    // Get segmentStartTime for TimeScroller (only when playing)
+    const segmentStartTime = videoState.type === 'playing' ? videoState.segmentStartTime : null
 
-    // Determining if we should show the player or placeholder
-    // Use DEBOUNCED gap state to prevent brief transitions from unmounting iframe
-    const showPlayer = !streamError && !debouncedGapIsGap
-
-    // Explicitly unmount iframe if gap or error
-    // For error, we show overlay on top of placeholder? 
-    // Or just placeholder.
-    // Spec: "for network error... show the same 1) display by removing iframe with goto next available segm"
+    // === RENDER ===
 
     return (
         <div className="expanded-view">
             <div className="video-stage">
                 <div className="camera-badge">📹 CH{camId}</div>
 
-                {showPlayer ? (
-                    <iframe
-                        key={`${videoSrc}-${retryKey}`}
-                        src={videoSrc}
-                        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-                        className="video-player"
+                {/* State Machine Rendering */}
+                {videoState.type === 'live' && (
+                    <VideoPlayer url={getLiveUrl()} />
+                )}
+
+                {videoState.type === 'playing' && (
+                    <VideoPlayer
+                        url={videoState.url}
+                        onTimeUpdate={handleVideoTimeUpdate}
                     />
-                ) : (
-                    <div className="no-video-placeholder">
-                        <div className="placeholder-content">
-                            <span className="placeholder-icon">🚫</span>
-                            <h3>Video Not Available</h3>
-                            <p>No recording found at this time.</p>
+                )}
 
-                            {gapState.nextTime !== null && (
-                                <button className="placeholder-btn" onClick={handleGoToNext}>
-                                    ⏭ Go to Next ({formatTimeHMS(gapState.nextTime)})
-                                </button>
-                            )}
+                {videoState.type === 'loading' && (
+                    <InfoOverlay type="loading" message="Loading video..." />
+                )}
 
-                            {gapState.isFuture && (
-                                <button className="placeholder-btn go-live-btn" onClick={play30sBuffer}>
-                                    📺 Go Live
-                                </button>
-                            )}
-
-                            {/* If it's a stream error, maybe show retry too? */}
-                            {streamError && (
-                                <div className="error-details">
-                                    <p className="error-msg">{streamError.message}</p>
-                                    <button className="placeholder-retry-btn" onClick={retryStream}>🔄 Retry</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                {videoState.type === 'no-video' && (
+                    <InfoOverlay
+                        type="no-video"
+                        onGoNext={videoState.nextTime ? handleGoNext : undefined}
+                        nextTime={videoState.nextTime ? formatTimeHMS(videoState.nextTime) : null}
+                        onGoLive={handleGoLive}
+                    />
                 )}
             </div>
 
@@ -261,18 +204,24 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     camId={camId}
                     date={selectedDate}
                     availableDates={dates}
-                    onDateChange={setSelectedDate}
-                    isLive={isLive}
-                    videoTime={videoTime}
-                    playlistStart={playlistStart}
-                    onPlayHls={handlePlayHls}
-                    onPlayLive={playLive}
-                    playMode={playMode}
-                    onModeChange={handleModeChange}
-                    onGapChange={(isGap, nextTime, isFuture) => setGapState({ isGap, nextTime, isFuture })}
+                    onDateChange={handleDateChange}
+                    onScrollStart={handleScrollStart}
+                    onScrollEnd={handleScrollEnd}
                     externalForceTime={forceTime}
+                    segmentStartTime={segmentStartTime}
+                    playerTime={playerTime}
                 />
             )}
+
+            {/* Mode toggle */}
+            <div className="mode-controls">
+                <button
+                    className={`mode-btn ${videoState.type === 'live' ? 'active' : ''}`}
+                    onClick={handleGoLive}
+                >
+                    Live
+                </button>
+            </div>
         </div>
     )
 }
