@@ -243,8 +243,10 @@ export default function TimeScroller({
 
                 <div className="time-display-center">
                     <span className="current-time-large">{formatTimeShort(currentTime)}</span>
+                </div>
 
-                    {/* Live Indicator */}
+                {/* Live Indicator - Right column */}
+                <div className="live-indicator-wrapper">
                     <button
                         className={`live-indicator ${isNearLive ? 'is-live' : 'is-faded'}`}
                         onClick={onGoLive}

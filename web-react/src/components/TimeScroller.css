@@ -11,7 +11,7 @@
     border: 1px solid #334155;
 }
 
-/* Header */
+/* Header - Three column layout: Date | Time | Live */
 .scroller-header {
     display: flex;
     align-items: center;
@@ -21,6 +21,7 @@
 }
 
 .date-select-wrapper {
+    flex: 1;
     position: relative;
     z-index: 5;
 }
@@ -45,10 +46,12 @@
     color: #e2e8f0;
 }
 
+/* Time display in true center */
 .time-display-center {
-    flex: 1;
+    flex: 2;
     display: flex;
     justify-content: center;
+    align-items: center;
 }
 
 .current-time-large {
@@ -59,12 +62,18 @@
     letter-spacing: 1px;
 }
 
+/* Live Indicator Wrapper - Right column */
+.live-indicator-wrapper {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+}
+
 /* Live Indicator */
 .live-indicator {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-left: 12px;
     padding: 4px 10px;
     border: none;
     border-radius: 20px;
