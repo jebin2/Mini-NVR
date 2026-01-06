@@ -9,7 +9,7 @@ interface TimeScrollerProps {
     onDateChange: (date: string) => void
     onScrollStart: () => void
     onScrollEnd: (time: number) => void
-    onGoLive: () => void  // Callback when user clicks live indicator
+    onGoLive: () => void
     externalForceTime?: number | null
     segmentStartTime?: number | null
     playerTime?: number | null
@@ -18,7 +18,9 @@ interface TimeScrollerProps {
 // === CONSTANTS ===
 const ZOOM_MINUTES = 30
 const SECONDS_IN_DAY = 86400
-const LIVE_THRESHOLD = 45  // Consider "live" if within 45s of current time
+const LIVE_THRESHOLD = 45
+const FRICTION = 0.95  // Momentum friction (0.95 = smooth deceleration)
+const MIN_VELOCITY = 0.5  // Stop animation when velocity below this
 
 // === PURE HELPERS ===
 
@@ -67,22 +69,45 @@ export default function TimeScroller({
     // === REFS ===
     const trackRef = useRef<HTMLDivElement>(null)
     const debounceRef = useRef<number | null>(null)
+    const velocityRef = useRef(0)  // Track velocity for momentum
+    const lastMoveTimeRef = useRef(0)  // Time of last move event
+    const animationRef = useRef<number | null>(null)  // requestAnimationFrame ID
+    const currentTimeRef = useRef(0)  // Non-reactive time for animation
+    const currentDateRef = useRef(date)  // Non-reactive date for animation
+
+    // Keep refs in sync with state
+    useEffect(() => {
+        currentTimeRef.current = currentTime
+    }, [currentTime])
+
+    useEffect(() => {
+        currentDateRef.current = currentDate
+    }, [currentDate])
 
     // === CLEANUP ===
     useEffect(() => {
         return () => {
             if (debounceRef.current) clearTimeout(debounceRef.current)
+            if (animationRef.current) cancelAnimationFrame(animationRef.current)
         }
     }, [])
 
     // Sync date prop -> internal state
     useEffect(() => {
         setCurrentDate(date)
+        currentDateRef.current = date
     }, [date])
 
     // === EXTERNAL FORCE TIME ===
     useEffect(() => {
         if (externalForceTime != null) {
+            // Stop any ongoing momentum animation
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current)
+                animationRef.current = null
+            }
+            velocityRef.current = 0
+
             setCurrentTime(externalForceTime)
             setUserSelectedTime(externalForceTime)
             onScrollEnd(externalForceTime)
@@ -93,6 +118,7 @@ export default function TimeScroller({
     useEffect(() => {
         if (isDragging) return
         if (segmentStartTime == null || playerTime == null) return
+        if (animationRef.current) return  // Don't sync during momentum animation
 
         const actualVideoTime = segmentStartTime + playerTime
 
@@ -118,8 +144,54 @@ export default function TimeScroller({
         return diff >= 0 && diff <= LIVE_THRESHOLD
     }, [currentDate, currentTime])
 
+    // === MOMENTUM ANIMATION ===
+    const animateMomentum = useCallback(() => {
+        const velocity = velocityRef.current
+
+        // Stop if velocity is too low
+        if (Math.abs(velocity) < MIN_VELOCITY) {
+            velocityRef.current = 0
+            animationRef.current = null
+
+            // Trigger video load after momentum stops
+            const finalTime = currentTimeRef.current
+            setUserSelectedTime(finalTime)
+            debounceRef.current = window.setTimeout(() => {
+                onScrollEnd(finalTime)
+                debounceRef.current = null
+            }, 400)
+            return
+        }
+
+        // Apply friction
+        velocityRef.current *= FRICTION
+
+        // Update time
+        const newTime = currentTimeRef.current + velocityRef.current
+        const wrapped = wrapTime(newTime, currentDateRef.current)
+
+        if (wrapped.dateChanged) {
+            currentDateRef.current = wrapped.date
+            setCurrentDate(wrapped.date)
+            onDateChange(wrapped.date)
+        }
+
+        currentTimeRef.current = wrapped.time
+        setCurrentTime(wrapped.time)
+
+        // Continue animation
+        animationRef.current = requestAnimationFrame(animateMomentum)
+    }, [onDateChange, onScrollEnd])
+
     // === POINTER HANDLERS ===
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
+        // Stop any ongoing momentum animation
+        if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current)
+            animationRef.current = null
+        }
+        velocityRef.current = 0
+
         setIsDragging(true)
         onScrollStart()
             ; (e.target as HTMLElement).setPointerCapture(e.pointerId)
@@ -128,6 +200,8 @@ export default function TimeScroller({
             clearTimeout(debounceRef.current)
             debounceRef.current = null
         }
+
+        lastMoveTimeRef.current = Date.now()
     }, [onScrollStart])
 
     const handlePointerMove = useCallback((e: React.PointerEvent) => {
@@ -136,6 +210,15 @@ export default function TimeScroller({
         const rect = trackRef.current.getBoundingClientRect()
         const secondsPerPixel = (ZOOM_MINUTES * 60) / rect.width
         const delta = -e.movementX * secondsPerPixel
+
+        // Track velocity for momentum
+        const now = Date.now()
+        const dt = now - lastMoveTimeRef.current
+        if (dt > 0) {
+            // Weighted average for smoother velocity
+            velocityRef.current = velocityRef.current * 0.5 + (delta / dt * 16) * 0.5
+        }
+        lastMoveTimeRef.current = now
 
         setCurrentTime(prevTime => {
             const newTime = prevTime + delta
@@ -154,33 +237,37 @@ export default function TimeScroller({
         if (!isDragging) return
 
         setIsDragging(false)
-        setUserSelectedTime(currentTime)
 
-        debounceRef.current = window.setTimeout(() => {
-            onScrollEnd(currentTime)
-            debounceRef.current = null
-        }, 400)
-    }, [isDragging, currentTime, onScrollEnd])
+        // Start momentum animation if velocity is significant
+        if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
+            animationRef.current = requestAnimationFrame(animateMomentum)
+        } else {
+            // No momentum, trigger video load immediately
+            setUserSelectedTime(currentTime)
+            debounceRef.current = window.setTimeout(() => {
+                onScrollEnd(currentTime)
+                debounceRef.current = null
+            }, 400)
+        }
+    }, [isDragging, currentTime, onScrollEnd, animateMomentum])
 
     // Click to jump to a specific time
     const handleClick = useCallback((e: React.MouseEvent) => {
         if (!trackRef.current) return
-
-        // Only handle direct clicks, not drag releases
-        // If we were dragging, skip this
         if (isDragging) return
+
+        // Don't handle click if we just finished momentum scrolling
+        if (animationRef.current) return
 
         const rect = trackRef.current.getBoundingClientRect()
         const clickX = e.clientX - rect.left
         const clickPct = clickX / rect.width
 
-        // Calculate time at click position
         const viewportSeconds = ZOOM_MINUTES * 60
         const halfViewport = viewportSeconds / 2
         const viewStart = currentTime - halfViewport
         const clickedTime = viewStart + (clickPct * viewportSeconds)
 
-        // Wrap and apply
         const wrapped = wrapTime(clickedTime, currentDate)
         if (wrapped.dateChanged) {
             setCurrentDate(wrapped.date)
@@ -190,7 +277,6 @@ export default function TimeScroller({
         setCurrentTime(wrapped.time)
         setUserSelectedTime(wrapped.time)
 
-        // Trigger video load
         onScrollStart()
         debounceRef.current = window.setTimeout(() => {
             onScrollEnd(wrapped.time)
