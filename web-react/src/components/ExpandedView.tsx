@@ -63,6 +63,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     }
 
     // === LOAD SEGMENTS ===
+    const [hasAutoStarted, setHasAutoStarted] = useState(false)
+
     useEffect(() => {
         if (!selectedDate) return
 
@@ -72,7 +74,14 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             try {
                 const data = await fetchSegments(camId, selectedDate)
                 if (isMounted) {
-                    setSegments(data.segments || [])
+                    const segs = data.segments || []
+                    setSegments(segs)
+
+                    // Auto-start 30s before current time on first load
+                    if (!hasAutoStarted && segs.length > 0) {
+                        setHasAutoStarted(true)
+                        startLivePlayback(segs)
+                    }
                 }
             } catch (err) {
                 console.error('Failed to load segments:', err)
@@ -94,6 +103,24 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             if (intervalId) clearInterval(intervalId)
         }
     }, [camId, selectedDate])
+
+    // Start playback 30s before current time
+    function startLivePlayback(segs: Segment[]) {
+        const now = new Date()
+        const thirtySecsAgo = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() - 30
+
+        const segment = findSegmentAt(thirtySecsAgo, segs)
+        if (segment) {
+            const segmentStartTime = parseTime(segment.time)
+            const url = getPlaylistUrl(camId, selectedDate, segment.time)
+            setVideoState({
+                type: 'playing',
+                url: getJellyJumpUrl(window.location.origin + url),
+                segmentStartTime
+            })
+            setForceTime(thirtySecsAgo)
+        }
+    }
 
     // === HANDLERS ===
 
