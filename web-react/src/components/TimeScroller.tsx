@@ -238,6 +238,13 @@ export default function TimeScroller({
 
         setIsDragging(false)
 
+        // Check if user was stopped before releasing
+        // If no movement for 100ms+, don't apply momentum
+        const timeSinceLastMove = Date.now() - lastMoveTimeRef.current
+        if (timeSinceLastMove > 100) {
+            velocityRef.current = 0
+        }
+
         // Start momentum animation if velocity is significant
         if (Math.abs(velocityRef.current) > MIN_VELOCITY) {
             animationRef.current = requestAnimationFrame(animateMomentum)
