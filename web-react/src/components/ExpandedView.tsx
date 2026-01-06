@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Channel, Segment, fetchDates, fetchSegments, getPlaylistUrl } from '../services/api'
-import { getHlsApiUrl, getJellyJumpUrl } from '../services/go2rtc'
+import { getJellyJumpUrl } from '../services/go2rtc'
 import { getLocalDateString } from '../utils/dateUtils'
 import VideoPlayer from './VideoPlayer'
 import InfoOverlay from './InfoOverlay'
@@ -26,9 +26,14 @@ function findSegmentAt(time: number, segments: Segment[]): Segment | null {
     }) || null
 }
 
+// Get time 30 seconds before now
+function getThirtySecsAgo(): number {
+    const now = new Date()
+    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() - 30
+}
+
 // Simple state machine for video area
 type VideoAreaState =
-    | { type: 'live' }
     | { type: 'loading' }
     | { type: 'playing'; url: string; segmentStartTime: number }
     | { type: 'no-video'; nextTime: number | null }
@@ -38,12 +43,47 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const [selectedDate, setSelectedDate] = useState('')
     const [forceTime, setForceTime] = useState<number | null>(null)
     const [segments, setSegments] = useState<Segment[]>([])
+    const [hasAutoStarted, setHasAutoStarted] = useState(false)
 
     // Simple state machine - one source of truth
-    const [videoState, setVideoState] = useState<VideoAreaState>({ type: 'live' })
+    const [videoState, setVideoState] = useState<VideoAreaState>({ type: 'loading' })
 
     // Video playback time (from VideoPlayer)
     const [playerTime, setPlayerTime] = useState<number | null>(null)
+
+    // === COMMON: Go to "Live" (30s before current time) ===
+    const goToLive = useCallback((segs?: Segment[]) => {
+        const today = getLocalDateString(new Date())
+        const time = getThirtySecsAgo()
+        const segsToUse = segs || segments
+
+        // Ensure we're on today's date
+        if (selectedDate !== today) {
+            setSelectedDate(today)
+        }
+
+        setPlayerTime(null)
+
+        const segment = findSegmentAt(time, segsToUse)
+        if (segment) {
+            const segmentStartTime = parseTime(segment.time)
+            const url = getPlaylistUrl(camId, today, segment.time)
+            setVideoState({
+                type: 'playing',
+                url: getJellyJumpUrl(window.location.origin + url),
+                segmentStartTime
+            })
+            setForceTime(time)
+        } else {
+            // No segment at 30s ago
+            const nextSeg = segsToUse.find(seg => parseTime(seg.time) > time)
+            setVideoState({
+                type: 'no-video',
+                nextTime: nextSeg ? parseTime(nextSeg.time) : null
+            })
+            setForceTime(time)
+        }
+    }, [camId, segments, selectedDate])
 
     // === LOAD DATES ===
     useEffect(() => {
@@ -63,8 +103,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     }
 
     // === LOAD SEGMENTS ===
-    const [hasAutoStarted, setHasAutoStarted] = useState(false)
-
     useEffect(() => {
         if (!selectedDate) return
 
@@ -77,10 +115,10 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     const segs = data.segments || []
                     setSegments(segs)
 
-                    // Auto-start 30s before current time on first load
+                    // Auto-start 30s playback on first load
                     if (!hasAutoStarted && segs.length > 0) {
                         setHasAutoStarted(true)
-                        startLivePlayback(segs)
+                        goToLive(segs)
                     }
                 }
             } catch (err) {
@@ -102,51 +140,28 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             isMounted = false
             if (intervalId) clearInterval(intervalId)
         }
-    }, [camId, selectedDate])
-
-    // Start playback 30s before current time
-    function startLivePlayback(segs: Segment[]) {
-        const now = new Date()
-        const thirtySecsAgo = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() - 30
-
-        const segment = findSegmentAt(thirtySecsAgo, segs)
-        if (segment) {
-            const segmentStartTime = parseTime(segment.time)
-            const url = getPlaylistUrl(camId, selectedDate, segment.time)
-            setVideoState({
-                type: 'playing',
-                url: getJellyJumpUrl(window.location.origin + url),
-                segmentStartTime
-            })
-            setForceTime(thirtySecsAgo)
-        }
-    }
+    }, [camId, selectedDate, hasAutoStarted, goToLive])
 
     // === HANDLERS ===
 
     function handleScrollStart() {
-        // User started scrolling → unmount video player, show loading
         setVideoState({ type: 'loading' })
         setPlayerTime(null)
     }
 
     function handleScrollEnd(time: number) {
-        // Find segment at user's selected time
         const segment = findSegmentAt(time, segments)
 
         if (segment) {
             const segmentStartTime = parseTime(segment.time)
             const url = getPlaylistUrl(camId, selectedDate, segment.time)
-
             setVideoState({
                 type: 'playing',
                 url: getJellyJumpUrl(window.location.origin + url),
                 segmentStartTime
             })
-            setPlayerTime(null)  // Will be updated by VideoPlayer
+            setPlayerTime(null)
         } else {
-            // No video at this time
-            // Find next available segment
             const nextSeg = segments.find(seg => parseTime(seg.time) > time)
             setVideoState({
                 type: 'no-video',
@@ -165,34 +180,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setPlayerTime(null)
     }
 
-    function handleGoLive() {
-        // "Live" means 30 seconds before current time (true live is slow)
-        const now = new Date()
-        const today = getLocalDateString(now)
-        const thirtySecsAgo = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() - 30
-
-        setSelectedDate(today)
-        setPlayerTime(null)
-
-        // Trigger playback at 30s ago
-        const segment = findSegmentAt(thirtySecsAgo, segments)
-        if (segment) {
-            const segmentStartTime = parseTime(segment.time)
-            const url = getPlaylistUrl(camId, today, segment.time)
-            setVideoState({
-                type: 'playing',
-                url: getJellyJumpUrl(window.location.origin + url),
-                segmentStartTime
-            })
-            // Force TimeScroller to jump to this time
-            setForceTime(thirtySecsAgo)
-        } else {
-            // No segment 30s ago, fallback to loading
-            setVideoState({ type: 'loading' })
-            setForceTime(thirtySecsAgo)
-        }
-    }
-
     function handleGoNext() {
         if (videoState.type === 'no-video' && videoState.nextTime !== null) {
             setForceTime(videoState.nextTime)
@@ -208,11 +195,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
     }
 
-    function getLiveUrl(): string {
-        return getJellyJumpUrl(getHlsApiUrl(camId))
-    }
-
-    // Get segmentStartTime for TimeScroller (only when playing)
     const segmentStartTime = videoState.type === 'playing' ? videoState.segmentStartTime : null
 
     // === RENDER ===
@@ -223,10 +205,6 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                 <div className="camera-badge">📹 CH{camId}</div>
 
                 {/* State Machine Rendering */}
-                {videoState.type === 'live' && (
-                    <VideoPlayer url={getLiveUrl()} />
-                )}
-
                 {videoState.type === 'playing' && (
                     <VideoPlayer
                         url={videoState.url}
@@ -243,7 +221,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                         type="no-video"
                         onGoNext={videoState.nextTime ? handleGoNext : undefined}
                         nextTime={videoState.nextTime ? formatTimeHMS(videoState.nextTime) : null}
-                        onGoLive={handleGoLive}
+                        onGoLive={() => goToLive()}
                     />
                 )}
             </div>
@@ -265,8 +243,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             {/* Mode toggle */}
             <div className="mode-controls">
                 <button
-                    className={`mode-btn ${videoState.type === 'live' ? 'active' : ''}`}
-                    onClick={handleGoLive}
+                    className={`mode-btn ${videoState.type === 'playing' ? 'active' : ''}`}
+                    onClick={() => goToLive()}
                 >
                     Live
                 </button>
