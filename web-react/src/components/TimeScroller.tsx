@@ -74,6 +74,7 @@ export default function TimeScroller({
     const animationRef = useRef<number | null>(null)  // requestAnimationFrame ID
     const currentTimeRef = useRef(0)  // Non-reactive time for animation
     const currentDateRef = useRef(date)  // Non-reactive date for animation
+    const justDraggedRef = useRef(false)  // Prevent click after drag
 
     // Keep refs in sync with state
     useEffect(() => {
@@ -256,12 +257,19 @@ export default function TimeScroller({
                 debounceRef.current = null
             }, 400)
         }
+
+        // Mark that we just dragged - prevents click from firing
+        justDraggedRef.current = true
+        setTimeout(() => { justDraggedRef.current = false }, 50)
     }, [isDragging, currentTime, onScrollEnd, animateMomentum])
 
     // Click to jump to a specific time
     const handleClick = useCallback((e: React.MouseEvent) => {
         if (!trackRef.current) return
         if (isDragging) return
+
+        // Skip click if we just finished dragging
+        if (justDraggedRef.current) return
 
         // Don't handle click if we just finished momentum scrolling
         if (animationRef.current) return
