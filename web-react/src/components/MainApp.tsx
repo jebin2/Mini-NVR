@@ -15,6 +15,7 @@ export default function MainApp({ user: _user }: MainAppProps) {
     const [channels, setChannels] = useState<Record<string, Channel>>({})
     const [storage, setStorage] = useState<string>('Loading...')
     const [currentCam, setCurrentCam] = useState<string>('')
+    const [isLoading, setIsLoading] = useState(true)  // Loading state
 
     useEffect(() => {
         loadData()
@@ -34,6 +35,8 @@ export default function MainApp({ user: _user }: MainAppProps) {
             setStorage(storageData.summary || 'Unknown')
         } catch (err) {
             console.error('Failed to load data:', err)
+        } finally {
+            setIsLoading(false)
         }
     }
 
@@ -67,7 +70,11 @@ export default function MainApp({ user: _user }: MainAppProps) {
 
             <main>
                 {view === 'grid' ? (
-                    <CameraGrid channels={channels} onOpenCamera={openCamera} />
+                    <CameraGrid
+                        channels={channels}
+                        onOpenCamera={openCamera}
+                        isLoading={isLoading}
+                    />
                 ) : (
                     <ExpandedView camId={currentCam} channels={channels} />
                 )}

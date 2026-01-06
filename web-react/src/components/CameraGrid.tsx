@@ -5,11 +5,23 @@ import './CameraGrid.css'
 interface CameraGridProps {
     channels: Record<string, Channel>
     onOpenCamera: (camId: string) => void
+    isLoading?: boolean
 }
 
-export default function CameraGrid({ channels, onOpenCamera }: CameraGridProps) {
+export default function CameraGrid({ channels, onOpenCamera, isLoading }: CameraGridProps) {
     const channelIds = Object.keys(channels)
 
+    // Show loading state first
+    if (isLoading) {
+        return (
+            <div className="grid-empty grid-loading">
+                <div className="loading-spinner" />
+                <p>Loading cameras...</p>
+            </div>
+        )
+    }
+
+    // Only show "no cameras" after loading completes
     if (channelIds.length === 0) {
         return (
             <div className="grid-empty">
