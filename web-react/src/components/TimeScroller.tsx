@@ -162,6 +162,42 @@ export default function TimeScroller({
         }, 400)
     }, [isDragging, currentTime, onScrollEnd])
 
+    // Click to jump to a specific time
+    const handleClick = useCallback((e: React.MouseEvent) => {
+        if (!trackRef.current) return
+
+        // Only handle direct clicks, not drag releases
+        // If we were dragging, skip this
+        if (isDragging) return
+
+        const rect = trackRef.current.getBoundingClientRect()
+        const clickX = e.clientX - rect.left
+        const clickPct = clickX / rect.width
+
+        // Calculate time at click position
+        const viewportSeconds = ZOOM_MINUTES * 60
+        const halfViewport = viewportSeconds / 2
+        const viewStart = currentTime - halfViewport
+        const clickedTime = viewStart + (clickPct * viewportSeconds)
+
+        // Wrap and apply
+        const wrapped = wrapTime(clickedTime, currentDate)
+        if (wrapped.dateChanged) {
+            setCurrentDate(wrapped.date)
+            onDateChange(wrapped.date)
+        }
+
+        setCurrentTime(wrapped.time)
+        setUserSelectedTime(wrapped.time)
+
+        // Trigger video load
+        onScrollStart()
+        debounceRef.current = window.setTimeout(() => {
+            onScrollEnd(wrapped.time)
+            debounceRef.current = null
+        }, 400)
+    }, [currentTime, currentDate, isDragging, onDateChange, onScrollStart, onScrollEnd])
+
     // === RENDER ===
     const ticks = useMemo(() => {
         const viewportSeconds = ZOOM_MINUTES * 60
@@ -223,6 +259,7 @@ export default function TimeScroller({
             <div
                 className={`scroller-container ruler-style ${isDragging ? 'is-dragging' : ''}`}
                 ref={trackRef}
+                onClick={handleClick}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
