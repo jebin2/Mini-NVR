@@ -139,9 +139,31 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     }
 
     function handleGoLive() {
-        setVideoState({ type: 'live' })
+        // "Live" means 30 seconds before current time (true live is slow)
+        const now = new Date()
+        const today = getLocalDateString(now)
+        const thirtySecsAgo = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() - 30
+
+        setSelectedDate(today)
         setPlayerTime(null)
-        setSelectedDate(getLocalDateString(new Date()))
+
+        // Trigger playback at 30s ago
+        const segment = findSegmentAt(thirtySecsAgo, segments)
+        if (segment) {
+            const segmentStartTime = parseTime(segment.time)
+            const url = getPlaylistUrl(camId, today, segment.time)
+            setVideoState({
+                type: 'playing',
+                url: getJellyJumpUrl(window.location.origin + url),
+                segmentStartTime
+            })
+            // Force TimeScroller to jump to this time
+            setForceTime(thirtySecsAgo)
+        } else {
+            // No segment 30s ago, fallback to loading
+            setVideoState({ type: 'loading' })
+            setForceTime(thirtySecsAgo)
+        }
     }
 
     function handleGoNext() {
