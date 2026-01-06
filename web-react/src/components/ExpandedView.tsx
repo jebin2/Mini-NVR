@@ -234,21 +234,12 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     onDateChange={handleDateChange}
                     onScrollStart={handleScrollStart}
                     onScrollEnd={handleScrollEnd}
+                    onGoLive={() => goToLive()}
                     externalForceTime={forceTime}
                     segmentStartTime={segmentStartTime}
                     playerTime={playerTime}
                 />
             )}
-
-            {/* Mode toggle */}
-            <div className="mode-controls">
-                <button
-                    className={`mode-btn ${videoState.type === 'playing' ? 'active' : ''}`}
-                    onClick={() => goToLive()}
-                >
-                    Live
-                </button>
-            </div>
         </div>
     )
 }

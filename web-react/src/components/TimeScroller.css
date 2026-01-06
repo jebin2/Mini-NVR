@@ -59,27 +59,97 @@
     letter-spacing: 1px;
 }
 
-.mode-toggle {
-    display: flex;
-    gap: 8px;
-}
-
-.mode-btn {
-    background: transparent;
-    border: 1px solid #334155;
-    color: #64748b;
+/* Live Indicator */
+.live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 12px;
     padding: 4px 10px;
-    border-radius: 6px;
+    border: none;
+    border-radius: 20px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.5px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s ease;
+    background: transparent;
 }
 
-.mode-btn.active {
-    background: #2563eb;
-    border-color: #2563eb;
-    color: white;
+.live-indicator.is-live {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.live-indicator.is-faded {
+    background: rgba(100, 116, 139, 0.1);
+    color: #64748b;
+    opacity: 0.6;
+}
+
+.live-indicator.is-faded:hover {
+    opacity: 1;
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+}
+
+.live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    position: relative;
+}
+
+.live-indicator.is-live .live-dot {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.live-indicator.is-live .live-dot::before {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    right: -3px;
+    bottom: -3px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    animation: pulse-ring 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.8;
+    }
+
+    50% {
+        transform: scale(1.3);
+        opacity: 0;
+    }
+
+    100% {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+}
+
+.live-text {
+    text-transform: uppercase;
 }
 
 /* Track / Container */

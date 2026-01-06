@@ -1,22 +1,24 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { getLocalDateString } from '../utils/dateUtils'
 import './TimeScroller.css'
 
 interface TimeScrollerProps {
-    camId: string  // Kept for future use (e.g., segment loading)
+    camId: string
     date: string
     availableDates: string[]
     onDateChange: (date: string) => void
     onScrollStart: () => void
-    onScrollEnd: (time: number) => void  // Just reports user's selected time
+    onScrollEnd: (time: number) => void
+    onGoLive: () => void  // Callback when user clicks live indicator
     externalForceTime?: number | null
-    // Video sync props (from ExpandedView)
-    segmentStartTime?: number | null  // When video segment starts (e.g., 8:10:00 = 29400)
-    playerTime?: number | null         // Video's playback time (seconds from start, e.g., 0, 1, 2...)
+    segmentStartTime?: number | null
+    playerTime?: number | null
 }
 
 // === CONSTANTS ===
 const ZOOM_MINUTES = 30
 const SECONDS_IN_DAY = 86400
+const LIVE_THRESHOLD = 45  // Consider "live" if within 45s of current time
 
 // === PURE HELPERS ===
 
@@ -43,11 +45,16 @@ function wrapTime(time: number, currentDate: string): { time: number; date: stri
     return { time, date: currentDate, dateChanged: false }
 }
 
+function getCurrentTimeSeconds(): number {
+    const now = new Date()
+    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+}
+
 // === COMPONENT ===
 
 export default function TimeScroller({
     camId: _camId, date, availableDates, onDateChange,
-    onScrollStart, onScrollEnd, externalForceTime,
+    onScrollStart, onScrollEnd, onGoLive, externalForceTime,
     segmentStartTime, playerTime
 }: TimeScrollerProps) {
 
@@ -55,7 +62,7 @@ export default function TimeScroller({
     const [currentTime, setCurrentTime] = useState(0)
     const [isDragging, setIsDragging] = useState(false)
     const [currentDate, setCurrentDate] = useState(date)
-    const [userSelectedTime, setUserSelectedTime] = useState<number | null>(null)  // Where user dropped
+    const [userSelectedTime, setUserSelectedTime] = useState<number | null>(null)
 
     // === REFS ===
     const trackRef = useRef<HTMLDivElement>(null)
@@ -83,38 +90,40 @@ export default function TimeScroller({
     }, [externalForceTime])
 
     // === VIDEO SYNC ===
-    // Only update scrubber when video has caught up to user's selected position
     useEffect(() => {
-        // Skip if dragging, or no video data
         if (isDragging) return
         if (segmentStartTime == null || playerTime == null) return
 
-        // Calculate actual video time
         const actualVideoTime = segmentStartTime + playerTime
 
-        // If user selected a specific time, wait until video catches up
         if (userSelectedTime != null) {
             if (actualVideoTime < userSelectedTime) {
-                // Video hasn't caught up yet, don't update scrubber
                 return
             }
-            // Video caught up! Clear userSelectedTime and start syncing
             setUserSelectedTime(null)
         }
 
-        // Sync scrubber to video (only if significant difference)
         if (Math.abs(actualVideoTime - currentTime) > 1) {
             setCurrentTime(actualVideoTime)
         }
     }, [segmentStartTime, playerTime, isDragging, userSelectedTime, currentTime])
 
+    // === IS NEAR LIVE? ===
+    const isNearLive = useMemo(() => {
+        const today = getLocalDateString(new Date())
+        if (currentDate !== today) return false
+
+        const now = getCurrentTimeSeconds()
+        const diff = now - currentTime
+        return diff >= 0 && diff <= LIVE_THRESHOLD
+    }, [currentDate, currentTime])
+
     // === POINTER HANDLERS ===
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
         setIsDragging(true)
-        onScrollStart()  // Tell parent to unmount video player
+        onScrollStart()
             ; (e.target as HTMLElement).setPointerCapture(e.pointerId)
 
-        // Cancel pending debounce
         if (debounceRef.current) {
             clearTimeout(debounceRef.current)
             debounceRef.current = null
@@ -145,15 +154,12 @@ export default function TimeScroller({
         if (!isDragging) return
 
         setIsDragging(false)
-
-        // Remember what time user selected
         setUserSelectedTime(currentTime)
 
-        // Debounce before notifying parent
         debounceRef.current = window.setTimeout(() => {
             onScrollEnd(currentTime)
             debounceRef.current = null
-        }, 400)  // 400ms debounce
+        }, 400)
     }, [isDragging, currentTime, onScrollEnd])
 
     // === RENDER ===
@@ -201,6 +207,16 @@ export default function TimeScroller({
 
                 <div className="time-display-center">
                     <span className="current-time-large">{formatTimeShort(currentTime)}</span>
+
+                    {/* Live Indicator */}
+                    <button
+                        className={`live-indicator ${isNearLive ? 'is-live' : 'is-faded'}`}
+                        onClick={onGoLive}
+                        title={isNearLive ? 'Currently live' : 'Go to live'}
+                    >
+                        <span className="live-dot" />
+                        <span className="live-text">LIVE</span>
+                    </button>
                 </div>
             </div>
 
