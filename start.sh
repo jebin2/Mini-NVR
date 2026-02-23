@@ -26,27 +26,52 @@ log_info() { echo "[INFO] $1"; }
 log_warn() { echo "[WARN] $1"; }
 log_error() { echo "[ERROR] $1"; }
 
+show_help() {
+    echo "Mini-NVR Start Script"
+    echo ""
+    echo "Usage: ./start.sh [options]"
+    echo ""
+    echo "Options:"
+    echo "  -d          Run in background (detached)"
+    echo "  -c          Clean logs and encrypt before starting"
+    echo "  -r          Clean recordings before starting"
+    echo "  -b          Force rebuild Docker image without cache"
+    echo "  -h, --help  Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  ./start.sh           Start in foreground"
+    echo "  ./start.sh -d        Start in background"
+    echo "  ./start.sh -cd       Clean and start in background"
+    echo "  ./start.sh -cb       Clean and force rebuild"
+    exit 0
+}
+
 # ============================================
 # CORE FUNCTIONS
 # ============================================
 
 parse_arguments() {
     while [[ $# -gt 0 ]]; do
-        if [[ "$1" == -* ]]; then
-            for (( i=1; i<${#1}; i++ )); do
-                char="${1:$i:1}"
-                case "$char" in
-                    d) DETACHED=true ;;
-                    c) CLEAN=true ;;
-                    r) CLEAN_RECORDINGS=true ;;
-                    b) BUILD_NO_CACHE=true ;;
-                    *) echo "Unknown option: -$char"; exit 1 ;;
-                esac
-            done
-        else
-            echo "Unknown argument: $1"
-            exit 1
-        fi
+        case "$1" in
+            --help) show_help ;;
+            -*)
+                for (( i=1; i<${#1}; i++ )); do
+                    char="${1:$i:1}"
+                    case "$char" in
+                        d) DETACHED=true ;;
+                        c) CLEAN=true ;;
+                        r) CLEAN_RECORDINGS=true ;;
+                        b) BUILD_NO_CACHE=true ;;
+                        h) show_help ;;
+                        *) echo "Unknown option: -$char"; exit 1 ;;
+                    esac
+                done
+                ;;
+            *)
+                echo "Unknown argument: $1"
+                exit 1
+                ;;
+        esac
         shift
     done
 }
@@ -76,7 +101,8 @@ clean_data() {
     # Docker cleanup when building or cleaning
     if [ "$CLEAN" = true ] || [ "$BUILD_NO_CACHE" = true ]; then
         log_info "Cleaning Docker resources..."
-        docker system prune -f >/dev/null 2>&1 || true
+        docker system prune -af --volumes >/dev/null 2>&1 || true
+        docker builder prune -af >/dev/null 2>&1 || true
         echo "Docker cleanup complete."
     fi
 }
