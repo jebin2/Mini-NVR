@@ -62,11 +62,10 @@ declare -A SERVICE_CMD=(
     [cleanup]="python cleanup.py"
     [uploader]="python youtube_upload.py"
     [youtube_stream]="python youtube_stream.py"
-    [backup]="python backup_service.py"
 )
 
 # Order matters for startup
-SERVICES=(server recorder cleanup uploader youtube_stream backup)
+SERVICES=(server recorder cleanup uploader youtube_stream)
 
 # Per-service "should run?" checks
 is_enabled() {
@@ -74,7 +73,6 @@ is_enabled() {
     case $name in
         uploader)        [ "${YOUTUBE_UPLOAD_ENABLED}" = "true" ] ;;
         youtube_stream)  [ "${YOUTUBE_LIVE_ENABLED}" = "true" ] ;;
-        backup)          [ "${BACKUP_ENABLED}" = "true" ] ;;
         *)               true ;;  # Core services always enabled
     esac
 }
