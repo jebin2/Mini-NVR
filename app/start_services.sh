@@ -31,12 +31,13 @@ mount_hf_bucket() {
     log "Mounting Hugging Face bucket: $HF_BUCKET_ID to /recordings..."
     mkdir -p /recordings
     
-    # Run hf-mount in background using advanced writes to support ffmpeg random writes
-    ~/.local/bin/hf-mount start --fuse --advanced-writes --hf-token "$HF_TOKEN" bucket "$HF_BUCKET_ID" /recordings
+    # Run hf-mount using NFS backend (no FUSE/root needed, works in Docker)
+    # NFS always uses advanced writes mode, perfect for ffmpeg
+    ~/.local/bin/hf-mount start --hf-token "$HF_TOKEN" bucket "$HF_BUCKET_ID" /recordings
     
-    # Wait for mount to become active
-    for i in $(seq 1 10); do
-        if mountpoint -q /recordings; then
+    # Wait for mount to become active (NFS mount - check if directory has content)
+    for i in $(seq 1 30); do
+        if mountpoint -q /recordings 2>/dev/null || ls /recordings/ >/dev/null 2>&1; then
             log "✅ Hugging Face bucket successfully mounted!"
             return 0
         fi
