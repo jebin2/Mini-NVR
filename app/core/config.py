@@ -43,8 +43,8 @@ class Settings:
     skip_channels: List[int] = field(default_factory=lambda: [int(x) for x in get_list_env("SKIP_CHANNELS")])
     
     segment_duration: int = field(default_factory=lambda: int(get_env("SEGMENT_DURATION", "10")))
-    max_storage_gb: int = field(default_factory=lambda: int(get_env("MAX_STORAGE_GB")))
-    cleanup_interval: int = field(default_factory=lambda: int(get_env("CLEANUP_INTERVAL", "60")))
+    retention_days: int = field(default_factory=lambda: int(get_env("RETENTION_DAYS", "7")))
+    cleanup_interval: int = field(default_factory=lambda: int(get_env("CLEANUP_INTERVAL", "3600")))
     
     youtube_upload_enabled: bool = field(default_factory=lambda: get_env("YOUTUBE_UPLOAD_ENABLED", "false").lower() == "true")
     
