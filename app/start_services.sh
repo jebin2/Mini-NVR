@@ -16,11 +16,23 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$MONITOR_LOG"; }
 HF_MOUNT_PID=""
 
 mount_hf_bucket() {
-    log "Mounting Hugging Face bucket: $HF_REPO_ID to /recordings..."
+    # Support both HF_BUCKET (preferred) and HF_REPO_ID (legacy)
+    HF_BUCKET_ID="${HF_BUCKET:-$HF_REPO_ID}"
+    
+    if [ -z "$HF_BUCKET_ID" ]; then
+        log "❌ HF_BUCKET not set! Cannot mount storage."
+        exit 1
+    fi
+    if [ -z "$HF_TOKEN" ]; then
+        log "❌ HF_TOKEN not set! Cannot authenticate with Hugging Face."
+        exit 1
+    fi
+    
+    log "Mounting Hugging Face bucket: $HF_BUCKET_ID to /recordings..."
     mkdir -p /recordings
     
     # Run hf-mount in background using advanced writes to support ffmpeg random writes
-    ~/.local/bin/hf-mount start --fuse --advanced-writes --hf-token "$HF_TOKEN" bucket "$HF_REPO_ID" /recordings
+    ~/.local/bin/hf-mount start --fuse --advanced-writes --hf-token "$HF_TOKEN" bucket "$HF_BUCKET_ID" /recordings
     
     # Wait for mount to become active
     for i in $(seq 1 10); do
