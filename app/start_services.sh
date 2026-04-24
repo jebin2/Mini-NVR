@@ -10,6 +10,35 @@ AUTH_FILE="need_auth.info"
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$MONITOR_LOG"; }
 
 # =============================================================================
+# Hugging Face Storage Mount
+# =============================================================================
+
+HF_MOUNT_PID=""
+
+mount_hf_bucket() {
+    log "Mounting Hugging Face bucket: $HF_REPO_ID to /recordings..."
+    mkdir -p /recordings
+    
+    # Run hf-mount in background using advanced writes to support ffmpeg random writes
+    ~/.local/bin/hf-mount start --fuse --advanced-writes --hf-token "$HF_TOKEN" bucket "$HF_REPO_ID" /recordings
+    
+    # Wait for mount to become active
+    for i in $(seq 1 10); do
+        if mountpoint -q /recordings; then
+            log "✅ Hugging Face bucket successfully mounted!"
+            return 0
+        fi
+        sleep 1
+    done
+    
+    log "❌ Failed to mount Hugging Face bucket after 10 seconds!"
+    exit 1
+}
+
+# Mount before anything else starts
+mount_hf_bucket
+
+# =============================================================================
 # Service Definitions
 # Each service has: command, enabled check, and optional special handling
 # =============================================================================
@@ -106,6 +135,10 @@ cleanup() {
     for name in "${SERVICES[@]}"; do
         stop_service $name
     done
+    
+    log "Unmounting Hugging Face bucket..."
+    ~/.local/bin/hf-mount stop /recordings 2>/dev/null || umount /recordings 2>/dev/null || true
+    
     exit 0
 }
 trap cleanup SIGINT SIGTERM

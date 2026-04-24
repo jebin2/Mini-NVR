@@ -9,9 +9,14 @@ RUN apt-get update && \
     docker.io \
     intel-media-va-driver \
     libva-drm2 \
-    rsync && \
+    rsync \
+    fuse3 \
+    curl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Install hf-mount
+RUN curl -fsSL https://raw.githubusercontent.com/huggingface/hf-mount/main/install.sh | sh
 
 # Install Python dependencies
 COPY requirements.txt .
