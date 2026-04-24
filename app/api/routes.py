@@ -14,7 +14,7 @@ def get_config():
     return {
         "numChannels": config.settings.num_channels,
         "activeChannels": config.settings.get_active_channels(),
-        "storageLimit": config.settings.max_storage_gb
+        "retentionDays": config.settings.retention_days
     }
 
 @router.get("/storage")

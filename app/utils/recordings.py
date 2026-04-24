@@ -46,8 +46,8 @@ def get_storage_usage():
                     pass
     
     used_gb = round(total_size / (1024**3), 1)
-    summary = f"{used_gb} GB / {settings.max_storage_gb} GB"
-    return {"summary": summary, "usedGB": used_gb, "maxGB": settings.max_storage_gb}
+    summary = f"{used_gb} GB (retention: {settings.retention_days} days)"
+    return {"summary": summary, "usedGB": used_gb, "retentionDays": settings.retention_days}
 
 def get_live_channels():
     channels = {}
