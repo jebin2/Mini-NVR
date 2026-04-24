@@ -31,20 +31,21 @@ mount_hf_bucket() {
     log "Mounting Hugging Face bucket: $HF_BUCKET_ID to /recordings..."
     mkdir -p /recordings
     
-    # Run hf-mount using NFS backend (no FUSE/root needed, works in Docker)
+    # Run hf-mount using NFS backend (needs nfs-common for mount.nfs)
     # NFS always uses advanced writes mode, perfect for ffmpeg
-    ~/.local/bin/hf-mount start --hf-token "$HF_TOKEN" bucket "$HF_BUCKET_ID" /recordings
+    HF_MOUNT_OUTPUT=$(~/.local/bin/hf-mount start --hf-token "$HF_TOKEN" bucket "$HF_BUCKET_ID" /recordings 2>&1)
+    log "hf-mount output: $HF_MOUNT_OUTPUT"
     
-    # Wait for mount to become active (NFS mount - check if directory has content)
+    # Wait for NFS mount to become active (mountpoint detects real mounts)
     for i in $(seq 1 30); do
-        if mountpoint -q /recordings 2>/dev/null || ls /recordings/ >/dev/null 2>&1; then
+        if mountpoint -q /recordings 2>/dev/null; then
             log "✅ Hugging Face bucket successfully mounted!"
             return 0
         fi
         sleep 1
     done
     
-    log "❌ Failed to mount Hugging Face bucket after 10 seconds!"
+    log "❌ Failed to mount Hugging Face bucket after 30 seconds!"
     exit 1
 }
 

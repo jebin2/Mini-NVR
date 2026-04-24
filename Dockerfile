@@ -10,6 +10,7 @@ RUN apt-get update && \
     intel-media-va-driver \
     libva-drm2 \
     rsync \
+    nfs-common \
     curl && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
