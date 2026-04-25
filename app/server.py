@@ -49,11 +49,14 @@ app.add_middleware(
     ]
 )
 
-# Add COOP header for Google Sign-In (Popups)
+# Add COOP header only on HTML pages — Google Sign-In needs it for popup flow,
+# but setting it on API/asset responses blocks Google's own iframe postMessages.
 @app.middleware("http")
 async def add_security_headers(request, call_next):
     response = await call_next(request)
-    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    content_type = response.headers.get("content-type", "")
+    if "text/html" in content_type:
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
     return response
 
 # CORSMiddleware added last so it wraps everything and runs first —
