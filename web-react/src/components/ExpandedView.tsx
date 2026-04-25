@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Channel, Segment, fetchDates, fetchSegments, fetchConfig, getHfPlaylistUrl, getPlaylistUrl } from '../services/api'
 import { getJellyJumpUrl, getJellyJumpHfUrl } from '../services/go2rtc'
 import { getLocalDateString } from '../utils/dateUtils'
@@ -126,6 +126,12 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         }
     }
 
+    // Ref so the segments effect can always call the latest goToLive without
+    // including it in the dependency array (which would create an infinite loop:
+    // segments → goToLive ref changes → effect re-runs → setSegments → repeat).
+    const goToLiveRef = useRef(goToLive)
+    useEffect(() => { goToLiveRef.current = goToLive })
+
     // === LOAD SEGMENTS ===
     useEffect(() => {
         if (!selectedDate) return
@@ -142,7 +148,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     // Auto-start 30s playback on first load
                     if (!hasAutoStarted && segs.length > 0) {
                         setHasAutoStarted(true)
-                        goToLive(segs)
+                        goToLiveRef.current(segs)
                     }
                 }
             } catch (err) {
@@ -164,7 +170,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             isMounted = false
             if (intervalId) clearInterval(intervalId)
         }
-    }, [camId, selectedDate, hasAutoStarted, goToLive])
+    }, [camId, selectedDate, hasAutoStarted])
 
     // === HANDLERS ===
 
