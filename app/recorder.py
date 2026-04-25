@@ -1,6 +1,7 @@
 import subprocess
 import time
 import os
+import re
 import json
 import threading
 import glob
@@ -182,6 +183,53 @@ def create_master_playlist(out_dir, ts_path):
         logger.warning(f"Failed to write master.m3u8: {e}")
 
 
+def generate_vod_playlist(out_dir, segment_duration):
+    """
+    Generate a VOD-compatible playlist.m3u8 from .ts segments on disk.
+    Includes #EXT-X-PLAYLIST-TYPE:VOD and #EXT-X-ENDLIST so players
+    treat it as a completed recording (seekable, not live).
+    """
+    ts_files = []
+    try:
+        for entry in os.scandir(out_dir):
+            if not entry.is_file() or not entry.name.endswith('.ts'):
+                continue
+            if re.match(r'^\d{6}\.ts$', entry.name):
+                ts_files.append(entry.name)
+    except OSError:
+        return
+
+    if not ts_files:
+        return
+
+    ts_files.sort()
+
+    lines = [
+        "#EXTM3U",
+        "#EXT-X-VERSION:3",
+        "#EXT-X-PLAYLIST-TYPE:VOD",
+        f"#EXT-X-TARGETDURATION:{segment_duration}",
+        "#EXT-X-INDEPENDENT-SEGMENTS",
+        "",
+    ]
+
+    for ts in ts_files:
+        lines.append(f"#EXTINF:{segment_duration},")
+        lines.append(ts)
+
+    lines.append("")
+    lines.append("#EXT-X-ENDLIST")
+
+    playlist_path = os.path.join(out_dir, "playlist.m3u8")
+    try:
+        tmp_path = playlist_path + ".tmp"
+        with open(tmp_path, 'w') as f:
+            f.write("\n".join(lines) + "\n")
+        os.rename(tmp_path, playlist_path)
+    except OSError as e:
+        logger.warning(f"Failed to write VOD playlist: {e}")
+
+
 def start_camera(channel, rtsp_url, base_dir, segment_duration):
     """Record RTSP stream for a single camera channel."""
     proc = None
@@ -198,6 +246,9 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
         # Check if date changed (midnight rollover)
         today = datetime.now().strftime("%Y-%m-%d")
         if current_date and current_date != today:
+            # Generate final VOD playlist for the old date before switching
+            old_dir = get_output_dir(base_dir, channel).replace(today, current_date)
+            generate_vod_playlist(old_dir, segment_duration)
             # Date changed, restart to use new folder
             if proc:
                 proc.terminate()
@@ -278,7 +329,7 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                 "-hls_flags", "append_list+program_date_time",
                 "-strftime", "1",
                 "-hls_segment_filename", f"{out_dir}/%H%M%S.ts",
-                f"{out_dir}/playlist.m3u8"
+                f"{out_dir}/_live.m3u8"
             ])
 
             # Log the full command for debugging
@@ -329,6 +380,10 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                 if not master_created and latest and latest.endswith('.ts'):
                     create_master_playlist(out_dir, latest)
                     master_created = True
+
+                # Regenerate VOD playlist with latest segments
+                if latest and latest.endswith('.ts'):
+                    generate_vod_playlist(out_dir, segment_duration)
             time.sleep(1)
 
 
