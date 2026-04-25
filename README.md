@@ -44,6 +44,14 @@ A lightweight, Docker-based Network Video Recorder for RTSP cameras with live st
 - go2rtc handles reconnection and buffering
 - All consumers share one stream: live view, recording, YouTube
 
+### Playback Architecture
+
+Mini-NVR offloads recorded video playback directly to Hugging Face (HF) CDN to save server bandwidth. 
+
+- **Live View (Grid):** Streams in real-time via WebRTC (powered by go2rtc).
+- **Recorded Playback:** The UI constructs direct Hugging Face CDN URLs (`master.m3u8`). The video flows directly from HF to the client browser, completely bypassing the NVR server.
+- **Playlist Regeneration:** The VOD playlist (`playlist.m3u8`) is regenerated and synced to Hugging Face every **5 minutes**. As a result, "Go to Live" in the expanded player (which uses the VOD playlist) may be up to 5-6 minutes behind real-time.
+
 ---
 
 ## Quick Start
