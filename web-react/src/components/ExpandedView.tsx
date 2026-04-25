@@ -25,10 +25,6 @@ function findSegmentAt(time: number, segments: Segment[]): Segment | null {
     }) || null
 }
 
-function getCurrentSeconds(): number {
-    const now = new Date()
-    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
-}
 
 function secondsToHMS(s: number): string {
     const h = Math.floor(s / 3600)
@@ -56,15 +52,18 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
     const [hasAutoStarted, setHasAutoStarted] = useState(false)
     const [hfBucketUrl, setHfBucketUrl] = useState('')
+    const [configLoaded, setConfigLoaded] = useState(false)
 
     const [videoState, setVideoState] = useState<VideoAreaState>({ type: 'loading' })
     const [playerTime, setPlayerTime] = useState<number | null>(null)
 
-    // Load config once
+    // Load config once — segments effect waits for this before deciding HF vs NVR
     useEffect(() => {
         fetchConfig().then(cfg => {
             setHfBucketUrl(cfg.hfBucketUrl || '')
-        }).catch(() => {})
+        }).catch(() => {}).finally(() => {
+            setConfigLoaded(true)
+        })
     }, [])
 
     // === LIVE ===
@@ -72,8 +71,9 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         const today = getLocalDateString(new Date())
         if (selectedDate !== today) setSelectedDate(today)
         setVideoState({ type: 'live' })
-        setForceTime(getCurrentSeconds())
         setPlayerTime(null)
+        // Do NOT set forceTime here — that would trigger TimeScroller's onScrollEnd
+        // which would immediately override the live state with a VOD load.
     }, [selectedDate])
 
     // === LOAD DATES ===
@@ -99,7 +99,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     // If HF is configured: parse HF playlist.m3u8 (no NVR API call needed).
     // If not: fall back to NVR API segments.
     useEffect(() => {
-        if (!selectedDate) return
+        if (!selectedDate || !configLoaded) return
 
         let isMounted = true
 
@@ -143,7 +143,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             isMounted = false
             if (intervalId) clearInterval(intervalId)
         }
-    }, [camId, selectedDate, hasAutoStarted, hfBucketUrl])
+    }, [camId, selectedDate, hasAutoStarted, hfBucketUrl, configLoaded])
 
     // === HANDLERS ===
 
