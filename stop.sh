@@ -28,16 +28,18 @@ for cid in $(docker ps -aq --filter "name=mini-nvr" 2>/dev/null); do
     # Try graceful remove first
     if ! docker rm -f "$cid" >/dev/null 2>&1; then
         echo -e "  ${YELLOW}⚠${NC} Container $cid stuck (NFS mount), force-killing..."
-        # Kill container process at kernel level
+        # Step 1: Lazy-unmount NFS mounts FIRST (unblocks D-state processes)
+        for mnt in $(grep -s "recordings" /proc/mounts | awk '{print $2}'); do
+            sudo umount -f -l "$mnt" 2>/dev/null || true
+        done
+        sleep 1
+        # Step 2: Now kill the unblocked process
         pid=$(docker inspect --format '{{.State.Pid}}' "$cid" 2>/dev/null)
         if [ -n "$pid" ] && [ "$pid" != "0" ]; then
             sudo kill -9 "$pid" 2>/dev/null || true
         fi
-        # Lazy-unmount leftover NFS mounts inside container overlay
-        for mnt in $(grep -s "recordings" /proc/mounts | grep overlay2 | awk '{print $2}'); do
-            sudo umount -f -l "$mnt" 2>/dev/null || true
-        done
         sleep 2
+        # Step 3: Remove the container
         docker rm -f "$cid" >/dev/null 2>&1 || true
     fi
 done
