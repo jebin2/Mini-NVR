@@ -75,7 +75,17 @@ export function getJellyJumpUrl(videoUrl: string): string {
  * No credentials (public bucket), no liveMode (VOD content).
  */
 export function getJellyJumpHfUrl(videoUrl: string): string {
+    return getJellyJumpHfUrlWithSeek(videoUrl, 0)
+}
+
+/**
+ * Build JellyJump HF URL with a start_time seek offset (seconds into the VOD playlist).
+ * Used when scrubbing: the offset is pre-computed from the wall-clock → playlist map.
+ */
+export function getJellyJumpHfUrlWithSeek(videoUrl: string, startSeconds: number): string {
     const baseUrl = 'https://www.voidall.com/JellyJump/embed.html'
     const controls = 'play,pause,volume,fullscreen,progress'
-    return `${baseUrl}?video_url=${encodeURIComponent(videoUrl)}&controls=${controls}&autoplay=1&muted=0&controlBarMode=fixed`
+    let url = `${baseUrl}?video_url=${encodeURIComponent(videoUrl)}&controls=${controls}&autoplay=1&muted=0&controlBarMode=fixed`
+    if (startSeconds > 0) url += `&start_time=${Math.floor(startSeconds)}`
+    return url
 }

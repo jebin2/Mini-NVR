@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Channel, Segment, fetchDates, fetchSegments, fetchConfig, getHfPlaylistUrl, getPlaylistUrl } from '../services/api'
-import { getJellyJumpUrl, getJellyJumpHfUrl } from '../services/go2rtc'
+import { getJellyJumpUrl, getJellyJumpHfUrlWithSeek, getMSEUrl } from '../services/go2rtc'
+import { fetchHfSegments, wallClockToOffset, offsetToWallClock, HfSegment } from '../services/hfPlaylist'
 import { getLocalDateString } from '../utils/dateUtils'
 import VideoPlayer from './VideoPlayer'
 import InfoOverlay from './InfoOverlay'
@@ -12,13 +13,11 @@ interface ExpandedViewProps {
     channels: Record<string, Channel>
 }
 
-// Helper to parse time string to seconds
 function parseTime(timeStr: string): number {
     const parts = timeStr.split(':')
     return (+parts[0]) * 3600 + (+parts[1]) * 60 + (+parts[2] || 0)
 }
 
-// Find segment containing the given time
 function findSegmentAt(time: number, segments: Segment[]): Segment | null {
     return segments.find(seg => {
         const start = parseTime(seg.time)
@@ -26,88 +25,56 @@ function findSegmentAt(time: number, segments: Segment[]): Segment | null {
     }) || null
 }
 
-// Get time 30 seconds before now
-function getThirtySecsAgo(): number {
+function getCurrentSeconds(): number {
     const now = new Date()
-    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() - 30
+    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
 }
 
-// Simple state machine for video area
+function secondsToHMS(s: number): string {
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = Math.floor(s % 60)
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
+}
+
+// State machine — one source of truth for what's shown in the video area
 type VideoAreaState =
     | { type: 'loading' }
-    | { type: 'playing'; url: string; segmentStartTime: number }
+    | { type: 'live' }                // go2rtc WebRTC/MSE
+    | { type: 'vod'; url: string }    // HF HLS VOD (with start_time baked into URL)
     | { type: 'no-video'; nextTime: number | null }
 
 export default function ExpandedView({ camId, channels: _channels }: ExpandedViewProps) {
     const [dates, setDates] = useState<string[]>([])
     const [selectedDate, setSelectedDate] = useState('')
     const [forceTime, setForceTime] = useState<number | null>(null)
+
+    // HF segments (wall-clock ↔ offset map) — parsed from HF playlist.m3u8
+    const [hfSegments, setHfSegments] = useState<HfSegment[]>([])
+    // Segment[] format for findSegmentAt / no-video next-time logic
     const [segments, setSegments] = useState<Segment[]>([])
+
     const [hasAutoStarted, setHasAutoStarted] = useState(false)
     const [hfBucketUrl, setHfBucketUrl] = useState('')
 
-    // Simple state machine - one source of truth
     const [videoState, setVideoState] = useState<VideoAreaState>({ type: 'loading' })
-
-    // Video playback time (from VideoPlayer)
     const [playerTime, setPlayerTime] = useState<number | null>(null)
 
-    // Load HF bucket URL from config
+    // Load config once
     useEffect(() => {
         fetchConfig().then(cfg => {
             setHfBucketUrl(cfg.hfBucketUrl || '')
         }).catch(() => {})
     }, [])
 
-    /**
-     * Build the playback URL for a given date and segment.
-     * If HF bucket is configured, use HF CDN (full day VOD).
-     * Otherwise fall back to NVR server API (time-specific playlist).
-     */
-    const buildPlaybackUrl = useCallback((date: string, segment?: Segment): string => {
-        if (hfBucketUrl) {
-            // HF CDN: full day VOD playlist — no NVR server involvement
-            const hfUrl = getHfPlaylistUrl(hfBucketUrl, camId, date)
-            return getJellyJumpHfUrl(hfUrl)
-        } else {
-            // Fallback: NVR server API (time-specific playlist)
-            const url = getPlaylistUrl(camId, date, segment?.time)
-            return getJellyJumpUrl(window.location.origin + url)
-        }
-    }, [hfBucketUrl, camId])
-
-    // === COMMON: Go to "Live" (30s before current time) ===
-    const goToLive = useCallback((segs?: Segment[]) => {
+    // === LIVE ===
+    const goToLive = useCallback(() => {
         const today = getLocalDateString(new Date())
-        const time = getThirtySecsAgo()
-        const segsToUse = segs || segments
-
-        // Ensure we're on today's date
-        if (selectedDate !== today) {
-            setSelectedDate(today)
-        }
-
+        if (selectedDate !== today) setSelectedDate(today)
+        setVideoState({ type: 'live' })
+        setForceTime(getCurrentSeconds())
         setPlayerTime(null)
-
-        const segment = findSegmentAt(time, segsToUse)
-        if (segment) {
-            const segmentStartTime = parseTime(segment.time)
-            setVideoState({
-                type: 'playing',
-                url: buildPlaybackUrl(today, segment),
-                segmentStartTime
-            })
-            setForceTime(time)
-        } else {
-            // No segment at 30s ago
-            const nextSeg = segsToUse.find(seg => parseTime(seg.time) > time)
-            setVideoState({
-                type: 'no-video',
-                nextTime: nextSeg ? parseTime(nextSeg.time) : null
-            })
-            setForceTime(time)
-        }
-    }, [camId, segments, selectedDate, buildPlaybackUrl])
+    }, [selectedDate])
 
     // === LOAD DATES ===
     useEffect(() => {
@@ -118,21 +85,19 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         try {
             const data = await fetchDates(camId)
             setDates(data.dates || [])
-            if (data.dates?.length > 0) {
-                setSelectedDate(data.dates[0])
-            }
+            if (data.dates?.length > 0) setSelectedDate(data.dates[0])
         } catch (err) {
             console.error('Failed to load dates:', err)
         }
     }
 
-    // Ref so the segments effect can always call the latest goToLive without
-    // including it in the dependency array (which would create an infinite loop:
-    // segments → goToLive ref changes → effect re-runs → setSegments → repeat).
+    // Ref so the segments effect can always call latest goToLive without being in deps
     const goToLiveRef = useRef(goToLive)
     useEffect(() => { goToLiveRef.current = goToLive })
 
     // === LOAD SEGMENTS ===
+    // If HF is configured: parse HF playlist.m3u8 (no NVR API call needed).
+    // If not: fall back to NVR API segments.
     useEffect(() => {
         if (!selectedDate) return
 
@@ -140,26 +105,34 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
         async function load() {
             try {
-                const data = await fetchSegments(camId, selectedDate)
+                let segs: Segment[]
+                let hfSegs: HfSegment[] = []
+
+                if (hfBucketUrl) {
+                    hfSegs = await fetchHfSegments(hfBucketUrl, camId, selectedDate)
+                    segs = hfSegs.map(s => ({ time: secondsToHMS(s.wallClock), duration: s.duration }))
+                } else {
+                    const data = await fetchSegments(camId, selectedDate)
+                    segs = data.segments || []
+                }
+
                 if (isMounted) {
-                    const segs = data.segments || []
+                    setHfSegments(hfSegs)
                     setSegments(segs)
 
-                    // Auto-start 30s playback on first load
                     if (!hasAutoStarted && segs.length > 0) {
                         setHasAutoStarted(true)
-                        goToLiveRef.current(segs)
+                        goToLiveRef.current()
                     }
                 }
             } catch (err) {
                 console.error('Failed to load segments:', err)
-                if (isMounted) setSegments([])
+                if (isMounted) { setHfSegments([]); setSegments([]) }
             }
         }
 
         load()
 
-        // Refresh every 15s if today
         const today = getLocalDateString(new Date())
         let intervalId: number | null = null
         if (selectedDate === today) {
@@ -170,7 +143,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             isMounted = false
             if (intervalId) clearInterval(intervalId)
         }
-    }, [camId, selectedDate, hasAutoStarted])
+    }, [camId, selectedDate, hasAutoStarted, hfBucketUrl])
 
     // === HANDLERS ===
 
@@ -182,25 +155,31 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     function handleScrollEnd(time: number) {
         const segment = findSegmentAt(time, segments)
 
-        if (segment) {
-            const segmentStartTime = parseTime(segment.time)
-            setVideoState({
-                type: 'playing',
-                url: buildPlaybackUrl(selectedDate, segment),
-                segmentStartTime
-            })
-            setPlayerTime(null)
-        } else {
+        if (!segment) {
             const nextSeg = segments.find(seg => parseTime(seg.time) > time)
-            setVideoState({
-                type: 'no-video',
-                nextTime: nextSeg ? parseTime(nextSeg.time) : null
-            })
+            setVideoState({ type: 'no-video', nextTime: nextSeg ? parseTime(nextSeg.time) : null })
+            return
         }
+
+        if (hfBucketUrl) {
+            const offset = wallClockToOffset(time, hfSegments)
+            const hfUrl = getHfPlaylistUrl(hfBucketUrl, camId, selectedDate)
+            setVideoState({ type: 'vod', url: getJellyJumpHfUrlWithSeek(hfUrl, offset) })
+        } else {
+            const url = getPlaylistUrl(camId, selectedDate, segment.time)
+            setVideoState({ type: 'vod', url: getJellyJumpUrl(window.location.origin + url) })
+        }
+
+        setPlayerTime(null)
     }
 
-    function handleVideoTimeUpdate(time: number) {
-        setPlayerTime(time)
+    // JellyJump sends playlist-offset currentTime; convert to wall-clock for timeline sync
+    function handleVideoTimeUpdate(playlistOffset: number) {
+        if (hfSegments.length > 0) {
+            setPlayerTime(offsetToWallClock(playlistOffset, hfSegments))
+        } else {
+            setPlayerTime(playlistOffset)
+        }
     }
 
     function handleDateChange(date: string) {
@@ -215,26 +194,27 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         }
     }
 
-    // === RENDER HELPERS ===
-
     function formatTimeHMS(seconds: number): string {
-        const h = Math.floor(seconds / 3600)
-        const m = Math.floor((seconds % 3600) / 60)
-        const s = Math.floor(seconds % 60)
-        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+        return secondsToHMS(seconds)
     }
 
-    const segmentStartTime = videoState.type === 'playing' ? videoState.segmentStartTime : null
+    // segmentStartTime=0 so TimeScroller can use playerTime directly as wall-clock
+    const segmentStartTime = videoState.type === 'vod' ? 0 : null
 
     // === RENDER ===
-
     return (
         <div className="expanded-view">
             <div className="video-stage">
                 <div className="camera-badge">📹 CH{camId}</div>
 
-                {/* State Machine Rendering */}
-                {videoState.type === 'playing' && (
+                {videoState.type === 'live' && (
+                    <VideoPlayer
+                        url={getMSEUrl(camId)}
+                        onTimeUpdate={undefined}
+                    />
+                )}
+
+                {videoState.type === 'vod' && (
                     <VideoPlayer
                         url={videoState.url}
                         onTimeUpdate={handleVideoTimeUpdate}
@@ -250,7 +230,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                         type="no-video"
                         onGoNext={videoState.nextTime ? handleGoNext : undefined}
                         nextTime={videoState.nextTime ? formatTimeHMS(videoState.nextTime) : null}
-                        onGoLive={() => goToLive()}
+                        onGoLive={goToLive}
                     />
                 )}
             </div>
@@ -263,7 +243,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                     onDateChange={handleDateChange}
                     onScrollStart={handleScrollStart}
                     onScrollEnd={handleScrollEnd}
-                    onGoLive={() => goToLive()}
+                    onGoLive={goToLive}
                     externalForceTime={forceTime}
                     segmentStartTime={segmentStartTime}
                     playerTime={playerTime}
