@@ -41,6 +41,14 @@ export async function fetchHfSegments(hfBucketUrl: string, channel: string, date
     return parsePlaylistText(await res.text())
 }
 
+/** Fetch and parse the live recording manifest from the NVR server. */
+export async function fetchLiveSegments(channel: string, date: string): Promise<HfSegment[]> {
+    const url = `/recordings/ch${channel}/${date}/_live.m3u8`
+    const res = await fetch(url, { credentials: 'include' })
+    if (!res.ok) throw new Error(`Live m3u8 fetch failed: ${res.status}`)
+    return parsePlaylistText(await res.text())
+}
+
 /** Wall-clock seconds → playlist offset (seconds into the VOD). */
 export function wallClockToOffset(wallClock: number, segments: HfSegment[]): number {
     if (segments.length === 0) return 0

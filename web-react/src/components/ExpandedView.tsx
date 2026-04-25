@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Channel, Segment, fetchDates, fetchSegments, fetchConfig, getHfPlaylistUrl, getPlaylistUrl } from '../services/api'
 import { getJellyJumpUrl, getJellyJumpHfUrlWithSeek } from '../services/go2rtc'
-import { fetchHfSegments, wallClockToOffset, offsetToWallClock, HfSegment } from '../services/hfPlaylist'
+import { fetchHfSegments, fetchLiveSegments, wallClockToOffset, offsetToWallClock, HfSegment } from '../services/hfPlaylist'
 import { getLocalDateString } from '../utils/dateUtils'
 import VideoPlayer from './VideoPlayer'
 import InfoOverlay from './InfoOverlay'
@@ -55,6 +55,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     // Segment[] format for findSegmentAt / no-video next-time logic
     const [segments, setSegments] = useState<Segment[]>([])
 
+    const [liveSegments, setLiveSegments] = useState<HfSegment[]>([])
     const [hasAutoStarted, setHasAutoStarted] = useState(false)
     const [hfBucketUrl, setHfBucketUrl] = useState('')
     const [configLoaded, setConfigLoaded] = useState(false)
@@ -97,6 +98,18 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             console.error('Failed to load dates:', err)
         }
     }
+
+    // Fetch _live.m3u8 and refresh every 15s while in live mode (for timeupdate conversion)
+    useEffect(() => {
+        if (videoState.type !== 'live' || !selectedDate) return
+        let isMounted = true
+        const load = () => fetchLiveSegments(camId, selectedDate)
+            .then(segs => { if (isMounted) setLiveSegments(segs) })
+            .catch(() => {})
+        load()
+        const id = window.setInterval(load, 15000)
+        return () => { isMounted = false; clearInterval(id) }
+    }, [videoState.type, camId, selectedDate])
 
     // Ref so the segments effect can always call latest goToLive without being in deps
     const goToLiveRef = useRef(goToLive)
@@ -186,7 +199,9 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
     // JellyJump sends playlist-offset currentTime; convert to wall-clock for timeline sync
     function handleVideoTimeUpdate(playlistOffset: number) {
-        if (hfSegments.length > 0) {
+        if (videoState.type === 'live' && liveSegments.length > 0) {
+            setPlayerTime(offsetToWallClock(playlistOffset, liveSegments))
+        } else if (hfSegments.length > 0) {
             setPlayerTime(offsetToWallClock(playlistOffset, hfSegments))
         } else {
             setPlayerTime(playlistOffset)
@@ -209,8 +224,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         return secondsToHMS(seconds)
     }
 
-    // segmentStartTime=0 so TimeScroller can use playerTime directly as wall-clock
-    const segmentStartTime = videoState.type === 'vod' ? 0 : null
+    const segmentStartTime = (videoState.type === 'vod' || videoState.type === 'live') ? 0 : null
 
     // === RENDER ===
     return (
@@ -221,7 +235,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
                 {videoState.type === 'live' && (
                     <VideoPlayer
                         url={videoState.url}
-                        onTimeUpdate={undefined}
+                        onTimeUpdate={handleVideoTimeUpdate}
                     />
                 )}
 
