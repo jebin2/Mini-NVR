@@ -35,25 +35,6 @@ def get_video_duration(filepath):
         pass
     return None
 
-def get_storage_usage():
-    # If using HF CDN, full directory scan over NFS is too slow and unnecessary
-    if config.settings.hf_bucket_url:
-        summary = f"Cloud Storage (retention: {settings.retention_days} days)"
-        return {"summary": summary, "usedGB": 0, "retentionDays": settings.retention_days}
-
-    total_size = 0
-    for dirpath, _, filenames in os.walk(settings.record_dir):
-        for f in filenames:
-            fp = os.path.join(dirpath, f)
-            if not os.path.islink(fp):
-                try:
-                    total_size += os.path.getsize(fp)
-                except FileNotFoundError:
-                    pass
-    
-    used_gb = round(total_size / (1024**3), 1)
-    summary = f"{used_gb} GB (retention: {settings.retention_days} days)"
-    return {"summary": summary, "usedGB": used_gb, "retentionDays": settings.retention_days}
 
 def get_live_channels():
     channels = {}

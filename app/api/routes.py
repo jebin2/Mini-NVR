@@ -18,9 +18,6 @@ def get_config():
         "hfBucketUrl": config.settings.hf_bucket_url
     }
 
-@router.get("/storage")
-def get_storage():
-    return recordings.get_storage_usage()
 
 @router.get("/live")
 def get_live_feeds():
