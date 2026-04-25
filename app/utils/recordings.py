@@ -62,7 +62,13 @@ def get_live_channels():
         
         if candidates:
             # Get absolute newest file regardless of type
-            latest_file = max(candidates, key=os.path.getctime)
+            # Filter out files that vanished between glob and stat (NFS race)
+            def safe_getctime(path):
+                try:
+                    return os.path.getctime(path)
+                except (FileNotFoundError, OSError):
+                    return 0
+            latest_file = max(candidates, key=safe_getctime)
             is_live = is_file_live(latest_file)
             
             # Determine logic status
