@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Channel, Segment, fetchDates, fetchSegments, fetchConfig, getHfPlaylistUrl, getPlaylistUrl } from '../services/api'
-import { getJellyJumpUrl, getJellyJumpHfUrlWithSeek, getHlsApiUrl } from '../services/go2rtc'
+import { getJellyJumpUrl, getJellyJumpHfUrlWithSeek } from '../services/go2rtc'
 import { fetchHfSegments, wallClockToOffset, offsetToWallClock, HfSegment } from '../services/hfPlaylist'
 import { getLocalDateString } from '../utils/dateUtils'
 import VideoPlayer from './VideoPlayer'
@@ -36,7 +36,7 @@ function secondsToHMS(s: number): string {
 // State machine — one source of truth for what's shown in the video area
 type VideoAreaState =
     | { type: 'loading' }
-    | { type: 'live' }                // go2rtc WebRTC/MSE
+    | { type: 'live'; url: string }   // ffmpeg _live.m3u8 (MPEG-TS, same format as VOD)
     | { type: 'vod'; url: string }    // HF HLS VOD (with start_time baked into URL)
     | { type: 'no-video'; nextTime: number | null }
 
@@ -70,11 +70,12 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const goToLive = useCallback(() => {
         const today = getLocalDateString(new Date())
         if (selectedDate !== today) setSelectedDate(today)
-        setVideoState({ type: 'live' })
+        const liveUrl = `${window.location.origin}/recordings/ch${camId}/${today}/_live.m3u8`
+        setVideoState({ type: 'live', url: getJellyJumpUrl(liveUrl) })
         setPlayerTime(null)
         // Do NOT set forceTime here — that would trigger TimeScroller's onScrollEnd
         // which would immediately override the live state with a VOD load.
-    }, [selectedDate])
+    }, [camId, selectedDate])
 
     // === LOAD DATES ===
     useEffect(() => {
@@ -209,7 +210,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
                 {videoState.type === 'live' && (
                     <VideoPlayer
-                        url={getJellyJumpUrl(getHlsApiUrl(camId))}
+                        url={videoState.url}
                         onTimeUpdate={undefined}
                     />
                 )}
