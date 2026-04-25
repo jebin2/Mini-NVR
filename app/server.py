@@ -30,23 +30,23 @@ auth = GoogleAuth(
     cookie_secure=False # Set True if HTTPS
 )
 
-# 2. Add Middleware (Must wrap Auth with CORS)
+# Middleware is applied LIFO in Starlette — last added = outermost = runs first.
+# Order here: GoogleAuth → security_headers → CORS (outermost, handles preflight before auth)
+
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://www.voidall.com",
-        "https://cctv.voidall.com",
-        "https://voidall.com",
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:2126",  # Mini-NVR local
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:2126",
-    ],
-    allow_origin_regex=r"https://.*\.?voidall\.com",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["Content-Length", "Content-Range", "Accept-Ranges", "Content-Type", "Date"],
+    GoogleAuthMiddleware,
+    google_auth=auth,
+    public_paths=[
+        "/api/auth/*",
+        "/login.html",
+        "/",
+        "/assets",
+        "/manifest.json",
+        "/sw.js",
+        "/icon-192.png",
+        "/icon-512.png",
+        "/favicon.ico"
+    ]
 )
 
 # Add COOP header for Google Sign-In (Popups)
@@ -56,20 +56,24 @@ async def add_security_headers(request, call_next):
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
     return response
 
+# CORSMiddleware added last so it wraps everything and runs first —
+# OPTIONS preflight and CORS headers are handled before auth sees the request.
 app.add_middleware(
-    GoogleAuthMiddleware,
-    google_auth=auth,
-    public_paths=[
-        "/api/auth/*",  # Whitelist auth endpoints
-        "/login.html", 
-        "/",
-        "/assets",
-        "/manifest.json",
-        "/sw.js",
-        "/icon-192.png", 
-        "/icon-512.png", 
-        "/favicon.ico"
-    ]
+    CORSMiddleware,
+    allow_origins=[
+        "https://www.voidall.com",
+        "https://cctv.voidall.com",
+        "https://voidall.com",
+        "http://localhost:5173",
+        "http://localhost:2126",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:2126",
+    ],
+    allow_origin_regex=r"https://.*\.?voidall\.com",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Length", "Content-Range", "Accept-Ranges", "Content-Type", "Date"],
 )
 
 # Mount API
