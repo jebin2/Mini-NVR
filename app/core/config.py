@@ -74,6 +74,14 @@ class Settings:
     @property
     def go2rtc_api_url(self) -> str:
         return f"http://localhost:{self.go2rtc_api_port}"
+
+    @property
+    def hf_bucket_url(self) -> str:
+        """HuggingFace CDN base URL for direct video playback."""
+        bucket = getattr(self, '_hf_bucket', None) or get_env("HF_BUCKET", "")
+        if bucket:
+            return f"https://huggingface.co/buckets/{bucket}/resolve/"
+        return ""
     
     # --- YouTube Streaming ---
     youtube_live_enabled: bool = field(default_factory=lambda: get_env("YOUTUBE_LIVE_ENABLED", "false").lower() == "true")

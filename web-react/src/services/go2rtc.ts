@@ -60,7 +60,7 @@ export function getSnapshotRefreshInterval(): number {
 }
 
 /**
- * Build JellyJump embed URL for video playback
+ * Build JellyJump embed URL for video playback (NVR server)
  * @param videoUrl - URL of the video to play (recording URL or HLS URL)
  */
 export function getJellyJumpUrl(videoUrl: string): string {
@@ -68,4 +68,14 @@ export function getJellyJumpUrl(videoUrl: string): string {
     const controls = 'play,pause,volume,fullscreen'
     // autoplay=1 + muted=0: User click on Rec/Live satisfies browser autoplay policy
     return `${baseUrl}?video_url=${encodeURIComponent(videoUrl)}&controls=${controls}&credentials=true&autoplay=1&muted=0&controlBarMode=fixed&liveMode=realtime`
+}
+
+/**
+ * Build JellyJump embed URL for HuggingFace CDN playback.
+ * No credentials (public bucket), no liveMode (VOD content).
+ */
+export function getJellyJumpHfUrl(videoUrl: string): string {
+    const baseUrl = 'https://www.voidall.com/JellyJump/embed.html'
+    const controls = 'play,pause,volume,fullscreen,progress'
+    return `${baseUrl}?video_url=${encodeURIComponent(videoUrl)}&controls=${controls}&autoplay=1&muted=0&controlBarMode=fixed`
 }

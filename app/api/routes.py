@@ -14,7 +14,8 @@ def get_config():
     return {
         "numChannels": config.settings.num_channels,
         "activeChannels": config.settings.get_active_channels(),
-        "retentionDays": config.settings.retention_days
+        "retentionDays": config.settings.retention_days,
+        "hfBucketUrl": config.settings.hf_bucket_url
     }
 
 @router.get("/storage")

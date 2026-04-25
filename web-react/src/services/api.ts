@@ -18,6 +18,13 @@ export interface Recording {
     youtube_url?: string
 }
 
+export interface AppConfig {
+    numChannels: number
+    activeChannels: number[]
+    retentionDays: number
+    hfBucketUrl: string
+}
+
 function getCookie(name: string): string | undefined {
     const value = `; ${document.cookie}`
     const parts = value.split(`; ${name}=`)
@@ -50,6 +57,20 @@ async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise
     }
 
     return res.json()
+}
+
+// --- Config (cached) ---
+
+let _configCache: AppConfig | null = null
+
+export async function fetchConfig(): Promise<AppConfig> {
+    if (_configCache) return _configCache
+    _configCache = await fetchAPI<AppConfig>('/api/config')
+    return _configCache
+}
+
+export function getCachedConfig(): AppConfig | null {
+    return _configCache
 }
 
 export async function fetchStorage(): Promise<{ summary: string }> {
@@ -103,7 +124,7 @@ export async function fetchSegments(channel: string, date: string): Promise<Segm
 }
 
 /**
- * Get the HLS playlist URL for a time range
+ * Get the HLS playlist URL for a time range (served by NVR)
  * @param channel Channel number
  * @param date Date in YYYY-MM-DD format
  * @param start Optional start time in HH:MM:SS format
@@ -117,4 +138,12 @@ export function getPlaylistUrl(channel: string, date: string, start?: string, en
     const queryStr = params.toString()
     if (queryStr) url += `?${queryStr}`
     return url
+}
+
+/**
+ * Build HuggingFace CDN URL for direct video playback.
+ * Bypasses NVR server entirely — video streams from HF CDN.
+ */
+export function getHfPlaylistUrl(hfBucketUrl: string, channel: string, date: string): string {
+    return `${hfBucketUrl}ch${channel}/${date}/master.m3u8`
 }

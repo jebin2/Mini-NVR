@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Channel, Segment, fetchDates, fetchSegments, getPlaylistUrl } from '../services/api'
-import { getJellyJumpUrl } from '../services/go2rtc'
+import { Channel, Segment, fetchDates, fetchSegments, fetchConfig, getHfPlaylistUrl, getPlaylistUrl } from '../services/api'
+import { getJellyJumpUrl, getJellyJumpHfUrl } from '../services/go2rtc'
 import { getLocalDateString } from '../utils/dateUtils'
 import VideoPlayer from './VideoPlayer'
 import InfoOverlay from './InfoOverlay'
@@ -44,12 +44,37 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     const [forceTime, setForceTime] = useState<number | null>(null)
     const [segments, setSegments] = useState<Segment[]>([])
     const [hasAutoStarted, setHasAutoStarted] = useState(false)
+    const [hfBucketUrl, setHfBucketUrl] = useState('')
 
     // Simple state machine - one source of truth
     const [videoState, setVideoState] = useState<VideoAreaState>({ type: 'loading' })
 
     // Video playback time (from VideoPlayer)
     const [playerTime, setPlayerTime] = useState<number | null>(null)
+
+    // Load HF bucket URL from config
+    useEffect(() => {
+        fetchConfig().then(cfg => {
+            setHfBucketUrl(cfg.hfBucketUrl || '')
+        }).catch(() => {})
+    }, [])
+
+    /**
+     * Build the playback URL for a given date and segment.
+     * If HF bucket is configured, use HF CDN (full day VOD).
+     * Otherwise fall back to NVR server API (time-specific playlist).
+     */
+    const buildPlaybackUrl = useCallback((date: string, segment?: Segment): string => {
+        if (hfBucketUrl) {
+            // HF CDN: full day VOD playlist — no NVR server involvement
+            const hfUrl = getHfPlaylistUrl(hfBucketUrl, camId, date)
+            return getJellyJumpHfUrl(hfUrl)
+        } else {
+            // Fallback: NVR server API (time-specific playlist)
+            const url = getPlaylistUrl(camId, date, segment?.time)
+            return getJellyJumpUrl(window.location.origin + url)
+        }
+    }, [hfBucketUrl, camId])
 
     // === COMMON: Go to "Live" (30s before current time) ===
     const goToLive = useCallback((segs?: Segment[]) => {
@@ -67,10 +92,9 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         const segment = findSegmentAt(time, segsToUse)
         if (segment) {
             const segmentStartTime = parseTime(segment.time)
-            const url = getPlaylistUrl(camId, today, segment.time)
             setVideoState({
                 type: 'playing',
-                url: getJellyJumpUrl(window.location.origin + url),
+                url: buildPlaybackUrl(today, segment),
                 segmentStartTime
             })
             setForceTime(time)
@@ -83,7 +107,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
             })
             setForceTime(time)
         }
-    }, [camId, segments, selectedDate])
+    }, [camId, segments, selectedDate, buildPlaybackUrl])
 
     // === LOAD DATES ===
     useEffect(() => {
@@ -154,10 +178,9 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
         if (segment) {
             const segmentStartTime = parseTime(segment.time)
-            const url = getPlaylistUrl(camId, selectedDate, segment.time)
             setVideoState({
                 type: 'playing',
-                url: getJellyJumpUrl(window.location.origin + url),
+                url: buildPlaybackUrl(selectedDate, segment),
                 segmentStartTime
             })
             setPlayerTime(null)

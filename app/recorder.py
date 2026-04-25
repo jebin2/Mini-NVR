@@ -235,6 +235,7 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
     proc = None
     consecutive_failures = 0
     last_file_check = 0
+    last_playlist_regen = 0
     current_date = None
     master_created = False
     
@@ -381,9 +382,10 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                     create_master_playlist(out_dir, latest)
                     master_created = True
 
-                # Regenerate VOD playlist with latest segments
-                if latest and latest.endswith('.ts'):
+                # Regenerate VOD playlist every 5 minutes (not every check)
+                if latest and latest.endswith('.ts') and (time.time() - last_playlist_regen > 300):
                     generate_vod_playlist(out_dir, segment_duration)
+                    last_playlist_regen = time.time()
             time.sleep(1)
 
 
