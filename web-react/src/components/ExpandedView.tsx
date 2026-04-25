@@ -26,6 +26,11 @@ function findSegmentAt(time: number, segments: Segment[]): Segment | null {
 }
 
 
+function getCurrentSeconds(): number {
+    const now = new Date()
+    return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+}
+
 function secondsToHMS(s: number): string {
     const h = Math.floor(s / 3600)
     const m = Math.floor((s % 3600) / 60)
@@ -56,6 +61,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
     const [videoState, setVideoState] = useState<VideoAreaState>({ type: 'loading' })
     const [playerTime, setPlayerTime] = useState<number | null>(null)
+    const goingLiveRef = useRef(false)  // skip handleScrollEnd when triggered by goToLive's forceTime
 
     // Load config once — segments effect waits for this before deciding HF vs NVR
     useEffect(() => {
@@ -73,8 +79,8 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         const liveUrl = `${window.location.origin}/recordings/ch${camId}/${today}/_live.m3u8`
         setVideoState({ type: 'live', url: getJellyJumpUrl(liveUrl) })
         setPlayerTime(null)
-        // Do NOT set forceTime here — that would trigger TimeScroller's onScrollEnd
-        // which would immediately override the live state with a VOD load.
+        goingLiveRef.current = true   // tell handleScrollEnd to ignore the next call
+        setForceTime(getCurrentSeconds())
     }, [camId, selectedDate])
 
     // === LOAD DATES ===
@@ -154,6 +160,10 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
     }
 
     function handleScrollEnd(time: number) {
+        if (goingLiveRef.current) {
+            goingLiveRef.current = false
+            return
+        }
         const segment = findSegmentAt(time, segments)
 
         if (!segment) {
