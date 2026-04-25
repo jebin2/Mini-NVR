@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Channel, Segment, fetchDates, fetchSegments, fetchConfig, getHfPlaylistUrl, getPlaylistUrl } from '../services/api'
-import { getJellyJumpUrl, getJellyJumpHfUrlWithSeek, getMSEUrl } from '../services/go2rtc'
+import { getJellyJumpUrl, getJellyJumpHfUrlWithSeek, getHlsApiUrl } from '../services/go2rtc'
 import { fetchHfSegments, wallClockToOffset, offsetToWallClock, HfSegment } from '../services/hfPlaylist'
 import { getLocalDateString } from '../utils/dateUtils'
 import VideoPlayer from './VideoPlayer'
@@ -209,7 +209,7 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
 
                 {videoState.type === 'live' && (
                     <VideoPlayer
-                        url={getMSEUrl(camId)}
+                        url={getJellyJumpUrl(getHlsApiUrl(camId))}
                         onTimeUpdate={undefined}
                     />
                 )}
