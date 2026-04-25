@@ -197,14 +197,19 @@ export default function ExpandedView({ camId, channels: _channels }: ExpandedVie
         setPlayerTime(null)
     }
 
-    // JellyJump sends playlist-offset currentTime; convert to wall-clock for timeline sync
-    function handleVideoTimeUpdate(playlistOffset: number) {
-        if (videoState.type === 'live' && liveSegments.length > 0) {
-            setPlayerTime(offsetToWallClock(playlistOffset, liveSegments))
+    // JellyJump sends currentTime as Unix timestamp (seconds since epoch) when the
+    // HLS playlist has EXT-X-PROGRAM-DATE-TIME tags (ffmpeg -hls_flags program_date_time).
+    // Anything > 86400 can't be a same-day offset — extract wall-clock time-of-day directly.
+    function handleVideoTimeUpdate(time: number) {
+        if (time > 86400) {
+            const d = new Date(time * 1000)
+            setPlayerTime(d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds())
+        } else if (videoState.type === 'live' && liveSegments.length > 0) {
+            setPlayerTime(offsetToWallClock(time, liveSegments))
         } else if (hfSegments.length > 0) {
-            setPlayerTime(offsetToWallClock(playlistOffset, hfSegments))
+            setPlayerTime(offsetToWallClock(time, hfSegments))
         } else {
-            setPlayerTime(playlistOffset)
+            setPlayerTime(time)
         }
     }
 
