@@ -1,13 +1,12 @@
 import './Header.css'
 
 interface HeaderProps {
-    storage: string
     showBack: boolean
     onBack: () => void
     onLogout: () => void
 }
 
-export default function Header({ storage, showBack, onBack, onLogout }: HeaderProps) {
+export default function Header({ showBack, onBack, onLogout }: HeaderProps) {
     async function handleRestartYT() {
         try {
             await fetch('/api/youtube/restart', { method: 'POST', credentials: 'include' })
@@ -26,7 +25,6 @@ export default function Header({ storage, showBack, onBack, onLogout }: HeaderPr
                 <img src="/icon-192.png" alt="See Me" className="header-logo" />
             </div>
             <div className="header-controls">
-                <div className="storage-info">{storage}</div>
                 <button className="btn btn-ghost desktop-only" onClick={handleRestartYT} title="Restart YouTube Stream">
                     🔄 YT
                 </button>

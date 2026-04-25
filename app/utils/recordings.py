@@ -35,6 +35,11 @@ def get_video_duration(filepath):
     return None
 
 def get_storage_usage():
+    # If using HF CDN, full directory scan over NFS is too slow and unnecessary
+    if config.settings.hf_bucket_url:
+        summary = f"Cloud Storage (retention: {settings.retention_days} days)"
+        return {"summary": summary, "usedGB": 0, "retentionDays": settings.retention_days}
+
     total_size = 0
     for dirpath, _, filenames in os.walk(settings.record_dir):
         for f in filenames:
@@ -51,11 +56,12 @@ def get_storage_usage():
 
 def get_live_channels():
     channels = {}
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
     for ch in settings.get_active_channels():
         # Find latest HLS segment for this channel
+        # Only check today's directory to avoid massive NFS glob overhead
         candidates = []
-        # Check Nested HLS segments
-        candidates.extend(glob.glob(os.path.join(settings.record_dir, f"ch{ch}", "*", "*.ts")))
+        candidates.extend(glob.glob(os.path.join(settings.record_dir, f"ch{ch}", today, "*.ts")))
         
         status = "OFF"
         file_path = None

@@ -3,7 +3,7 @@ import { GoogleUser, signOut } from '@jebin2/googleauthservice/client/src'
 import Header from './Header'
 import CameraGrid from './CameraGrid'
 import ExpandedView from './ExpandedView'
-import { fetchLive, fetchStorage, Channel } from '../services/api'
+import { fetchLive, Channel } from '../services/api'
 import './MainApp.css'
 
 interface MainAppProps {
@@ -13,7 +13,6 @@ interface MainAppProps {
 export default function MainApp({ user: _user }: MainAppProps) {
     const [view, setView] = useState<'grid' | 'expanded'>('grid')
     const [channels, setChannels] = useState<Record<string, Channel>>({})
-    const [storage, setStorage] = useState<string>('Loading...')
     const [currentCam, setCurrentCam] = useState<string>('')
     const [isLoading, setIsLoading] = useState(true)  // Loading state
 
@@ -27,12 +26,8 @@ export default function MainApp({ user: _user }: MainAppProps) {
 
     async function loadData() {
         try {
-            const [liveData, storageData] = await Promise.all([
-                fetchLive(),
-                fetchStorage(),
-            ])
+            const liveData = await fetchLive()
             setChannels(liveData.channels || {})
-            setStorage(storageData.summary || 'Unknown')
         } catch (err) {
             console.error('Failed to load data:', err)
         } finally {
@@ -62,7 +57,6 @@ export default function MainApp({ user: _user }: MainAppProps) {
     return (
         <div className="main-app">
             <Header
-                storage={storage}
                 showBack={view === 'expanded'}
                 onBack={goBack}
                 onLogout={handleLogout}

@@ -73,9 +73,6 @@ export function getCachedConfig(): AppConfig | null {
     return _configCache
 }
 
-export async function fetchStorage(): Promise<{ summary: string }> {
-    return fetchAPI('/api/storage')
-}
 
 export async function fetchLive(): Promise<{ channels: Record<string, Channel> }> {
     return fetchAPI('/api/live')
