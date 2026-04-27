@@ -16,7 +16,19 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install hf-mount
-RUN curl -fsSL https://raw.githubusercontent.com/huggingface/hf-mount/main/install.sh | sh
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        HF_ARCH="x86_64-linux"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        HF_ARCH="aarch64-linux"; \
+    else \
+        echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    curl -fsSL -O "https://github.com/huggingface/hf-mount/releases/latest/download/hf-mount-${HF_ARCH}" && \
+    curl -fsSL -O "https://github.com/huggingface/hf-mount/releases/latest/download/hf-mount-nfs-${HF_ARCH}" && \
+    chmod +x hf-mount-* && \
+    mv hf-mount-${HF_ARCH} /usr/local/bin/hf-mount && \
+    mv hf-mount-nfs-${HF_ARCH} /usr/local/bin/hf-mount-nfs
 
 # Install Python dependencies
 COPY requirements.txt .

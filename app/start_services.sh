@@ -33,7 +33,7 @@ mount_hf_bucket() {
     
     # Run hf-mount using NFS backend (needs nfs-common for mount.nfs)
     # NFS always uses advanced writes mode, perfect for ffmpeg
-    HF_MOUNT_OUTPUT=$(~/.local/bin/hf-mount start --hf-token "$HF_TOKEN" bucket "$HF_BUCKET_ID" /recordings 2>&1)
+    HF_MOUNT_OUTPUT=$(hf-mount start --hf-token "$HF_TOKEN" bucket "$HF_BUCKET_ID" /recordings 2>&1)
     log "hf-mount output: $HF_MOUNT_OUTPUT"
     
     # Wait for NFS mount to become active (mountpoint detects real mounts)
@@ -149,7 +149,7 @@ cleanup() {
     done
     
     log "Unmounting Hugging Face bucket..."
-    ~/.local/bin/hf-mount stop /recordings 2>/dev/null || umount /recordings 2>/dev/null || true
+    hf-mount stop /recordings 2>/dev/null || umount /recordings 2>/dev/null || true
     
     exit 0
 }
