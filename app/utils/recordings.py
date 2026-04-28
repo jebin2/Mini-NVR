@@ -40,23 +40,23 @@ def get_live_channels():
     channels = {}
     today = datetime.datetime.now().strftime("%Y-%m-%d")
     for ch in settings.get_active_channels():
-        # Find latest HLS segment for this channel
-        # Only check today's directory to avoid massive NFS glob overhead
-        candidates = []
-        candidates.extend(glob.glob(os.path.join(settings.record_dir, f"ch{ch}", today, "*.ts")))
-        
+        today_dir = os.path.join(settings.record_dir, f"ch{ch}", today)
         status = "OFF"
         file_path = None
         
-        if candidates:
-            # Get absolute newest file regardless of type
-            # Filter out files that vanished between glob and stat (NFS race)
-            def safe_getctime(path):
-                try:
-                    return os.path.getctime(path)
-                except (FileNotFoundError, OSError):
-                    return 0
-            latest_file = max(candidates, key=safe_getctime)
+        latest_file = None
+        if os.path.exists(today_dir):
+            try:
+                # Use scandir and avoid stat() calls to prevent NFS timeouts
+                # HLS segment filenames are HHMMSS.ts, which sort chronologically
+                ts_files = [e.name for e in os.scandir(today_dir) if e.name.endswith('.ts')]
+                if ts_files:
+                    latest_name = max(ts_files)
+                    latest_file = os.path.join(today_dir, latest_name)
+            except OSError:
+                pass
+                
+        if latest_file:
             is_live = is_file_live(latest_file)
             
             # Determine logic status
