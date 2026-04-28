@@ -103,8 +103,9 @@ class YouTubeAccount:
             logger.error(f"Account {self.account_id}: Failed to get service: {e}")
             return None
     
-    def get_channel_name(self) -> Optional[str]:
+    async def get_channel_name(self) -> Optional[str]:
         """Get the channel name for this account."""
+        import asyncio
         if self.channel_name:
             return self.channel_name
         
@@ -113,7 +114,9 @@ class YouTubeAccount:
             return None
         
         try:
-            response = service.channels().list(part="snippet", mine=True).execute()
+            def _fetch():
+                return service.channels().list(part="snippet", mine=True).execute()
+            response = await asyncio.to_thread(_fetch)
             if response.get("items"):
                 self.channel_name = response["items"][0]["snippet"]["title"]
                 return self.channel_name

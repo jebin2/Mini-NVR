@@ -8,7 +8,7 @@ Processes channels round-robin style - one batch per channel per iteration.
 import os
 import time
 import tempfile
-import subprocess
+import asyncio
 import logging
 from datetime import datetime
 from typing import List, Optional, Dict
@@ -42,7 +42,7 @@ class YouTubeUploaderService:
         self._running = False
         self.upload_count = 0
     
-    def _get_video_duration(self, filepath: str) -> float:
+    async def _get_video_duration(self, filepath: str) -> float:
         """Get video duration in seconds using ffprobe."""
         cmd = [
             "ffprobe", "-v", "error",
@@ -51,8 +51,15 @@ class YouTubeUploaderService:
             filepath
         ]
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            return float(result.stdout.strip())
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await process.communicate()
+            if process.returncode == 0:
+                return float(stdout.decode('utf-8').strip())
+            return 0.0
         except Exception:
             return 0.0
     
@@ -62,7 +69,7 @@ class YouTubeUploaderService:
         h, m = divmod(m, 60)
         return f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
     
-    def _concatenate_segments(self, ts_paths: List[str], output_path: str) -> bool:
+    async def _concatenate_segments(self, ts_paths: List[str], output_path: str) -> bool:
         """
         Concatenate multiple TS segments into a single MP4 file.
         Returns True if successful.
@@ -73,11 +80,14 @@ class YouTubeUploaderService:
         # Create concat file list
         concat_file = output_path + ".txt"
         try:
-            with open(concat_file, "w") as f:
-                for ts_path in ts_paths:
-                    # Escape single quotes in path
-                    escaped_path = ts_path.replace("'", "'\\''")
-                    f.write(f"file '{escaped_path}'\n")
+            def write_concat_file():
+                with open(concat_file, "w") as f:
+                    for ts_path in ts_paths:
+                        # Escape single quotes in path
+                        escaped_path = ts_path.replace("'", "'\\''")
+                        f.write(f"file '{escaped_path}'\n")
+            
+            await asyncio.to_thread(write_concat_file)
             
             # FFmpeg concat demuxer
             cmd = [
@@ -91,27 +101,34 @@ class YouTubeUploaderService:
                 output_path
             ]
             
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=3600  # 1 hour timeout
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
             
-            if result.returncode != 0:
-                logger.error(f"Concat failed: {result.stderr[:500]}")
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=3600.0)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.communicate()
+                logger.error("Concat failed: timeout")
                 return False
             
-            return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+            if process.returncode != 0:
+                logger.error(f"Concat failed: {stderr.decode('utf-8')[:500]}")
+                return False
+            
+            return await asyncio.to_thread(os.path.exists, output_path) and await asyncio.to_thread(os.path.getsize, output_path) > 0
             
         except Exception as e:
             logger.error(f"Concatenation error: {e}")
             return False
         finally:
             # Clean up concat file
-            if os.path.exists(concat_file):
+            if await asyncio.to_thread(os.path.exists, concat_file):
                 try:
-                    os.remove(concat_file)
+                    await asyncio.to_thread(os.remove, concat_file)
                 except OSError:
                     pass
     
@@ -143,7 +160,7 @@ class YouTubeUploaderService:
             "segment_count": len(rows)
         }
     
-    def _upload_batch(self, rows: List[dict], account_id: int = 1) -> Optional[str]:
+    async def _upload_batch(self, rows: List[dict], account_id: int = 1) -> Optional[str]:
         """
         Upload a batch of TS segments to YouTube.
         Returns video ID if successful.
@@ -159,7 +176,7 @@ class YouTubeUploaderService:
         
         # Verify all files exist
         for path in ts_paths:
-            if not os.path.exists(path):
+            if not await asyncio.to_thread(os.path.exists, path):
                 logger.warning(f"Missing file: {path}")
                 return None
         
@@ -195,13 +212,13 @@ class YouTubeUploaderService:
             f"{info['start_time']} - {info['end_time']}"
         )
         
-        if not self._concatenate_segments(ts_paths, temp_mp4):
+        if not await self._concatenate_segments(ts_paths, temp_mp4):
             logger.error("Failed to concatenate segments")
             return None
         
         try:
             # Get duration
-            duration = self._get_video_duration(temp_mp4)
+            duration = await self._get_video_duration(temp_mp4)
             duration_str = self._format_duration(duration)
             
             # Build metadata
@@ -224,7 +241,8 @@ class YouTubeUploaderService:
             
             logger.info(f"Uploading: {title}")
             
-            video_id = account.uploader.upload_video(
+            video_id = await asyncio.to_thread(
+                account.uploader.upload_video,
                 service=service,
                 video_path=temp_mp4,
                 metadata=metadata
@@ -235,7 +253,7 @@ class YouTubeUploaderService:
                 
                 # Mark all segments as uploaded in CSV
                 video_paths = [row["video_path"] for row in rows]
-                mark_uploaded(video_paths)
+                await asyncio.to_thread(mark_uploaded, video_paths)
                 
                 self.upload_count += 1
                 return video_id
@@ -244,9 +262,9 @@ class YouTubeUploaderService:
             logger.error(f"Upload failed: {e}")
         finally:
             # Clean up temp MP4
-            if os.path.exists(temp_mp4):
+            if await asyncio.to_thread(os.path.exists, temp_mp4):
                 try:
-                    os.remove(temp_mp4)
+                    await asyncio.to_thread(os.remove, temp_mp4)
                 except OSError:
                     pass
         
@@ -271,7 +289,7 @@ class YouTubeUploaderService:
         # Not enough for a batch yet
         return None
     
-    def run(self):
+    async def run(self):
         """Main upload loop - runs continuously, round-robin through channels."""
         self._running = True
         logger.info("=" * 50)
@@ -283,7 +301,7 @@ class YouTubeUploaderService:
         
         while self._running:
             try:
-                pending_by_channel = get_pending_by_channel()
+                pending_by_channel = await asyncio.to_thread(get_pending_by_channel)
                 uploaded_any = False
                 
                 # Round-robin through channels
@@ -296,21 +314,21 @@ class YouTubeUploaderService:
                     
                     if batch:
                         logger.info(f"Processing {channel}: {len(batch)} segments")
-                        self._upload_batch(batch)
+                        await self._upload_batch(batch)
                         uploaded_any = True
                         # Move to next channel after one batch
                 
                 # Delete uploaded files if configured
                 if self.delete_after_upload:
-                    delete_uploaded_files(self.recordings_dir)
+                    await asyncio.to_thread(delete_uploaded_files, self.recordings_dir)
                 
                 # If nothing was uploaded, short sleep before next scan
                 if not uploaded_any:
-                    time.sleep(5)
+                    await asyncio.sleep(5)
                     
             except Exception as e:
                 logger.error(f"Scan error: {e}")
-                time.sleep(5)
+                await asyncio.sleep(5)
         
         logger.info("YouTube Uploader Service Stopped")
     

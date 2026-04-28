@@ -17,10 +17,9 @@ if project_dir not in sys.path:
 
 import time
 import signal
-import subprocess
+import asyncio
 import logging
 import math
-import threading
 import re
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -245,11 +244,14 @@ class YouTubeStreamer:
         
         return cmd
 
-    def _log_ffmpeg_output(self):
+    async def _log_ffmpeg_output(self):
         """Monitor FFmpeg output in real-time and detect stream health"""
         try:
-            for line in self.process.stdout:
-                line = line.strip()
+            while True:
+                line_bytes = await self.process.stdout.readline()
+                if not line_bytes:
+                    break
+                line = line_bytes.decode('utf-8', errors='ignore').strip()
                 if not line:
                     continue
                 
@@ -310,9 +312,9 @@ class YouTubeStreamer:
         except Exception as e:
             log.error(f"Error monitoring FFmpeg output: {e}")
 
-    def start(self):
-        if self.process and self.process.poll() is None:
-            self.stop()
+    async def start(self):
+        if self.process and self.process.returncode is None:
+            await self.stop()
         
         # Reset health monitoring counters
         self.error_count = 0
@@ -332,29 +334,35 @@ class YouTubeStreamer:
         log.debug(full_cmd)
         
         try:
-            self.process = subprocess.Popen(
-                cmd, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.STDOUT,  # Redirect stderr to stdout
-                text=True,
-                bufsize=1,  # Line buffered
+            self.process = await asyncio.create_subprocess_exec(
+                *cmd, 
+                stdout=asyncio.subprocess.PIPE, 
+                stderr=asyncio.subprocess.STDOUT,  # Redirect stderr to stdout
                 start_new_session=True  # Create new process group so we can kill all children
             )
             self.start_time = time.time()
             self.start_datetime = datetime.now() # Capture valid start time
             self.segment += 1
             
-            # Start background thread to monitor FFmpeg output
-            monitor_thread = threading.Thread(
-                target=self._log_ffmpeg_output, 
-                daemon=True,
+            # Start background task to monitor FFmpeg output
+            self.monitor_task = asyncio.create_task(
+                self._log_ffmpeg_output(), 
                 name=f"FFmpeg-Monitor-{self.process.pid}"
             )
-            monitor_thread.start()
+            
+            def handle_monitor_exception(task):
+                try:
+                    task.result()
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    log.error(f"FFmpeg Monitor Task crashed: {e}")
+                    
+            self.monitor_task.add_done_callback(handle_monitor_exception)
             
             # Brief health check
-            time.sleep(5)
-            if self.process.poll() is not None:
+            await asyncio.sleep(5)
+            if self.process.returncode is not None:
                 log.error(f"❌ FFmpeg crashed immediately for cams [{cam_str}]")
                 return False
             
@@ -362,10 +370,10 @@ class YouTubeStreamer:
             log.info(f"⏳ Waiting 15 seconds for initial stream stabilization...")
             
             # Shorter initial wait - just enough for stream to stabilize
-            time.sleep(15)
+            await asyncio.sleep(15)
             
             # Final check
-            if self.process.poll() is not None:
+            if self.process.returncode is not None:
                 log.error(f"❌ FFmpeg died during initialization")
                 return False
                 
@@ -380,7 +388,7 @@ class YouTubeStreamer:
             log.error(f"❌ Failed to start stream: {e}")
             return False
 
-    def stop(self):
+    async def stop(self):
         if not self.process:
             log.debug("stop() called but no process exists")
             return
@@ -400,18 +408,18 @@ class YouTubeStreamer:
             
             # Step 3: Wait for graceful shutdown
             log.info(f"⏳ Waiting up to 10s for process to exit...")
-            self.process.wait(timeout=10)
-            log.info(f"✅ Process {pid} stopped gracefully")
-            
-        except subprocess.TimeoutExpired:
-            log.warning(f"⚠️ Process {pid} didn't exit in 10s, force killing...")
             try:
-                pgid = os.getpgid(pid)
-                os.killpg(pgid, signal.SIGKILL)
-                log.info(f"💀 Sent SIGKILL to process group {pgid}")
-            except Exception as e:
-                log.warning(f"killpg failed: {e}, killing process directly")
-                self.process.kill()
+                await asyncio.wait_for(self.process.wait(), timeout=10.0)
+                log.info(f"✅ Process {pid} stopped gracefully")
+            except asyncio.TimeoutError:
+                log.warning(f"⚠️ Process {pid} didn't exit in 10s, force killing...")
+                try:
+                    pgid = os.getpgid(pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                    log.info(f"💀 Sent SIGKILL to process group {pgid}")
+                except Exception as e:
+                    log.warning(f"killpg failed: {e}, killing process directly")
+                    self.process.kill()
                 
         except Exception as e:
             log.warning(f"⚠️ Graceful stop failed: {e}, force killing...")
@@ -424,15 +432,22 @@ class YouTubeStreamer:
                 self.process.kill()
                 
         self.process = None
+        if hasattr(self, 'monitor_task') and self.monitor_task:
+            self.monitor_task.cancel()
+            try:
+                await self.monitor_task
+            except asyncio.CancelledError:
+                pass
+            self.monitor_task = None
         log.info(f"✅ Stream stopped for cams {self.job.cameras}")
 
-    def is_running(self):
-        return self.process and self.process.poll() is None
+    async def is_running(self):
+        return self.process and self.process.returncode is None
 
 
-    def check_stream_health(self):
+    async def check_stream_health(self):
         """Check stream health without YouTube API"""
-        if not self.is_running():
+        if not await self.is_running():
             return False
         
         # Don't check health during initial startup (first 2 minutes)
@@ -497,20 +512,20 @@ class StreamManager:
             
         return True
 
-    def monitor(self):
+    async def monitor(self):
         for s in self.streamers:
-            if not s.is_running():
+            if not await s.is_running():
                 log.warning(f"⚠️ Stream died: {s.job}")
                 log.info(f"🔄 Restarting stream in 10 seconds...")
-                time.sleep(10)
-                s.start()
-            elif not s.check_stream_health():
+                await asyncio.sleep(10)
+                await s.start()
+            elif not await s.check_stream_health():
                 # YouTube rejected the stream or it's not live anymore
                 log.warning(f"⚠️ YouTube health check failed for {s.job}")
                 log.info(f"🔄 Restarting stream to recover...")
-                s.stop()
-                time.sleep(10)
-                s.start()
+                await s.stop()
+                await asyncio.sleep(10)
+                await s.start()
             else:
                 # Periodic health log
                 if s.start_time and (time.time() - s.start_time) > 300:  # 5 minutes
@@ -518,29 +533,29 @@ class StreamManager:
                     if uptime_mins % 30 == 0:  # Log every 30 minutes
                         log.info(f"💚 Stream healthy: {s.job} - Uptime: {uptime_mins} minutes")
 
-    def stop_all(self):
+    async def stop_all(self):
         for s in self.streamers:
-            s.stop()
+            await s.stop()
 
 # ============================================
 # Main
 # ============================================
 
-def wait_for_go2rtc():
+async def wait_for_go2rtc():
     import urllib.request
     url = f"http://127.0.0.1:{settings.go2rtc_api_port}/api"
     log.info("⏳ Waiting for go2rtc...")
     for i in range(60):
         try:
-            urllib.request.urlopen(url, timeout=2)
+            await asyncio.to_thread(urllib.request.urlopen, url, timeout=2)
             log.info("✅ go2rtc ready")
             return True
         except:
-            time.sleep(1)
+            await asyncio.sleep(1)
     log.error("❌ go2rtc not ready after 60s")
     return False
 
-def main():
+async def main():
     log.info("=" * 50)
     log.info("🎬 YouTube Streaming Service (Canvas-Based)")
     log.info("=" * 50)
@@ -549,33 +564,38 @@ def main():
         log.info("ℹ️ YouTube disabled (YOUTUBE_LIVE_ENABLED=false). Exiting.")
         return
 
-    if not wait_for_go2rtc():
+    if not await wait_for_go2rtc():
         return
 
     manager = StreamManager()
     if not manager.discover_config():
         return
 
-    def shutdown(sig, frame):
-        log.info("🛑 Shutting down...")
-        manager.stop_all()
-        sys.exit(0)
+    loop = asyncio.get_running_loop()
     
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
+    async def shutdown():
+        log.info("🛑 Shutting down...")
+        await manager.stop_all()
+        loop.stop()
+    
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown()))
     
     # Initial start
     log.info("Starting all streams...")
     for s in manager.streamers:
-        s.start()
-        time.sleep(2)  # Stagger starts
+        await s.start()
+        await asyncio.sleep(2)  # Stagger starts
         
     log.info("All streams started. Monitoring...")
         
     # Monitoring loop
-    while True:
-        manager.monitor()
-        time.sleep(10)
+    try:
+        while True:
+            await manager.monitor()
+            await asyncio.sleep(10)
+    except asyncio.CancelledError:
+        pass
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

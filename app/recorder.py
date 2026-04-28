@@ -3,7 +3,7 @@ import time
 import os
 import re
 import json
-import threading
+import asyncio
 import glob
 from datetime import datetime
 from core import config
@@ -230,7 +230,7 @@ def generate_vod_playlist(out_dir, segment_duration):
         logger.warning(f"Failed to write VOD playlist: {e}")
 
 
-def start_camera(channel, rtsp_url, base_dir, segment_duration):
+async def start_camera(channel, rtsp_url, base_dir, segment_duration):
     """Record RTSP stream for a single camera channel."""
     proc = None
     consecutive_failures = 0
@@ -242,33 +242,39 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
     while True:
         # Get date-specific output directory
         out_dir = get_output_dir(base_dir, channel)
-        ensure_dir(out_dir)
+        await asyncio.to_thread(ensure_dir, out_dir)
         
         # Check if date changed (midnight rollover)
         today = datetime.now().strftime("%Y-%m-%d")
         if current_date and current_date != today:
             # Generate final VOD playlist for the old date before switching
             old_dir = get_output_dir(base_dir, channel).replace(today, current_date)
-            generate_vod_playlist(old_dir, segment_duration)
+            await asyncio.to_thread(generate_vod_playlist, old_dir, segment_duration)
             # Date changed, restart to use new folder
             if proc:
                 proc.terminate()
-                proc.wait()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    proc.kill()
                 proc = None
 
                 logger.info(f"[📅] CH{channel} date rollover, restarting")
             master_created = False  # Reset for new date
         current_date = today
         
-        if is_stopped(channel):
+        if await asyncio.to_thread(is_stopped, channel):
             if proc:
                 proc.terminate()
-                proc.wait()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    proc.kill()
                 proc = None
 
                 logger.info(f"[⏹] CH{channel} stopped")
             consecutive_failures = 0
-            time.sleep(2)
+            await asyncio.sleep(2)
             continue
         
         if proc is None:
@@ -337,20 +343,24 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
             logger.info(f"[🐛] Full FFmpeg command:\n{' '.join(cmd)}")
 
             try:
-                proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stderr=asyncio.subprocess.PIPE
+                )
                 consecutive_failures = 0
                 last_file_check = time.time()
             except Exception as e:
                 logger.error(f"[❌] CH{channel} failed to start: {e}")
-                time.sleep(2)
+                await asyncio.sleep(2)
                 continue
         
         # Check if process is still running
-        ret = proc.poll()
+        ret = proc.returncode
         if ret is not None:
             # Capture error logs from ffmpeg
             if proc.stderr:
-                err_output = proc.stderr.read().decode('utf-8', errors='ignore')
+                err_bytes = await proc.stderr.read()
+                err_output = err_bytes.decode('utf-8', errors='ignore')
                 if err_output:
                      logger.error(f"[❌] CH{channel} FFmpeg Crash Log:\n{err_output[-1000:]}")  # Last 1000 chars
 
@@ -358,13 +368,13 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
             delay = 2 if consecutive_failures < 5 else min(consecutive_failures * 2, 30)
             logger.warning(f"[⚠] CH{channel} crashed (code {ret}), restart in {delay}s")
             proc = None
-            time.sleep(delay)
+            await asyncio.sleep(delay)
         else:
             # Every 10 seconds, check if our output file still exists 
             # (or if we just converted it, that counts as existing)
             if time.time() - last_file_check > 10:
                 last_file_check = time.time()
-                latest = get_latest_file(out_dir, channel)
+                latest = await asyncio.to_thread(get_latest_file, out_dir, channel)
                 
                 # If no MKV or MP4 exists for today, and we've been running for > segment time, something is wrong
                 # NOTE: We check against recording_start_time, not last_file_check
@@ -373,23 +383,26 @@ def start_camera(channel, rtsp_url, base_dir, segment_duration):
                     # This handles slow starts and network issues
                     logger.warning(f"[🔄] CH{channel} no output files found, restarting...")
                     proc.terminate()
-                    proc.wait()
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        proc.kill()
                     proc = None
                     continue
                 
                 # Create master.m3u8 once after first segment is available
                 if not master_created and latest and latest.endswith('.ts'):
-                    create_master_playlist(out_dir, latest)
+                    await asyncio.to_thread(create_master_playlist, out_dir, latest)
                     master_created = True
 
                 # Regenerate VOD playlist every 5 minutes (not every check)
                 if latest and latest.endswith('.ts') and (time.time() - last_playlist_regen > 300):
-                    generate_vod_playlist(out_dir, segment_duration)
+                    await asyncio.to_thread(generate_vod_playlist, out_dir, segment_duration)
                     last_playlist_regen = time.time()
-            time.sleep(1)
+            await asyncio.sleep(1)
 
 
-def main():
+async def main():
     try:
         # Use config module if env vars are missing, or strict check
         if not config.settings.dvr_ip: raise EnvironmentError("DVR_IP not set")
@@ -398,7 +411,7 @@ def main():
         logger.error(f"[❌] {e}")
         return
 
-    ensure_dir(config.settings.record_dir)
+    await asyncio.to_thread(ensure_dir, config.settings.record_dir)
     
 
     logger.info(f"[✓] DVR: {config.settings.dvr_ip}:{config.settings.dvr_port}")
@@ -407,25 +420,22 @@ def main():
     logger.info(f"[✓] Output: {config.settings.record_dir}/ch{{N}}/{{date}}/")
     logger.info(f"[✓] Source: go2rtc relay (localhost:{config.settings.go2rtc_rtsp_port})")
 
-    # --- Start Recording Threads ---
+    # --- Start Recording Tasks ---
     # Using go2rtc relay as unified RTSP source (single DVR connection)
-    threads = []
+    tasks = []
     for ch in config.settings.get_active_channels():
         # Use go2rtc as RTSP source for unified architecture
         rtsp_url = build_go2rtc_url(ch)
-        t = threading.Thread(
-            target=start_camera, 
-            args=(ch, rtsp_url, config.settings.record_dir, config.settings.segment_duration),
-            daemon=True
+        t = asyncio.create_task(
+            start_camera(ch, rtsp_url, config.settings.record_dir, config.settings.segment_duration)
         )
-        t.start()
-        threads.append(t)
-        logger.info(f"[✓] CH{ch} recording thread started")
+        tasks.append(t)
+        logger.info(f"[✓] CH{ch} recording task started")
 
     while True:
-        time.sleep(60)
-        ensure_dir(config.settings.record_dir)
+        await asyncio.sleep(60)
+        await asyncio.to_thread(ensure_dir, config.settings.record_dir)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

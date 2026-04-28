@@ -1,5 +1,5 @@
 import os
-import time
+import asyncio
 import shutil
 from datetime import datetime, timedelta
 from core import config
@@ -44,7 +44,7 @@ def get_date_dirs(record_dir):
     return date_dirs
 
 
-def main():
+async def main():
     retention_days = config.settings.retention_days
     
     logger.info(f"[🧹] Cleanup service started")
@@ -54,26 +54,26 @@ def main():
     while True:
         try:
             cutoff = datetime.now() - timedelta(days=retention_days)
-            date_dirs = get_date_dirs(config.settings.record_dir)
+            date_dirs = await asyncio.to_thread(get_date_dirs, config.settings.record_dir)
             
             deleted_count = 0
             for date_path, date_obj in date_dirs:
                 if date_obj < cutoff:
                     rel_path = os.path.relpath(date_path, config.settings.record_dir)
                     try:
-                        shutil.rmtree(date_path)
+                        await asyncio.to_thread(shutil.rmtree, date_path)
                         deleted_count += 1
                         logger.info(f"[🗑️] Deleted old recording dir: {rel_path}")
                     except OSError as e:
                         logger.error(f"[⚠] Failed to delete {rel_path}: {e}")
             
             # Clean up empty channel directories
-            if os.path.exists(config.settings.record_dir):
-                for ch_dir in os.listdir(config.settings.record_dir):
+            if await asyncio.to_thread(os.path.exists, config.settings.record_dir):
+                for ch_dir in await asyncio.to_thread(os.listdir, config.settings.record_dir):
                     ch_path = os.path.join(config.settings.record_dir, ch_dir)
-                    if os.path.isdir(ch_path) and not os.listdir(ch_path):
+                    if await asyncio.to_thread(os.path.isdir, ch_path) and not await asyncio.to_thread(os.listdir, ch_path):
                         try:
-                            os.rmdir(ch_path)
+                            await asyncio.to_thread(os.rmdir, ch_path)
                         except OSError:
                             pass
             
@@ -82,8 +82,8 @@ def main():
         except Exception as e:
             logger.error(f"[❌] Cleanup error: {e}")
 
-        time.sleep(CHECK_INTERVAL)
+        await asyncio.sleep(CHECK_INTERVAL)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

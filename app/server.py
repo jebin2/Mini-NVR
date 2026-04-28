@@ -2,6 +2,8 @@ import os
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+import aiofiles
+import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router as api_router
 from api.playback import router as playback_router
@@ -91,19 +93,20 @@ app.include_router(go2rtc_router, prefix="/api/go2rtc")
 # --- Static & File Serving ---
 
 @app.get("/")
-def serve_ui():
+async def serve_ui():
     index_path = os.path.join(config.settings.static_dir, "index.html")
-    if os.path.exists(index_path):
-        with open(index_path, 'r') as f:
-            return HTMLResponse(f.read())
+    if await asyncio.to_thread(os.path.exists, index_path):
+        async with aiofiles.open(index_path, 'r') as f:
+            content = await f.read()
+            return HTMLResponse(content)
     return HTMLResponse("<h1>NVR UI Error</h1><p>index.html not found.</p>")
 
 @app.get("/login.html")
-def serve_login():
-    return serve_static(config.settings.static_dir, "login.html", "text/html")
+async def serve_login():
+    return await serve_static(config.settings.static_dir, "login.html", "text/html")
 
 @app.get("/{filename}")
-def serve_root_files(filename: str):
+async def serve_root_files(filename: str):
     """Serve PWA files and other root assets."""
     allowed = {
         "sw.js": "application/javascript",
@@ -114,18 +117,18 @@ def serve_root_files(filename: str):
     }
     
     if filename in allowed:
-        return serve_static(config.settings.static_dir, filename, allowed[filename])
+        return await serve_static(config.settings.static_dir, filename, allowed[filename])
         
     raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/recordings/{path:path}")
-def serve_video(path: str, user = Depends(auth.current_user)): # Protected
+async def serve_video(path: str, user = Depends(auth.current_user)): # Protected
     # Security check to prevent directory traversal
     abs_path = os.path.abspath(os.path.join(config.settings.record_dir, path))
     if not abs_path.startswith(os.path.abspath(config.settings.record_dir)):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    if not os.path.exists(abs_path):
+    if not await asyncio.to_thread(os.path.exists, abs_path):
         raise HTTPException(status_code=404, detail="File not found")
         
     # Determine correct MIME type
@@ -149,16 +152,16 @@ def serve_video(path: str, user = Depends(auth.current_user)): # Protected
         "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges, Content-Type, Date",
     }
         
-    if is_file_live(abs_path):
-        file_size = os.path.getsize(abs_path)
+    if await asyncio.to_thread(is_file_live, abs_path):
+        file_size = await asyncio.to_thread(os.path.getsize, abs_path)
         cors_headers["Content-Length"] = str(file_size)
 
-        def iter_file():
+        async def iter_file():
             bytes_remaining = file_size
-            with open(abs_path, "rb") as f:
+            async with aiofiles.open(abs_path, "rb") as f:
                 while bytes_remaining > 0:
                     read_size = min(64 * 1024, bytes_remaining)
-                    chunk = f.read(read_size)
+                    chunk = await f.read(read_size)
                     if not chunk:
                         break
                     yield chunk
@@ -169,12 +172,12 @@ def serve_video(path: str, user = Depends(auth.current_user)): # Protected
     return FileResponse(abs_path, media_type=media_type, headers=cors_headers)
 
 @app.get("/assets/{path:path}")
-def serve_assets(path: str):
+async def serve_assets(path: str):
     """Serve Vite static assets (JS/CSS) or app assets"""
     
     # Check if file exists in web-react assets (Vite build)
     vite_assets_path = os.path.join(config.settings.static_dir, "assets", path)
-    if os.path.exists(vite_assets_path):
+    if await asyncio.to_thread(os.path.exists, vite_assets_path):
         media_type = "application/octet-stream"
         if path.endswith(".css"):
             media_type = "text/css"
@@ -188,7 +191,7 @@ def serve_assets(path: str):
     # Use path relative to this script file to ensure compatibility in Docker and Local
     current_dir = os.path.dirname(os.path.abspath(__file__))
     app_assets_path = os.path.join(current_dir, "assets", path)
-    if os.path.exists(app_assets_path):
+    if await asyncio.to_thread(os.path.exists, app_assets_path):
         media_type = "application/octet-stream"
         if path.endswith(".ts"):
             media_type = "video/mp2t"
@@ -196,7 +199,7 @@ def serve_assets(path: str):
 
     raise HTTPException(status_code=404, detail="File not found")
 
-def serve_static(base_dir, path, media_type):
+async def serve_static(base_dir, path, media_type):
     # Security check
     abs_base = os.path.abspath(base_dir)
     abs_path = os.path.abspath(os.path.join(abs_base, path))
@@ -204,7 +207,7 @@ def serve_static(base_dir, path, media_type):
     if not abs_path.startswith(abs_base):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    if not os.path.exists(abs_path):
+    if not await asyncio.to_thread(os.path.exists, abs_path):
         raise HTTPException(status_code=404, detail="File not found")
         
     return FileResponse(abs_path, media_type=media_type)

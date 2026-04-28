@@ -7,6 +7,7 @@ Wraps app.services.youtube_uploader.YouTubeUploaderService
 import os
 import sys
 import signal
+import asyncio
 
 # Get directories
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +24,7 @@ from services.youtube_uploader import YouTubeUploaderService
 
 log = setup_logger("yt_upload", "/logs/youtube_upload.log")
 
-def main():
+async def main():
     # Env loaded by settings
 
     
@@ -41,15 +42,16 @@ def main():
     )
     
     # Handle graceful shutdown
-    def signal_handler(signum, frame):
-        print(f"\n[NVR Uploader] Received signal {signum}, stopping...")
+    loop = asyncio.get_running_loop()
+    def signal_handler():
+        print(f"\n[NVR Uploader] Received signal, stopping...")
         service.stop()
     
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, signal_handler)
     
     # Run
-    service.run()
+    await service.run()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

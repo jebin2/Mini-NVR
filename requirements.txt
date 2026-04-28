@@ -15,3 +15,4 @@ git+https://github.com/jebin2/youtube_auto_pub.git
 
 # Google Auth Service from GitHub
 google-auth-service @ git+https://github.com/jebin2/googleauthservice.git@main#subdirectory=server
+aiofiles

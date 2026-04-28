@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from api.deps import get_current_user
 from core.config import settings
 from core.logger import setup_logger
+import asyncio
 
 logger = setup_logger("playback_api")
 
@@ -165,7 +166,7 @@ def generate_m3u8_playlist(segments: list[dict], base_url: str, start_dt: dateti
 
 
 @router.get("/playback/{channel}/{date}/playlist.m3u8")
-def get_playback_playlist(
+async def get_playback_playlist(
     channel: int = Path(..., ge=1, description="Channel number"),
     date: str = Path(..., description="Date in YYYY-MM-DD format"),
     start: str = Query(None, description="Start time in HH:MM:SS format"),
@@ -190,7 +191,7 @@ def get_playback_playlist(
         raise HTTPException(status_code=400, detail="Invalid or skipped channel")
     
     # Get segments
-    segments = get_segments_in_range(channel, date, start, end)
+    segments = await asyncio.to_thread(get_segments_in_range, channel, date, start, end)
     
     if not segments:
         # Return empty playlist instead of 404 (player can handle empty playlist)
@@ -228,7 +229,7 @@ def get_playback_playlist(
 
 
 @router.get("/playback/{channel}/{date}/segments")
-def get_segments_list(
+async def get_segments_list(
     channel: int = Path(..., ge=1, description="Channel number"),
     date: str = Path(..., description="Date in YYYY-MM-DD format"),
 ):
@@ -246,7 +247,7 @@ def get_segments_list(
     if channel not in settings.get_active_channels():
         raise HTTPException(status_code=400, detail="Invalid or skipped channel")
     
-    segments = get_segments_in_range(channel, date)
+    segments = await asyncio.to_thread(get_segments_in_range, channel, date)
     
     # Return simplified segment info for UI
     return {
