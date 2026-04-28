@@ -11,6 +11,18 @@ from utils.helpers import is_file_live
 from api.go2rtc_proxy import router as go2rtc_router, ws_router as go2rtc_ws_router
 from core import config
 from core.logger import setup_logger
+from starlette.responses import PlainTextResponse
+
+class SafeFileResponse(FileResponse):
+    """FileResponse that catches RuntimeErrors if a file is deleted mid-flight."""
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        except RuntimeError as e:
+            if "does not exist" in str(e):
+                await PlainTextResponse("File not found", status_code=404)(scope, receive, send)
+            else:
+                raise
 
 from google_auth_service import GoogleAuth, GoogleAuthMiddleware
 
@@ -169,7 +181,7 @@ async def serve_video(path: str, user = Depends(auth.current_user)): # Protected
 
         return StreamingResponse(iter_file(), media_type=media_type, headers=cors_headers)
 
-    return FileResponse(abs_path, media_type=media_type, headers=cors_headers)
+    return SafeFileResponse(abs_path, media_type=media_type, headers=cors_headers)
 
 @app.get("/assets/{path:path}")
 async def serve_assets(path: str):
