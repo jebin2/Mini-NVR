@@ -16,7 +16,6 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # ============================================
 DETACHED=false
 CLEAN=false
-CLEAN_RECORDINGS=false
 BUILD_NO_CACHE=false
 
 # ============================================
@@ -34,7 +33,6 @@ show_help() {
     echo "Options:"
     echo "  -d          Run in background (detached)"
     echo "  -c          Clean logs and encrypt before starting"
-    echo "  -r          Clean recordings before starting"
     echo "  -b          Force rebuild Docker image without cache"
     echo "  -h, --help  Show this help message"
     echo ""
@@ -60,7 +58,6 @@ parse_arguments() {
                     case "$char" in
                         d) DETACHED=true ;;
                         c) CLEAN=true ;;
-                        r) CLEAN_RECORDINGS=true ;;
                         b) BUILD_NO_CACHE=true ;;
                         h) show_help ;;
                         *) echo "Unknown option: -$char"; exit 1 ;;
@@ -92,12 +89,6 @@ clean_data() {
         echo "Cleaned: logs/, encrypt/"
     fi
 
-    if [ "$CLEAN_RECORDINGS" = true ]; then
-        log_info "Cleaning recordings..."
-        sudo rm -rf ./recordings/* 2>/dev/null || true
-        echo "Cleaned: recordings/"
-    fi
-
     # Docker cleanup when building or cleaning
     if [ "$CLEAN" = true ] || [ "$BUILD_NO_CACHE" = true ]; then
         log_info "Cleaning Docker resources..."
@@ -113,10 +104,10 @@ setup_directories() {
     export DOCKER_GID=$(id -g)
 
     # Create directories
-    mkdir -p ./logs ./recordings ./encrypt
+    mkdir -p ./logs ./encrypt
 
     # Fix ownership if owned by root
-    for dir in ./logs ./recordings ./encrypt; do
+    for dir in ./logs ./encrypt; do
         if [ -d "$dir" ] && [ "$(stat -c '%u' $dir 2>/dev/null)" = "0" ]; then
             log_info "Fixing $dir ownership..."
             sudo chown -R $(id -u):$(id -g) "$dir"

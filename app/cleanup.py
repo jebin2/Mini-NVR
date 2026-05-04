@@ -1,4 +1,5 @@
 import os
+import errno
 import asyncio
 import shutil
 from datetime import datetime, timedelta
@@ -61,7 +62,10 @@ async def main():
                 if date_obj < cutoff:
                     rel_path = os.path.relpath(date_path, config.settings.record_dir)
                     try:
-                        await asyncio.to_thread(shutil.rmtree, date_path)
+                        def _rmtree_onerror(func, path, exc_info):
+                            if exc_info[1].errno != errno.ENOENT:
+                                raise exc_info[1]
+                        await asyncio.to_thread(shutil.rmtree, date_path, onerror=_rmtree_onerror)
                         deleted_count += 1
                         logger.info(f"[🗑️] Deleted old recording dir: {rel_path}")
                     except OSError as e:
